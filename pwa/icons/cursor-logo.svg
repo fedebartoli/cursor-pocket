@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="50 50 410 410" width="64" height="64" role="img" aria-label="Cursor">
+  <!-- Riproduzione piatta, a sei colori, del marchio di Cursor (c) Anysphere. Il marchio e' di Anysphere: questo file e'
+       tenuto da solo, in modo da poterlo sostituire o togliere (vedi docs/SETUP.md, sezione "Marchio Cursor"). -->
+  <rect x="50" y="50" width="410" height="410" rx="96" fill="#14110a"/>
+  <g transform="translate(256 256) scale(1.16) translate(-256 -256)" stroke-linejoin="round" stroke-width="5">
+    <path d="M256 112 130 185v144l126 72z" fill="#55544f" stroke="#55544f"/>
+    <path d="M256 112l126 73v144l-126 72z" fill="#43413c" stroke="#43413c"/>
+    <path d="M130 329 256 257l126 72-126 72z" fill="#72716d" stroke="#72716d"/>
+    <path d="M139 189h235l-118 62z" fill="#fff" stroke="#fff"/>
+    <path d="M256 251l118-61-114 202z" fill="#d6d5d2" stroke="#d6d5d2"/>
+  </g>
+</svg>

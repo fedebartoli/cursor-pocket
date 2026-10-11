@@ -1,0 +1,19 @@
+{
+  "name": "cursor-pocket-daemon",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Daemon locale che espone le chat locali dell'Agents Window di Cursor a una PWA (lettura, notifiche e, con la porta di debug di Cursor, azioni).",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/index.js",
+    "pair": "node --disable-warning=ExperimentalWarning src/cli.js pair",
+    "status": "node --disable-warning=ExperimentalWarning src/cli.js status",
+    "probe": "node --disable-warning=ExperimentalWarning src/cli.js probe",
+    "cdp": "node --disable-warning=ExperimentalWarning src/cli.js cdp",
+    "demo": "node --disable-warning=ExperimentalWarning ../tools/demo-server.mjs",
+    "test": "node --disable-warning=ExperimentalWarning --test \"test/**/*.test.js\""
+  }
+}

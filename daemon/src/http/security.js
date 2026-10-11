@@ -1,0 +1,57 @@
+// Intestazioni e controlli di sicurezza HTTP.
+
+export const SECURITY_HEADERS = Object.freeze({
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'no-referrer',
+  'X-Frame-Options': 'DENY',
+  'Cross-Origin-Opener-Policy': 'same-origin',
+  'Cross-Origin-Resource-Policy': 'same-origin',
+  'Permissions-Policy': 'camera=(), microphone=(), geolocation=(), payment=(), usb=()',
+  // Nessuno script o stile inline: tutto proviene dalla stessa origine.
+  'Content-Security-Policy':
+    "default-src 'self'; script-src 'self'; style-src 'self'; img-src 'self' data:; connect-src 'self'; " +
+    "manifest-src 'self'; worker-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+});
+
+function hostOnly(hostHeader) {
+  return String(hostHeader || '')
+    .toLowerCase()
+    .replace(/:\d+$/, '')
+    .replace(/^\[|\]$/g, '');
+}
+
+/**
+ * Difesa dal DNS rebinding: accetta solo Host di loopback, di Tailscale (*.ts.net) o espressamente configurati.
+ */
+export function isAllowedHost(hostHeader, extraHosts = []) {
+  if (!hostHeader) return false;
+  const host = hostOnly(hostHeader);
+  if (host === 'localhost' || host === '127.0.0.1' || host === '::1') return true;
+  if (host.endsWith('.ts.net')) return true;
+  return extraHosts.some((h) => h.toLowerCase() === host);
+}
+
+/** True se la richiesta e' arrivata via HTTPS (Tailscale Serve termina il TLS e inoltra in HTTP su loopback). */
+export function isSecureRequest(req) {
+  if (String(req.headers['x-forwarded-proto'] || '').toLowerCase() === 'https') return true;
+  return hostOnly(req.headers.host).endsWith('.ts.net');
+}
+
+/** Se l'intestazione Origin e' presente deve coincidere con l'host richiesto (protezione CSRF aggiuntiva). */
+export function originMatchesHost(req) {
+  const origin = req.headers.origin;
+  if (!origin) return true;
+  try {
+    return new URL(origin).host === req.headers.host;
+  } catch {
+    return false;
+  }
+}
+
+/** Percorso URL "sicuro": deve iniziare con una sola barra (niente URL assoluti o protocol-relative). */
+export function splitUrl(rawUrl) {
+  const s = String(rawUrl || '');
+  if (!s.startsWith('/') || s.startsWith('//')) return null;
+  const q = s.indexOf('?');
+  return { pathname: q < 0 ? s : s.slice(0, q), search: q < 0 ? '' : s.slice(q + 1) };
+}

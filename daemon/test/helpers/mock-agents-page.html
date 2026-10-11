@@ -1,0 +1,254 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Cursor Agents (mock di prova)</title>
+<!--
+  Pagina FINTA che imita la struttura dell'Agents Window di Cursor letta nel bundle (non e' Cursor):
+  sidebar con righe `data-sidebar-item-key="row:<id>"`, tray del questionario (`glass-questionnaire-tray`, opzioni
+  `ui-tray-option`, campo libero `questionnaire-freeform-option`, footer primario/secondario) e composer Lexical-like.
+  La logica di selezione ricalca le funzioni del bundle: Weg (singola: un secondo clic deseleziona), Jnl (avanzamento o invio),
+  ie (la scelta singola avanza da sola). Serve solo a provare agents-ui.js in un Chromium vero.
+-->
+<style>
+  * { box-sizing: border-box; }
+  body { margin: 0; font: 13px/1.3 system-ui, sans-serif; display: grid; grid-template-columns: 220px 1fr; height: 100vh; overflow: hidden; }
+  #sidebar { border-right: 1px solid #ccc; padding: 6px; }
+  .row { display: block; width: 100%; padding: 8px; margin: 2px 0; border: 1px solid #ddd; background: #fff; text-align: left; cursor: pointer; }
+  .row[aria-selected="true"] { background: #dde7ff; }
+  #main { position: relative; }
+  .glass-questionnaire-tray { position: absolute; left: 10px; right: 10px; top: 10px; border: 1px solid #888; padding: 8px; background: #fafafa; max-height: 320px; overflow: auto; }
+  .glass-questionnaire-tray[hidden] { display: none; }
+  .ui-tray-option { display: flex; gap: 8px; align-items: center; width: 100%; padding: 6px; margin: 3px 0; border: 1px solid #bbb; background: #fff; text-align: left; }
+  .ui-tray-option[aria-pressed="true"] { background: #cfe3ff; }
+  .editor { flex: 1; min-height: 20px; border: 1px solid #99a; padding: 2px 4px; }
+  .editor[hidden] { display: none; }
+  .ui-tray-footer { display: flex; gap: 8px; margin-top: 8px; }
+  .composer { position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; gap: 8px; align-items: flex-end; border: 1px solid #888; padding: 6px; background: #fff; }
+  .ui-prompt-input-editor__input, .decoy-input { flex: 1; min-height: 40px; max-height: 120px; overflow: auto; outline: none; }
+  button[disabled] { opacity: .5; }
+</style>
+</head>
+<body>
+<nav id="sidebar"></nav>
+<main id="main" data-agent-panel-conversation-shell data-glass-agent-id="live">
+  <div class="glass-questionnaire-tray" id="tray" hidden></div>
+  <div id="approvals" style="position:absolute;left:10px;right:10px;top:340px"></div>
+  <div class="composer">
+    <div class="tiptap ProseMirror ui-prompt-input-editor__input" contenteditable="true" role="textbox" id="composer"></div>
+    <button type="button" aria-label="Send message" id="send" disabled>Invia</button>
+  </div>
+</main>
+<!-- Come in Cursor 3.24: i pannelli delle altre chat restano vivi ma nascosti, con un loro composer (il piu' in basso). -->
+<div data-keep-alive-hidden="">
+  <div data-agent-panel-conversation-shell data-glass-agent-id="decoy" style="position:absolute;left:0;right:0;bottom:0;height:30px">
+    <div class="tiptap ProseMirror ui-prompt-input-editor__input decoy-input" contenteditable="true" id="decoy-composer"></div>
+    <button type="button" aria-label="Send message" id="decoy-send">Invia</button>
+  </div>
+</div>
+<script>
+(() => {
+  const FREE = '__freeform_other__';
+  const LETTERS = 'ABCDEFGHIJKL';
+  // --- logica del bundle di Cursor (nomi originali tra parentesi) ---
+  const allAnswered = (qs, sel) => qs.every((q) => (sel[q.id]?.length ?? 0) > 0); // Qnl
+  const nextUnanswered = (qs, qid, sel) => { // eil
+    const i = qs.findIndex((q) => q.id === qid);
+    let r = qs.findIndex((q, o) => (o <= i ? false : (sel[q.id]?.length ?? 0) === 0));
+    if (r < 0) r = qs.findIndex((q, o) => (o >= i ? false : (sel[q.id]?.length ?? 0) === 0));
+    return r;
+  };
+  const decide = (qs, qid, sel) => { // Jnl
+    if (allAnswered(qs, sel)) return { type: 'submit' };
+    if (qid === undefined) return { type: 'none' };
+    const i = nextUnanswered(qs, qid, sel);
+    return i >= 0 ? { type: 'advance', next: i } : { type: 'none' };
+  };
+  const toggle = (cur, id, multi) => { // Weg
+    const has = cur.includes(id);
+    return multi ? (has ? cur.filter((x) => x !== id) : [...cur, id]) : (has ? [] : [id]);
+  };
+
+  const isOther = (l) => { // Ylk
+    const s = String(l).toLowerCase().trim();
+    return s === 'other' || s.startsWith('other:') || s.startsWith('other -') || s.startsWith('other (');
+  };
+
+  let S = null;
+  const $ = (s) => document.querySelector(s);
+
+  function sidebar() {
+    const nav = $('#sidebar');
+    nav.replaceChildren();
+    for (const id of Object.keys(S.chats)) {
+      const b = document.createElement('button');
+      b.className = 'row';
+      b.setAttribute('data-sidebar-item-key', `row:${id}`);
+      b.setAttribute('aria-selected', String(S.current === id));
+      b.textContent = S.chats[id].name || id;
+      b.addEventListener('click', () => { S.current = id; S.log.push(`open:${id}`); render(); });
+      nav.append(b);
+    }
+  }
+
+  const qs = () => S.chats[S.current]?.questions ?? null;
+  const qst = () => S.qstate[S.current];
+  const trayOpen = () => !!qs() && !S.done[S.current];
+
+  function tray() {
+    const el = $('#tray');
+    if (!trayOpen()) { el.hidden = true; el.replaceChildren(); return; }
+    el.hidden = false;
+    const questions = qs();
+    const st = qst();
+    const q = questions[st.step];
+    const sel = st.selections[q.id] ?? [];
+    el.replaceChildren();
+    const title = document.createElement('div');
+    title.className = 'ui-tray-step-title';
+    title.textContent = q.prompt;
+    el.append(title);
+    q.options.filter((o) => !isOther(o.label)).forEach((o, i) => { // uis/Ylk: le opzioni "Other" non si mostrano
+      const b = document.createElement('button');
+      b.type = 'button';
+      b.className = 'ui-tray-option';
+      b.setAttribute('aria-pressed', String(sel.includes(o.id)));
+      b.innerHTML = `<span class="ui-tray-option__badge">${LETTERS[i]}</span><span class="ui-tray-option__label"></span>`;
+      b.querySelector('.ui-tray-option__label').textContent = o.label;
+      b.addEventListener('click', () => selectOption(q, o.id));
+      el.append(b);
+    });
+    const ff = document.createElement('div');
+    ff.className = 'ui-tray-option questionnaire-freeform-option';
+    ff.setAttribute('role', 'button');
+    ff.setAttribute('aria-pressed', String(sel.includes(FREE)));
+    ff.innerHTML = '<span class="ui-tray-option__badge">+</span><span class="ui-tray-option__label">Other...</span>';
+    const ed = document.createElement('div');
+    ed.className = 'editor';
+    ed.setAttribute('contenteditable', 'true');
+    ed.hidden = !sel.includes(FREE);
+    ed.textContent = st.freeform[q.id] ?? '';
+    ed.addEventListener('click', (ev) => ev.stopPropagation());
+    ed.addEventListener('input', () => {
+      st.freeform[q.id] = ed.innerText.replace(/\n+$/, '');
+      if (!(st.selections[q.id] ?? []).includes(FREE)) st.selections[q.id] = [...(st.selections[q.id] ?? []), FREE];
+      footer();
+    });
+    ff.append(ed);
+    ff.addEventListener('click', () => selectOption(q, FREE));
+    el.append(ff);
+    const foot = document.createElement('div');
+    foot.className = 'ui-tray-footer';
+    foot.innerHTML = '<div class="ui-tray-footer__primary"><button type="button"></button></div><div class="ui-tray-footer__secondary"><button type="button">Skip</button></div>';
+    foot.querySelector('.ui-tray-footer__primary button').addEventListener('click', primary);
+    foot.querySelector('.ui-tray-footer__secondary button').addEventListener('click', () => { S.skipped.push(S.current); S.done[S.current] = true; S.log.push('skip'); render(); });
+    el.append(foot);
+    footer();
+  }
+
+  function footer() {
+    if (!trayOpen()) return;
+    const questions = qs();
+    const st = qst();
+    const d = decide(questions, questions[st.step].id, st.selections);
+    const b = $('#tray .ui-tray-footer__primary button');
+    b.textContent = d.type === 'advance' ? 'Next' : 'Continue';
+    b.disabled = d.type === 'none';
+  }
+
+  function selectOption(q, optId) { // ie
+    const st = qst();
+    const questions = qs();
+    S.clicks += 1;
+    S.log.push(`pick:${q.id}:${optId}`);
+    const cur = st.selections[q.id] ?? [];
+    const already = cur.includes(optId);
+    st.selections[q.id] = toggle(cur, optId, q.allowMultiple === true);
+    if (!q.allowMultiple && !already && optId !== FREE) {
+      const d = decide(questions, q.id, st.selections);
+      if (d.type === 'advance') st.step = d.next;
+    }
+    tray();
+  }
+
+  function primary() { // ce -> ee
+    const questions = qs();
+    const st = qst();
+    const d = decide(questions, questions[st.step].id, st.selections);
+    S.log.push(`primary:${d.type}`);
+    if (d.type === 'submit') {
+      S.submitted.push({ chat: S.current, selections: JSON.parse(JSON.stringify(st.selections)), freeform: { ...st.freeform } });
+      S.done[S.current] = true;
+      render();
+    } else if (d.type === 'advance') {
+      st.step = d.next;
+      tray();
+    }
+  }
+
+  // --- composer: Invio invia, Maiusc+Invio va a capo ---
+  const comp = $('#composer');
+  const send = $('#send');
+  const refreshSend = () => { send.disabled = comp.innerText.trim() === ''; };
+  comp.addEventListener('input', refreshSend);
+  function doSend() {
+    const text = comp.innerText.replace(/\n+$/, '');
+    if (!text.trim()) return;
+    S.sent.push({ chat: S.current, text });
+    comp.replaceChildren();
+    refreshSend();
+  }
+  comp.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); doSend(); }
+  });
+  send.addEventListener('click', doSend);
+
+  // Carte dei comandi di terminale in attesa di approvazione: riga con `data-message-id`, carta `.ui-shell-tool-call`, pulsanti
+  // "Skip" e "Run" (con il simbolo di Invio). Dopo la decisione i pulsanti spariscono, come in Cursor.
+  function approvals() {
+    const box = $('#approvals');
+    box.replaceChildren();
+    for (const ap of S.chats[S.current]?.approvals ?? []) {
+      const row = document.createElement('div');
+      row.setAttribute('data-message-id', ap.messageId);
+      const card = document.createElement('div');
+      card.className = 'ui-shell-tool-call';
+      card.style.cssText = 'border:1px solid #888;padding:6px;margin:4px 0';
+      card.append(Object.assign(document.createElement('code'), { textContent: ap.command }));
+      if (!S.decided[ap.messageId]) {
+        for (const [label, kind] of ap.order ?? [['Skip', 'reject'], ['Run \u23ce', 'approve']]) {
+          const b = document.createElement('button');
+          b.type = 'button';
+          b.textContent = label;
+          b.addEventListener('click', () => { S.decided[ap.messageId] = kind; S.log.push(`${kind}:${ap.messageId}`); approvals(); });
+          card.append(b);
+        }
+      }
+      row.append(card);
+      box.append(row);
+    }
+  }
+
+  function render() { sidebar(); tray(); approvals(); }
+
+  window.__mock = {
+    reset(cfg) {
+      S = { current: cfg.current ?? null, chats: cfg.chats, qstate: {}, done: {}, submitted: [], skipped: [], sent: [], clicks: 0, log: [], decided: {} };
+      for (const [id, c] of Object.entries(S.chats)) {
+        S.qstate[id] = { step: 0, selections: JSON.parse(JSON.stringify(cfg.initialSelections?.[id] ?? {})), freeform: { ...(cfg.initialFreeform?.[id] ?? {}) } };
+        if (c.questions) {
+          const first = c.questions.findIndex((q) => (S.qstate[id].selections[q.id]?.length ?? 0) === 0);
+          S.qstate[id].step = first >= 0 ? first : 0; // qeg
+        }
+      }
+      comp.replaceChildren();
+      if (cfg.draft) comp.textContent = cfg.draft;
+      refreshSend();
+      render();
+    },
+    state() { return JSON.stringify({ current: S.current, submitted: S.submitted, skipped: S.skipped, sent: S.sent, clicks: S.clicks, log: S.log, decided: S.decided }); },
+  };
+})();
+</script>
+</body>
+</html>
