@@ -119,12 +119,16 @@ test('optionBadge: letters like Cursor, then numbers', () => {
 
 // ---------------------------------------------------------------- error messages
 
-test('describeActionError: own copy, daemon text, fallback', () => {
+test('describeActionError: own copy, daemon text, fallback', async () => {
+  const { initI18n } = await import('../../pwa/js/i18n/index.js');
+  await initI18n({ preference: 'en', browserLanguages: [] });
   assert.match(describeActionError({ code: 'network' }), /unreachable/i);
-  assert.match(describeActionError({ code: 'stale', message: 'ignorato' }), /refreshed the view/);
-  assert.equal(describeActionError({ code: 'unavailable', message: ' Cursor non e\u2019 raggiungibile. ' }), 'Cursor non e\u2019 raggiungibile.');
-  assert.match(describeActionError({}), /retry/i);
-  assert.match(describeActionError(null), /retry/i);
+  assert.match(describeActionError({ code: 'stale', message: 'ignored' }), /refresh and try again/i);
+  await initI18n({ preference: 'it', browserLanguages: [] });
+  assert.match(describeActionError({ code: 'actions_unavailable', detail: 'unavailable' }), /debug/i);
+  assert.match(describeActionError({}), /riprova|retry/i);
+  assert.match(describeActionError(null), /riprova|retry/i);
+  await initI18n({ preference: 'en', browserLanguages: [] });
 });
 
 test('shouldRefreshAfter: only when Mac state changed', () => {

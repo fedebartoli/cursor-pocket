@@ -140,6 +140,10 @@ POST /api/chats/:id/message  { text }
 - HTTP checks: `Host` allowed only if localhost or `*.ts.net` or configured (anti DNS rebinding); `Origin` equal to `Host`
   on mutating requests; JSON `Content-Type`; max body 16 KB (64 KB for actions); CSP with no inline scripts or styles; `nosniff`,
   `frame-ancestors 'none'`; static files without path traversal; optional `CP_ALLOWED_TS_LOGINS` on Tailscale identity.
+- API errors (JSON): `{ error, message, detail?, params? }`. `error` is a stable code; `message` is a concise English default for
+  logs and clients without i18n. Optional `detail` disambiguates when several user messages share the same `error` (e.g. UI automation
+  keys mapped from Cursor). Optional `params` supplies `{placeholder}` values. The PWA translates with `error.<detail>` first, then
+  `error.<code>`, using catalogs in `pwa/js/i18n/locales/` (English source, Italian and others aligned by key).
 - Logs: JSON with allow-list; numbers and booleans pass, strings only for a few known keys. Never chat contents, never
   raw error messages, never keys. Dedicated test that searches log contents.
 - The Cursor database is always opened with `mode=ro` and `query_only`; never full scans (query by `composerId`).

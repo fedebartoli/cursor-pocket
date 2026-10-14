@@ -43,23 +43,23 @@ test('validateAnswers: single choice, multiple choice, freeform and multiple que
 });
 
 test('validateAnswers: rejects anything that does not match the real question', () => {
-  bad(() => validateAnswers(SINGLE, undefined), /mancanti/);
-  bad(() => validateAnswers(SINGLE, 'a'), /mancanti/);
-  bad(() => validateAnswers(SINGLE, []), /Manca/);
-  bad(() => validateAnswers(SINGLE, [{ questionId: 'q1', optionIds: [] }]), /almeno/);
-  bad(() => validateAnswers(SINGLE, [{ questionId: 'q1', optionIds: ['zzz'] }]), /sconosciuta/);
-  bad(() => validateAnswers(SINGLE, [{ questionId: 'q1', optionIds: ['a', 'b'] }]), /una sola/);
-  bad(() => validateAnswers(SINGLE, [{ questionId: 'q1', optionIds: ['a'], freeform: 'altro' }]), /una sola/);
-  bad(() => validateAnswers(MULTI, [{ questionId: 'q1', optionIds: ['a', 'a'] }]), /duplicate/);
-  bad(() => validateAnswers(MULTI, [{ questionId: 'q1', optionIds: [FREEFORM_ID] }]), /testo/);
-  bad(() => validateAnswers(MULTI, [{ questionId: 'q1', optionIds: [1] }]), /non valide/);
-  bad(() => validateAnswers(MULTI, [{ questionId: 'q1', optionIds: 'a' }]), /non valide/);
-  bad(() => validateAnswers(SINGLE, [{ questionId: 'q1', freeform: 'x'.repeat(LIMITS.freeformChars + 1) }]), /lunga/);
-  bad(() => validateAnswers(SINGLE, [{ questionId: 'q1', optionIds: ['a'] }, { questionId: 'q1', optionIds: ['b'] }]), /Troppe/);
-  bad(() => validateAnswers(TWO, [{ questionId: 'q1', optionIds: ['a'] }]), /Manca/);
-  bad(() => validateAnswers(SINGLE, [null]), /Manca/);
-  bad(() => validateAnswers({ questions: [] }, []), /Domanda/);
-  bad(() => validateAnswers(null, []), /Domanda/);
+  bad(() => validateAnswers(SINGLE, undefined), /missing/i);
+  bad(() => validateAnswers(SINGLE, 'a'), /missing/i);
+  bad(() => validateAnswers(SINGLE, []), /not answered/i);
+  bad(() => validateAnswers(SINGLE, [{ questionId: 'q1', optionIds: [] }]), /at least/i);
+  bad(() => validateAnswers(SINGLE, [{ questionId: 'q1', optionIds: ['zzz'] }]), /unknown/i);
+  bad(() => validateAnswers(SINGLE, [{ questionId: 'q1', optionIds: ['a', 'b'] }]), /one answer/i);
+  bad(() => validateAnswers(SINGLE, [{ questionId: 'q1', optionIds: ['a'], freeform: 'altro' }]), /one answer/i);
+  bad(() => validateAnswers(MULTI, [{ questionId: 'q1', optionIds: ['a', 'a'] }]), /duplicate/i);
+  bad(() => validateAnswers(MULTI, [{ questionId: 'q1', optionIds: [FREEFORM_ID] }]), /free-form/i);
+  bad(() => validateAnswers(MULTI, [{ questionId: 'q1', optionIds: [1] }]), /invalid options/i);
+  bad(() => validateAnswers(MULTI, [{ questionId: 'q1', optionIds: 'a' }]), /invalid options/i);
+  bad(() => validateAnswers(SINGLE, [{ questionId: 'q1', freeform: 'x'.repeat(LIMITS.freeformChars + 1) }]), /too long/i);
+  bad(() => validateAnswers(SINGLE, [{ questionId: 'q1', optionIds: ['a'] }, { questionId: 'q1', optionIds: ['b'] }]), /too many/i);
+  bad(() => validateAnswers(TWO, [{ questionId: 'q1', optionIds: ['a'] }]), /not answered/i);
+  bad(() => validateAnswers(SINGLE, [null]), /not answered/i);
+  bad(() => validateAnswers({ questions: [] }, []), /invalid question/i);
+  bad(() => validateAnswers(null, []), /invalid question/i);
 });
 
 test('cleanText: normalized newlines, no control chars, Unicode preserved', () => {
@@ -215,7 +215,7 @@ test('actions: Cursor UI error clears queue and does not block following request
     }),
   });
   await a.refresh();
-  await assert.rejects(a.sendMessage('c1', { text: 'uno' }), (e) => e.status === 502 && e.code === 'ui_failed');
+  await assert.rejects(a.sendMessage('c1', { text: 'uno' }), (e) => e.status === 409 && e.code === 'ui_changed' && e.detail === 'no_composer');
   const ok = await a.sendMessage('c1', { text: 'uno' }); // same text: failure does not "consume" it
   assert.equal(ok.ok, true);
 });
@@ -561,7 +561,7 @@ test('HTTP message: pending approval blocks send (could cancel command); allowed
     const r = await post('message', { text: 'ciao' });
     assert.equal(r.status, 409);
     assert.equal(r.json().error, 'approval_pending');
-    assert.match(r.json().message, /approvazione/);
+    assert.match(r.json().message, /approval/i);
     assert.equal(ui.calls.length, 0, 'Cursor not touched');
 
     // approved on Mac: reviewData Done and can message again

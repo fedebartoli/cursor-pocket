@@ -42,13 +42,13 @@ async function getJson(port, path, timeoutMs) {
   try {
     res = await fetch(`http://127.0.0.1:${port}${path}`, { signal: AbortSignal.timeout(timeoutMs), cache: 'no-store' });
   } catch {
-    throw new CdpError('unavailable', 'porta di debug non raggiungibile');
+    throw new CdpError('unavailable', 'debug port unreachable');
   }
-  if (!res.ok) throw new CdpError('unavailable', 'risposta inattesa dalla porta di debug');
+  if (!res.ok) throw new CdpError('unavailable', 'unexpected response from debug port');
   try {
     return await res.json();
   } catch {
-    throw new CdpError('unavailable', 'risposta non valida dalla porta di debug');
+    throw new CdpError('unavailable', 'invalid response from debug port');
   }
 }
 
@@ -65,7 +65,7 @@ export async function probeCdp(port, { timeoutMs = 1500 } = {}) {
 /** `page` targets with valid WebSocket URL: `{id, title, url, wsUrl}`. */
 export async function listPageTargets(port, { timeoutMs = 2000 } = {}) {
   const list = await getJson(port, '/json/list', timeoutMs);
-  if (!Array.isArray(list)) throw new CdpError('unavailable', 'elenco dei target non valido');
+  if (!Array.isArray(list)) throw new CdpError('unavailable', 'invalid target list');
   const out = [];
   for (const t of list) {
     if (!t || t.type !== 'page') continue;
@@ -101,18 +101,18 @@ export class CdpSession {
   constructor(ws) {
     this.#ws = ws;
     ws.addEventListener('message', (ev) => this.#onMessage(ev));
-    ws.addEventListener('close', () => this.#fail(new CdpError('closed', 'connessione chiusa')));
-    ws.addEventListener('error', () => this.#fail(new CdpError('closed', 'errore di connessione')));
+    ws.addEventListener('close', () => this.#fail(new CdpError('closed', 'connection closed')));
+    ws.addEventListener('error', () => this.#fail(new CdpError('closed', 'connection error')));
   }
 
   static open(wsUrl, { connectTimeoutMs = 3000, WebSocketImpl = globalThis.WebSocket } = {}) {
-    if (typeof WebSocketImpl !== 'function') return Promise.reject(new CdpError('unavailable', 'WebSocket non disponibile'));
+    if (typeof WebSocketImpl !== 'function') return Promise.reject(new CdpError('unavailable', 'WebSocket unavailable'));
     return new Promise((resolve, reject) => {
       let ws;
       try {
         ws = new WebSocketImpl(wsUrl);
       } catch {
-        reject(new CdpError('unavailable', 'indirizzo non valido'));
+        reject(new CdpError('unavailable', 'invalid address'));
         return;
       }
       const timer = setTimeout(() => {
@@ -121,7 +121,7 @@ export class CdpSession {
         } catch {
           // already closed
         }
-        reject(new CdpError('timeout', 'connessione scaduta'));
+        reject(new CdpError('timeout', 'connection timed out'));
       }, connectTimeoutMs);
       ws.addEventListener('open', () => {
         clearTimeout(timer);
@@ -129,7 +129,7 @@ export class CdpSession {
       });
       ws.addEventListener('error', () => {
         clearTimeout(timer);
-        reject(new CdpError('unavailable', 'connessione rifiutata'));
+        reject(new CdpError('unavailable', 'connection refused'));
       });
     });
   }
@@ -150,7 +150,7 @@ export class CdpSession {
     if (!p) return;
     this.#pending.delete(msg.id);
     clearTimeout(p.timer);
-    if (msg.error) p.reject(new CdpError('cdp_error', `${p.method}: ${String(msg.error.message || 'errore').slice(0, 120)}`));
+    if (msg.error) p.reject(new CdpError('cdp_error', `${p.method}: ${String(msg.error.message || 'error').slice(0, 120)}`));
     else p.resolve(msg.result ?? {});
   }
 
@@ -165,12 +165,12 @@ export class CdpSession {
 
   /** Sends a command and waits for the response. */
   send(method, params = {}, { timeoutMs = 10_000 } = {}) {
-    if (this.#closed) return Promise.reject(new CdpError('closed', 'connessione chiusa'));
+    if (this.#closed) return Promise.reject(new CdpError('closed', 'connection closed'));
     const id = ++this.#next;
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
         this.#pending.delete(id);
-        reject(new CdpError('timeout', `${method}: nessuna risposta`));
+        reject(new CdpError('timeout', `${method}: no response`));
       }, timeoutMs);
       this.#pending.set(id, { resolve, reject, timer, method });
       try {
@@ -178,7 +178,7 @@ export class CdpSession {
       } catch {
         this.#pending.delete(id);
         clearTimeout(timer);
-        reject(new CdpError('closed', 'invio non riuscito'));
+        reject(new CdpError('closed', 'send failed'));
       }
     });
   }
@@ -194,7 +194,7 @@ export class CdpSession {
       { timeoutMs },
     );
     if (r.exceptionDetails) {
-      const d = r.exceptionDetails.exception?.description || r.exceptionDetails.text || 'eccezione nella pagina';
+      const d = r.exceptionDetails.exception?.description || r.exceptionDetails.text || 'page exception';
       throw new CdpError('page_exception', String(d).split('\n')[0].slice(0, 160));
     }
     return r.result?.value;
@@ -226,6 +226,6 @@ export class CdpSession {
     } catch {
       // already closed
     }
-    this.#fail(new CdpError('closed', 'sessione chiusa'));
+    this.#fail(new CdpError('closed', 'session closed'));
   }
 }

@@ -1,15 +1,27 @@
 // Daemon API client. Session cookie is HttpOnly: JavaScript never sees it.
-import { t } from './i18n/index.js';
+import { hasMessage, t } from './i18n/index.js';
 
 export class ApiError extends Error {
-  constructor(status, code, message) {
+  constructor(status, code, message, { detail, params } = {}) {
     super(message);
     this.status = status;
     this.code = code;
+    if (detail) this.detail = detail;
+    if (params && Object.keys(params).length) this.params = params;
   }
 }
 
 const unauthorizedHandlers = new Set();
+
+function localizedApiMessage(data, status) {
+  const code = data?.error || 'http';
+  const detail = data?.detail;
+  const params = data?.params ?? {};
+  if (detail && hasMessage(`error.${detail}`)) return t(`error.${detail}`, params);
+  if (hasMessage(`error.${code}`)) return t(`error.${code}`, params);
+  if (typeof data?.message === 'string' && data.message) return data.message;
+  return t('api.httpError', { status });
+}
 
 /** Register a callback invoked when a protected request returns 401 (session expired or revoked). */
 export function onUnauthorized(fn) {
@@ -50,7 +62,8 @@ async function request(method, path, body) {
   }
   if (!res.ok) {
     if (res.status === 401 && path !== '/api/pair') for (const fn of unauthorizedHandlers) fn();
-    throw new ApiError(res.status, data?.error || 'http', data?.message || t('api.httpError', { status: res.status }));
+    const code = data?.error || 'http';
+    throw new ApiError(res.status, code, localizedApiMessage(data, res.status), { detail: data?.detail, params: data?.params });
   }
   return data;
 }
@@ -71,7 +84,8 @@ async function upload(blob) {
   }
   if (!res.ok) {
     if (res.status === 401) for (const fn of unauthorizedHandlers) fn();
-    throw new ApiError(res.status, data?.error || 'http', data?.message || t('api.httpError', { status: res.status }));
+    const code = data?.error || 'http';
+    throw new ApiError(res.status, code, localizedApiMessage(data, res.status), { detail: data?.detail, params: data?.params });
   }
   return data;
 }

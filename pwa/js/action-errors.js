@@ -1,7 +1,6 @@
 // User-facing messages for action errors (answer, skip, message). Pure logic (testable in Node).
 //
-// The daemon already returns clear text for almost all codes; here we only replace those that depend on
-// what the screen does next (e.g. "I refreshed the view") or that originate in the client.
+// The daemon returns English defaults plus stable codes; the PWA translates via error.<detail> or error.<code>.
 import { hasMessage, t } from './i18n/index.js';
 
 const CUSTOM_CODES = Object.freeze(['network', 'stale', 'already_sent', 'too_large', 'too_long', 'not_image', 'bad_name', 'http']);
@@ -10,8 +9,11 @@ const CUSTOM_CODES = Object.freeze(['network', 'stale', 'already_sent', 'too_lar
 const REFRESH_AFTER = new Set(['stale', 'no_question', 'mismatch', 'already_sent', 'not_found', 'not_running', 'timeout']);
 
 export function describeActionError(err) {
+  const detail = err?.detail;
   const code = err?.code;
-  if (code && hasMessage(`error.${code}`)) return t(`error.${code}`);
+  const params = err?.params ?? {};
+  if (detail && hasMessage(`error.${detail}`)) return t(`error.${detail}`, params);
+  if (code && hasMessage(`error.${code}`)) return t(`error.${code}`, params);
   if (code && CUSTOM_CODES.includes(code)) return t(`actionErrors.${code}`);
   const msg = typeof err?.message === 'string' ? err.message.trim() : '';
   return msg || t('actionErrors.generic');

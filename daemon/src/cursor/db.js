@@ -30,7 +30,7 @@ export class CursorDb {
   open() {
     this.close();
     if (!fs.existsSync(this.path)) {
-      const err = new Error('database di Cursor non trovato');
+      const err = new Error('Cursor database not found');
       err.code = 'DB_NOT_FOUND';
       throw err;
     }
@@ -133,7 +133,7 @@ export class CursorDb {
 
   #need() {
     if (!this.#db) {
-      const err = new Error('database di Cursor non aperto');
+      const err = new Error('Cursor database not open');
       err.code = 'DB_NOT_OPEN';
       throw err;
     }

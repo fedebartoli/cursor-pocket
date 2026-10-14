@@ -27,9 +27,9 @@ function hkdf(salt, ikm, info, length) {
  */
 export function encryptPayload({ payload, uaPublic, authSecret, salt = crypto.randomBytes(16), asEcdh = null }) {
   if (payload.length > MAX_PAYLOAD_BYTES) throw new RangeError('payload push troppo grande');
-  if (uaPublic.length !== 65 || uaPublic[0] !== 4) throw new TypeError('chiave p256dh non valida');
-  if (authSecret.length !== 16) throw new TypeError('segreto auth non valido');
-  if (salt.length !== 16) throw new TypeError('salt non valido');
+  if (uaPublic.length !== 65 || uaPublic[0] !== 4) throw new TypeError('invalid p256dh key');
+  if (authSecret.length !== 16) throw new TypeError('invalid auth secret');
+  if (salt.length !== 16) throw new TypeError('invalid salt');
 
   let ecdh = asEcdh;
   if (!ecdh) {
@@ -114,7 +114,7 @@ export async function sendPush({
   timeoutMs = 15_000,
 }) {
   if (!isAllowedPushEndpoint(subscription.endpoint)) {
-    return { ok: false, status: 0, gone: false, retryAfter: null, error: 'endpoint non consentito' };
+    return { ok: false, status: 0, gone: false, retryAfter: null, error: 'endpoint not allowed' };
   }
   const body = encryptPayload({
     payload: Buffer.isBuffer(payload) ? payload : Buffer.from(payload),

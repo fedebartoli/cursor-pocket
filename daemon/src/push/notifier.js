@@ -140,7 +140,7 @@ export class Notifier {
   }
   set quiet(v) {
     const q = normalizeQuiet(v);
-    if (!q) throw new Error('orari non validi');
+    if (!q) throw new Error('invalid quiet hours');
     this.#store.setMeta('quiet_hours', JSON.stringify(q));
   }
 

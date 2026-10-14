@@ -139,6 +139,6 @@ export function serveStatic({ root, req, res, urlPath, headers }) {
 
 function notFound(res, headers) {
   res.writeHead(404, { ...headers, 'Content-Type': 'text/plain; charset=utf-8' });
-  res.end('Non trovato');
+  res.end('Not found');
   return true;
 }
