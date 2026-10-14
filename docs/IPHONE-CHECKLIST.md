@@ -49,3 +49,10 @@ Home screen (not from Safari). For agent tests use a test chat, not real work.
 
 ## 7. Devices
 - [ ] Impostazioni > Dispositivi abbinati (Paired devices): the phone is listed; "Scollega" ("Disconnect") on a second test device disconnects it.
+
+## 8. Languages
+Interface labels in this list are quoted in Italian with the English meaning in parentheses; on your phone they follow its language.
+- [ ] With the phone in a supported language, "Automatic" (Settings > Language) shows the app in that language, including the tab bar.
+- [ ] Choose another language in Settings: the app reloads and every screen, error message and notification switches (notifications
+      follow the language of the device that subscribed; reopen the app once so it re-sends the language).
+- [ ] German, French and Japanese: no label is cut off in the bottom bar or on the buttons of the narrowest iPhone you own.
