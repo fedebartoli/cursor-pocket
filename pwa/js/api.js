@@ -41,7 +41,29 @@ async function request(method, path, body) {
   return data;
 }
 
+/** Carica un'immagine (corpo = i byte, tipo image/*). Risolve con { id, size }. */
+async function upload(blob) {
+  let res;
+  try {
+    res = await fetch('/api/uploads', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': blob.type || 'image/jpeg' }, body: blob });
+  } catch {
+    throw new ApiError(0, 'network', 'Daemon non raggiungibile');
+  }
+  let data = null;
+  try {
+    data = await res.json();
+  } catch {
+    // risposta senza corpo JSON
+  }
+  if (!res.ok) {
+    if (res.status === 401) for (const fn of unauthorizedHandlers) fn();
+    throw new ApiError(res.status, data?.error || 'http', data?.message || `Errore ${res.status}`);
+  }
+  return data;
+}
+
 export const api = {
+  upload,
   get: (path) => request('GET', path),
   post: (path, body = {}) => request('POST', path, body),
   del: (path, body = {}) => request('DELETE', path, body),

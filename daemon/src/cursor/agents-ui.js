@@ -54,6 +54,12 @@ export const SEL = Object.freeze({
   menuItem: '[role="menuitem"],[role="menuitemcheckbox"]',
   renameInput: 'input.ui-text-editable',
   customize: 'button[aria-label="Customize Sidebar"]',
+  // Allegati del compositore: il campo file (accetta image/*) sta nella barra del compositore; l'anteprima di ogni immagine ha
+  // il suo pulsante "Remove image". Si cerca solo nel pannello in primo piano.
+  fileInput: 'input[type="file"]',
+  imagePreview: '.ui-prompt-input-image-preview',
+  imageRemove: '.ui-prompt-input-image-preview button[aria-label="Remove image"]',
+  fileMark: 'data-cp-file-target',
   messageIdAttr: 'data-message-id',
 });
 
@@ -175,6 +181,9 @@ function pageKit(SEL, APPROVE_LABEL, REJECT_LABEL) {
   K.renameInput = () => [...document.querySelectorAll(SEL.renameInput)].find(K.visible) || null;
   K.customize = () => [...document.querySelectorAll(SEL.customize)].find(K.visible) || null;
   K.stop = () => [...K.scope().querySelectorAll(SEL.stop)].find(K.visible) || null;
+  K.fileInput = () => K.scope().querySelector(SEL.fileInput);
+  K.previews = () => [...K.scope().querySelectorAll(SEL.imagePreview + ' img')];
+  K.imageRemove = () => [...K.scope().querySelectorAll(SEL.imageRemove)].find(K.visible) || null;
   return K;
 }
 
@@ -224,6 +233,8 @@ function pageDo(a, K) {
         return K.renameInput();
       case 'customize':
         return K.customize();
+      case 'removeImage':
+        return K.imageRemove();
       default:
         return null;
     }
@@ -286,8 +297,20 @@ function pageDo(a, K) {
         send: s ? { disabled: K.isDisabled(s) } : null,
         stop: !!K.stop(),
         tray: !!K.tray(),
+        images: K.previews().length,
       };
     }
+    case 'attachState':
+      return { input: !!K.fileInput(), previews: K.previews().length };
+    case 'markFileInput': {
+      const i = K.fileInput();
+      if (!i) return false;
+      i.setAttribute(SEL.fileMark, '1');
+      return true;
+    }
+    case 'unmarkFileInput':
+      for (const e of document.querySelectorAll('[' + SEL.fileMark + ']')) e.removeAttribute(SEL.fileMark);
+      return true;
     case 'approvalState': {
       const card = K.approvalCard(a.messageId);
       if (!card) return { found: false };
@@ -438,6 +461,29 @@ class Ctx {
     await this.s.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: loc.x, y: loc.y });
     await this.s.send('Input.dispatchMouseEvent', { ...base, type: 'mousePressed', buttons: 2 });
     await this.s.send('Input.dispatchMouseEvent', { ...base, type: 'mouseReleased', buttons: 0 });
+  }
+
+  /** Collega file locali al campo file del compositore in primo piano (come la scelta dal selettore di file). */
+  async setFiles(files) {
+    if (!(await this.page({ op: 'markFileInput' }))) throw new UiError('no_file_input', 'campo allegati non trovato');
+    try {
+      const { root } = await this.s.send('DOM.getDocument', { depth: 0 });
+      const { nodeId } = await this.s.send('DOM.querySelector', { nodeId: root.nodeId, selector: `[${'data-cp-file-target'}]` });
+      if (!nodeId) throw new UiError('no_file_input', 'campo allegati non trovato');
+      await this.s.send('DOM.setFileInputFiles', { files, nodeId });
+    } finally {
+      await this.page({ op: 'unmarkFileInput' }).catch(() => {});
+    }
+  }
+
+  /** Toglie dal compositore tutte le immagini allegate (pulsante "Remove image"). */
+  async clearImages() {
+    for (let i = 0; i < 12; i++) {
+      const loc = await this.locate({ target: 'removeImage' });
+      if (!loc.found) return;
+      await this.clickTarget({ target: 'removeImage' }).catch(() => {});
+      await realSleep(250);
+    }
   }
 
   /** Scrive testo con il focus gia' sull'elemento; `\n` diventa Maiusc+Invio (a capo senza inviare). */
@@ -873,7 +919,7 @@ export class AgentsUi {
   }
 
   /** Scrive un messaggio nel composer della chat e lo invia (come Invio in Cursor). */
-  async sendMessage({ composerId, text }) {
+  async sendMessage({ composerId, text, files = [] }) {
     return this.withSession(async (ctx) => {
       const previous = await this.#openChat(ctx, composerId);
       try {
@@ -884,32 +930,78 @@ export class AgentsUi {
         if (!info) throw new UiError('no_composer', 'campo di scrittura non trovato');
         if (info.tray) throw new UiError('question_pending', 'la chat ha una domanda in attesa');
         // Non si mescola mai il messaggio con una bozza scritta dall'utente sul Mac.
-        if (!info.composer.empty) throw new UiError('draft_not_empty', 'nel campo di scrittura c\'e\' gia\' una bozza');
+        if (!info.composer.empty || info.images > 0) throw new UiError('draft_not_empty', 'nel campo di scrittura c\'e\' gia\' una bozza');
 
-        await ctx.clickTarget({ target: 'composer' });
-        const focus = await ctx.focusState('composer');
-        if (!focus.found || !focus.focused) throw new UiError('focus_failed', 'campo di scrittura senza focus');
-        await ctx.typeText(text);
-        const typed = await waitFor(async () => {
-          const f = await ctx.focusState('composer');
-          return f.found && norm(f.text).startsWith(norm(text).slice(0, 40)) ? f : null;
-        }, { timeoutMs: 3000, sleep: this.sleep });
-        if (!typed) throw new UiError('type_failed', 'testo non inserito nel campo di scrittura');
+        let attached = false;
+        try {
+          if (files.length) {
+            await this.#attach(ctx, files);
+            attached = true;
+          }
+          if (text) {
+            await ctx.clickTarget({ target: 'composer' });
+            const focus = await ctx.focusState('composer');
+            if (!focus.found || !focus.focused) throw new UiError('focus_failed', 'campo di scrittura senza focus');
+            await ctx.typeText(text);
+            const typed = await waitFor(async () => {
+              const f = await ctx.focusState('composer');
+              return f.found && norm(f.text).startsWith(norm(text).slice(0, 40)) ? f : null;
+            }, { timeoutMs: 3000, sleep: this.sleep });
+            if (!typed) throw new UiError('type_failed', 'testo non inserito nel campo di scrittura');
+          }
+        } catch (e) {
+          if (attached) await ctx.clearImages().catch(() => {});
+          throw e;
+        }
 
         const enabled = await waitFor(async () => {
           const i = await ctx.page({ op: 'composerInfo' });
           return i.send && !i.send.disabled ? i : null;
         }, { timeoutMs: 3000, sleep: this.sleep });
-        if (!enabled) throw new UiError('send_disabled', 'pulsante di invio non disponibile');
+        if (!enabled) {
+          if (attached) await ctx.clearImages().catch(() => {});
+          throw new UiError('send_disabled', 'pulsante di invio non disponibile');
+        }
         await ctx.clickTarget({ target: 'send' });
 
-        // Invio avvenuto = il campo si svuota.
+        // Invio avvenuto = il campo si svuota (e le anteprime delle immagini spariscono).
         const cleared = await waitFor(async () => {
           const f = await ctx.focusState('composer');
-          return !f.found || f.empty ? true : null;
+          const i = await ctx.page({ op: 'composerInfo' });
+          return (!f.found || f.empty) && !(i.images > 0) ? true : null;
         }, { timeoutMs: 5000, sleep: this.sleep });
         if (!cleared) throw new UiError('send_failed', 'il messaggio non risulta inviato');
         return { sent: true };
+      } finally {
+        await this.#restore(ctx, previous, composerId);
+      }
+    });
+  }
+
+  /** Allega immagini al compositore e verifica che compaiano le anteprime. */
+  async #attach(ctx, files) {
+    const before = (await ctx.page({ op: 'attachState' })).previews;
+    await ctx.setFiles(files);
+    const ok = await waitFor(async () => {
+      const st = await ctx.page({ op: 'attachState' });
+      return st.previews >= before + files.length ? st : null;
+    }, { timeoutMs: 6000, sleep: this.sleep });
+    if (!ok) {
+      await ctx.clearImages().catch(() => {});
+      throw new UiError('attach_failed', 'Cursor non ha mostrato le immagini allegate');
+    }
+  }
+
+  /** Solo per prove: allega, conta le anteprime e toglie tutto senza inviare. */
+  async attachImages({ composerId, files }) {
+    return this.withSession(async (ctx) => {
+      const previous = await this.#openChat(ctx, composerId);
+      try {
+        await this.#attach(ctx, files);
+        const n = (await ctx.page({ op: 'attachState' })).previews;
+        await ctx.clearImages();
+        const left = (await ctx.page({ op: 'attachState' })).previews;
+        return { attached: n, left };
       } finally {
         await this.#restore(ctx, previous, composerId);
       }

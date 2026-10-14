@@ -4,6 +4,7 @@ import { ActionError } from '../actions.js';
 import { clearedCookie, sessionCookie } from '../auth.js';
 import { errorFields } from '../log.js';
 import { isAllowedPushEndpoint } from '../push/webpush.js';
+import { UPLOAD_LIMITS } from '../uploads.js';
 import { b64u } from '../util.js';
 import { SECURITY_HEADERS, isAllowedHost, isSecureRequest, originMatchesHost, splitUrl } from './security.js';
 import { serveStatic } from './static.js';
@@ -72,7 +73,7 @@ function validSubscription(sub) {
  * @param {object} deps
  * @returns {{server: http.Server, listen: () => Promise<void>, close: () => Promise<void>}}
  */
-export function createHttpServer({ config, store, auth, hub, watcher, notifier, actions, awake, logger, now = Date.now }) {
+export function createHttpServer({ config, store, auth, hub, watcher, notifier, actions, awake, uploads = null, logger, now = Date.now }) {
   let lastTestAt = 0;
 
   async function api(req, res, path, headers, secure) {
@@ -142,6 +143,30 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
       if (r === 'unknown') throw new HttpError(404, 'not_found', 'Dispositivo non trovato');
       if (r === 'current') throw new HttpError(409, 'current_device', 'Questo e\' il dispositivo che stai usando: per scollegarlo usa "Esci da questo dispositivo".');
       logger.info('device_revoked');
+      return sendJson(res, 200, { ok: true }, headers);
+    }
+
+    // --- immagini da allegare a un messaggio (corpo = i byte dell'immagine) ---
+    if (path === '/api/uploads' && method === 'POST') {
+      if (!uploads) throw new HttpError(404, 'not_found', 'Non disponibile');
+      const type = String(req.headers['content-type'] || '').toLowerCase();
+      if (!type.startsWith('image/')) throw new HttpError(415, 'unsupported_media_type', 'Serve un\'immagine');
+      const chunks = [];
+      let size = 0;
+      for await (const chunk of req) {
+        size += chunk.length;
+        if (size > UPLOAD_LIMITS.bytes) throw new HttpError(413, 'too_large', 'Immagine troppo grande (massimo 8 MB)');
+        chunks.push(chunk);
+      }
+      const r = uploads.save(Buffer.concat(chunks));
+      if (r.error === 'not_image' || r.error === 'empty') throw new HttpError(415, 'not_image', 'Formato non supportato: servono JPEG, PNG, GIF o WebP.');
+      if (r.error === 'too_large') throw new HttpError(413, 'too_large', 'Immagine troppo grande (massimo 8 MB)');
+      if (r.error === 'too_many') throw new HttpError(429, 'too_many', 'Troppe immagini in attesa: invia o riprova tra poco.');
+      return sendJson(res, 200, { id: r.id, size: r.size }, headers);
+    }
+    const up = /^\/api\/uploads\/([a-f0-9]{32})$/.exec(path);
+    if (up && method === 'DELETE') {
+      uploads?.remove([up[1]]);
       return sendJson(res, 200, { ok: true }, headers);
     }
 
@@ -223,7 +248,7 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
         else if (action === 'rename') result = await actions.rename(id, { name: body.name });
         else if (action === 'archive') result = await actions.archive(id);
         else if (action === 'approval') result = await actions.approval(id, { key: body.key, decision: body.decision });
-        else result = await actions.sendMessage(id, { text: body.text });
+        else result = await actions.sendMessage(id, { text: body.text, images: body.images });
         return sendJson(res, 200, result, headers);
       }
       throw new HttpError(405, 'method_not_allowed', 'Metodo non consentito');

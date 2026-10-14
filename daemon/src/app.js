@@ -12,6 +12,7 @@ import { errorFields } from './log.js';
 import { Notifier } from './push/notifier.js';
 import { presentState } from './state/present.js';
 import { Store } from './state/store.js';
+import { Uploads } from './uploads.js';
 import { Watcher } from './watcher.js';
 
 const DAY = 24 * 3_600_000;
@@ -44,9 +45,10 @@ export function createApp({ config, logger, now = Date.now, send, actionsDeps = 
     badge: () => hub.current?.state?.counts?.attention ?? 0,
   });
   const ui = actionsDeps.ui ?? new AgentsUi({ port: config.cdpPort, restoreSelection: config.restoreSelection });
-  const actions = new Actions({ ui, db, watcher, config, logger, now, ...(actionsDeps.sleep ? { sleep: actionsDeps.sleep } : {}) });
+  const uploads = new Uploads({ dir: path.join(config.dataDir, 'uploads'), now });
+  const actions = new Actions({ ui, db, watcher, config, logger, uploads, now, ...(actionsDeps.sleep ? { sleep: actionsDeps.sleep } : {}) });
   const awake = new KeepAwake({ store, config, logger, ...(actionsDeps.awake ?? {}) });
-  const http = createHttpServer({ config, store, auth, hub, watcher, notifier, actions, awake, logger, now });
+  const http = createHttpServer({ config, store, auth, hub, watcher, notifier, actions, awake, uploads, logger, now });
 
   function publish() {
     const last = watcher.last;
@@ -110,6 +112,7 @@ export function createApp({ config, logger, now = Date.now, send, actionsDeps = 
       actions.stop();
       await awake.close();
       await http.close();
+      uploads.close();
       store.close();
     },
   };

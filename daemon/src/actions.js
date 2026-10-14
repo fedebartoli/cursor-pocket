@@ -11,6 +11,7 @@ import { EventEmitter } from 'node:events';
 import { SHELL_TOOLS } from './cursor/model.js';
 import { FREEFORM_ID } from './cursor/questions.js';
 import { errorFields } from './log.js';
+import { UPLOAD_LIMITS } from './uploads.js';
 import { sleep as realSleep } from './util.js';
 
 export class ActionError extends Error {
@@ -88,6 +89,8 @@ const UI_ERRORS = {
   question_pending: [409, 'question_pending', 'La chat ha una domanda in attesa: rispondi prima a quella.'],
   no_menu_item: [409, 'ui_changed', 'Cursor non mostra la voce di menu attesa: controlla sul Mac.'],
   no_rename_field: [409, 'ui_changed', 'Cursor non ha aperto il campo del nome: controlla sul Mac.'],
+  no_file_input: [409, 'ui_changed', 'Cursor non mostra il campo per gli allegati: controlla sul Mac.'],
+  attach_failed: [409, 'attach_failed', 'Cursor non ha accettato le immagini: riprova o allegale dal Mac.'],
   bad_name: [400, 'bad_name', 'Nome non valido.'],
   not_running: [409, 'not_running', 'L\'agente non sta lavorando in Cursor (forse ha gia\' finito).'],
 };
@@ -110,8 +113,9 @@ export class Actions extends EventEmitter {
   /**
    * @param {{ ui: object, db: object, watcher: object, config: object, logger: object, now?: Function, sleep?: Function }} deps
    */
-  constructor({ ui, db, watcher, config, logger, now = Date.now, sleep = realSleep }) {
+  constructor({ ui, db, watcher, config, logger, uploads = null, now = Date.now, sleep = realSleep }) {
     super();
+    this.uploads = uploads;
     this.ui = ui;
     this.db = db;
     this.watcher = watcher;
@@ -451,13 +455,19 @@ export class Actions extends EventEmitter {
   }
 
   /** Scrive un messaggio nella chat. Se l'agente sta lavorando decide Cursor (coda o invio immediato, impostazione sua). */
-  async sendMessage(chatId, { text } = {}) {
-    if (typeof text !== 'string') throw new ActionError(400, 'bad_text', 'Scrivi un messaggio');
-    const clean = cleanText(text).trim();
-    if (!clean) throw new ActionError(400, 'bad_text', 'Scrivi un messaggio');
+  async sendMessage(chatId, { text, images } = {}) {
+    const ids = images === undefined ? [] : images;
+    if (!Array.isArray(ids) || ids.length > UPLOAD_LIMITS.perMessage || !ids.every((x) => typeof x === 'string')) {
+      throw new ActionError(400, 'bad_images', `Si possono allegare al massimo ${UPLOAD_LIMITS.perMessage} immagini`);
+    }
+    if (text !== undefined && typeof text !== 'string') throw new ActionError(400, 'bad_text', 'Scrivi un messaggio');
+    const clean = cleanText(text ?? '').trim();
+    if (!clean && !ids.length) throw new ActionError(400, 'bad_text', 'Scrivi un messaggio');
     if (clean.length > LIMITS.messageChars) throw new ActionError(400, 'too_long', `Messaggio troppo lungo (massimo ${LIMITS.messageChars} caratteri)`);
     this.#requireReady();
     const chat = this.#chat(chatId);
+    const files = ids.length ? this.uploads?.paths(ids) : [];
+    if (!files) throw new ActionError(409, 'image_expired', 'Un\'immagine non \u00e8 pi\u00f9 disponibile: allegala di nuovo.');
     if (chat.attention?.kind === 'domanda' && chat.attention.live) {
       throw new ActionError(409, 'question_pending', 'La chat ha una domanda in attesa: rispondi prima a quella.');
     }
@@ -467,12 +477,12 @@ export class Actions extends EventEmitter {
       throw new ActionError(409, 'approval_pending', 'La chat aspetta una tua approvazione in Cursor: approvala o rifiutala dal Mac prima di scrivere.');
     }
     // Un doppio tocco sul pulsante non deve inviare due volte lo stesso testo.
-    const slot = this.#dedupe('message', chatId, crypto.createHash('sha1').update(clean).digest('hex').slice(0, 16), 8_000);
+    const slot = this.#dedupe('message', chatId, crypto.createHash('sha1').update(clean + '\u0000' + ids.join(',')).digest('hex').slice(0, 16), 8_000);
     let ok = false;
     try {
       const res = await this.#run('message', async () => {
         const before = this.db.composerTail(chatId);
-        await this.ui.sendMessage({ composerId: chatId, text: clean });
+        await this.ui.sendMessage({ composerId: chatId, text: clean, ...(files.length ? { files } : {}) });
         const tail = await this.#waitFor(() => {
           const t = this.db.composerTail(chatId);
           if (!t || !before) return null;
@@ -481,6 +491,10 @@ export class Actions extends EventEmitter {
         return { ok: true, verified: Boolean(tail), queued: Boolean(tail && before && tail.queueLength > before.queueLength) };
       });
       ok = true;
+      if (ids.length) {
+        this.uploads?.remove(ids);
+        this.logger.info('message_images', { count: ids.length });
+      }
       this.watcher.boost?.(chatId); // dopo l'azione la chat si rilegge ogni secondo: la reazione dell'agente si vede subito
       return res;
     } finally {

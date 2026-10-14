@@ -4,6 +4,8 @@
 // e il ripristino della chat aperta. Cosa NON dimostra: che i selettori coincidano con quelli di Cursor (vedi FINDINGS sez. 10).
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
+import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { AgentsUi, FREEFORM_ID, UiError, currentQuestionIndex, promptMatches } from '../src/cursor/agents-ui.js';
@@ -170,6 +172,48 @@ describe('AgentsUi su Chromium con la pagina finta', { skip }, () => {
     const s = await state();
     assert.deepEqual(s.sent, [{ chat: 'chat-c', text }]);
     assert.equal(s.current, 'chat-b');
+  });
+
+  it('sendMessage con immagini: allega, scrive, invia; con solo immagini invia lo stesso; le anteprime spariscono', async () => {
+    const f = path.join(os.tmpdir(), `cp-test-${process.pid}.png`);
+    fs.writeFileSync(f, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64'));
+    try {
+      await reset(withQ([RAW_Q1]));
+      await ui.sendMessage({ composerId: 'chat-c', text: 'guarda', files: [f, f] });
+      await ui.sendMessage({ composerId: 'chat-c', text: '', files: [f] });
+      const s = await state();
+      assert.deepEqual(s.sent, [{ chat: 'chat-c', text: 'guarda', images: 2 }, { chat: 'chat-c', text: '', images: 1 }]);
+      assert.equal(await browser.evalPage(`document.querySelectorAll('.ui-prompt-input-image-preview').length`), 0);
+    } finally {
+      fs.rmSync(f, { force: true });
+    }
+  });
+
+  it('sendMessage con immagini: se Cursor non le mostra, errore e nessun invio; con bozza di immagini non si mescola', async () => {
+    const f = path.join(os.tmpdir(), `cp-test2-${process.pid}.png`);
+    fs.writeFileSync(f, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64'));
+    try {
+      await reset({ ...withQ([RAW_Q1]), noPreview: true });
+      await assert.rejects(ui.sendMessage({ composerId: 'chat-c', text: 'x', files: [f] }), (e) => e.code === 'attach_failed');
+      assert.deepEqual((await state()).sent, []);
+      await reset(withQ([RAW_Q1]));
+      await browser.evalPage(`(() => { const b = document.createElement('div'); b.className = 'ui-prompt-input-image-preview'; b.innerHTML = '<img alt="x">'; document.querySelector('#previews').append(b); 0; })()`);
+      await assert.rejects(ui.sendMessage({ composerId: 'chat-c', text: 'x' }), (e) => e.code === 'draft_not_empty');
+    } finally {
+      fs.rmSync(f, { force: true });
+    }
+  });
+
+  it('attachImages: allega e toglie tutto senza inviare', async () => {
+    const f = path.join(os.tmpdir(), `cp-test3-${process.pid}.png`);
+    fs.writeFileSync(f, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64'));
+    try {
+      await reset(withQ([RAW_Q1]));
+      assert.deepEqual(await ui.attachImages({ composerId: 'chat-c', files: [f, f, f] }), { attached: 3, left: 0 });
+      assert.deepEqual((await state()).sent, []);
+    } finally {
+      fs.rmSync(f, { force: true });
+    }
   });
 
   it('sendMessage: non mescola il messaggio con una bozza dell\'utente', async () => {

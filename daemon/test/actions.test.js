@@ -1,3 +1,5 @@
+import fs from 'node:fs';
+import path from 'node:path';
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { Actions, ActionError, answersMatch, cleanText, LIMITS, validateAnswers } from '../src/actions.js';
@@ -772,6 +774,64 @@ test('archivia e ripristina via HTTP: non una chat che lavora; elenco archiviate
     assert.deepEqual(ui.calls.map((c) => c[0]), ['archive', 'unarchive']);
     h.tick();
     assert.equal((await h.req({ path: '/api/archived', cookie })).json().chats.length, 0);
+  } finally {
+    await h.stop();
+  }
+});
+
+const PNG = Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), Buffer.alloc(64, 1)]);
+
+test('immagini: caricamento controllato dal contenuto, messaggio con allegati, file cancellati dopo l\'invio', async () => {
+  const { h, ui, cookie, post } = await setup({ withQuestion: false });
+  try {
+    const up = (body, type = 'image/png') => h.req({ method: 'POST', path: '/api/uploads', cookie, headers: { 'Content-Type': type }, body });
+    assert.equal((await h.req({ method: 'POST', path: '/api/uploads', headers: { 'Content-Type': 'image/png' }, body: PNG })).status, 401);
+    assert.equal((await up(Buffer.from('non sono un\'immagine'))).status, 415, 'il contenuto conta, non il tipo dichiarato');
+    assert.equal((await up(PNG, 'text/plain')).status, 415);
+    assert.equal((await up(Buffer.alloc(0))).status, 415);
+    assert.equal((await up(Buffer.concat([PNG, Buffer.alloc(8 * 1024 * 1024)]))).status, 413);
+
+    const a = await up(PNG);
+    assert.equal(a.status, 200, a.text);
+    const id = a.json().id;
+    assert.match(id, /^[a-f0-9]{32}$/);
+    const dir = path.join(h.fx.dir, 'data', 'uploads');
+    const files = fs.readdirSync(dir);
+    assert.deepEqual(files, [`${id}.png`]);
+    assert.equal(fs.statSync(path.join(dir, files[0])).mode & 0o777, 0o600);
+
+    // id inventato / non una lista / troppi allegati
+    assert.equal((await post('message', { text: 'x', images: ['a'.repeat(32)] })).json().error, 'image_expired');
+    assert.equal((await post('message', { text: 'x', images: 'no' })).json().error, 'bad_images');
+    assert.equal((await post('message', { text: 'x', images: [id, id, id, id, id] })).json().error, 'bad_images');
+    assert.equal((await post('message', { images: [] })).json().error, 'bad_text');
+    assert.equal(ui.calls.length, 0);
+
+    // con solo l'immagine (niente testo) si puo' inviare; la UI riceve il percorso del file
+    ui.onMessage = () =>
+      h.fx.conversation(ID, [
+        { id: 'b1', type: 1, createdAt: T0 - 3000, text: 'Fai' },
+        { id: 'b2', type: 2, createdAt: T0 - 2000, text: 'Fatto.' },
+        { id: 'b3', type: 1, createdAt: T0 - 1000, text: '' },
+      ]);
+    const r = await post('message', { images: [id] });
+    assert.equal(r.status, 200, r.text);
+    assert.deepEqual(ui.calls[0][1], { composerId: ID, text: '', files: [path.join(dir, `${id}.png`)] });
+    assert.deepEqual(fs.readdirSync(dir), [], 'dopo l\'invio il file non c\'e\' piu\'');
+    assert.ok(!h.logLines.join('').includes(id), 'nessun id o percorso nei log');
+    assert.equal((await post('message', { text: 'x', images: [id] })).json().error, 'image_expired');
+
+    // se l'invio fallisce il file resta (si puo' ritentare) e si puo' cancellare
+    const b = (await up(PNG)).json().id;
+    ui.onMessage = () => {
+      throw Object.assign(new Error('x'), { code: 'attach_failed' });
+    };
+    const bad = await post('message', { text: 'ciao', images: [b] });
+    assert.equal(bad.status, 409);
+    assert.deepEqual(fs.readdirSync(dir), [`${b}.png`]);
+    const del = await h.req({ method: 'DELETE', path: `/api/uploads/${b}`, cookie });
+    assert.equal(del.status, 200);
+    assert.deepEqual(fs.readdirSync(dir), []);
   } finally {
     await h.stop();
   }

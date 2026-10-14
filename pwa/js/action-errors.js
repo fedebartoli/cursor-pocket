@@ -8,6 +8,7 @@ const CUSTOM = Object.freeze({
   already_sent: 'Questa richiesta \u00e8 gi\u00e0 stata inviata: attendo che Cursor la registri.',
   too_large: 'Il testo \u00e8 troppo lungo.',
   too_long: 'Il messaggio \u00e8 troppo lungo.',
+  not_image: 'Formato non supportato: servono JPEG, PNG, GIF o WebP.',
   bad_name: 'Scrivi un nome (massimo 100 caratteri).',
   http: 'Operazione non riuscita. Riprova.',
 });

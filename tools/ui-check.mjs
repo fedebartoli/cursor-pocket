@@ -480,6 +480,23 @@ try {
   check('compositore: campo svuotato dopo l\'invio', (await page.locator('.composer-input').inputValue()) === '');
   await shot('06-sent');
 
+  // --- immagini allegate: scelta, anteprima, rimozione, invio ---
+  const PNG_B64 = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==';
+  await page.waitForSelector('.attach');
+  check('immagini: pulsante "Allega immagini" con icona SVG', (await page.locator('.attach svg').count()) === 1 && (await page.locator('.attach').isEnabled()));
+  await page.locator('input[type=file]').setInputFiles([{ name: 'a.png', mimeType: 'image/png', buffer: Buffer.from(PNG_B64, 'base64') }, { name: 'b.png', mimeType: 'image/png', buffer: Buffer.from(PNG_B64, 'base64') }]);
+  await page.waitForFunction(() => document.querySelectorAll('.attach-item').length === 2 && !document.querySelector('.attach-item.loading'), null, { timeout: 8000 });
+  check('immagini: due anteprime, invio attivo anche senza testo', (await page.locator('.attach-item img').count()) === 2 && (await page.locator('.send').isEnabled()));
+  await shot('20-attach');
+  await page.locator('.attach-remove').first().click();
+  check('immagini: "Rimuovi" toglie l\'anteprima', (await page.locator('.attach-item').count()) === 1);
+  await page.locator('.send').click();
+  await page.waitForFunction(() => document.querySelectorAll('.attach-item').length === 0, null, { timeout: 10000 });
+  check('immagini: dopo l\'invio le anteprime spariscono e compare l\'esito', /inviato|coda/i.test(await page.locator('.dock-status').innerText()));
+  await page.locator('input[type=file]').setInputFiles([{ name: 'c.txt', mimeType: 'text/plain', buffer: Buffer.from('non un\'immagine') }]);
+  await page.waitForFunction(() => /non supportato|non caricata/i.test(document.querySelector('.dock-status')?.textContent || ''), null, { timeout: 8000 });
+  check('immagini: un file che non e\' un\'immagine viene rifiutato con un avviso', (await page.locator('.attach-item').count()) === 0);
+
   // --- doppio tocco: la rete di sicurezza blocca il secondo tocco ravvicinato ---
   await page.goto(`${BASE}/#/impostazioni`);
   await page.waitForSelector('.panel');

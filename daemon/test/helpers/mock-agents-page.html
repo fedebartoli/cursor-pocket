@@ -40,6 +40,8 @@
   <div class="glass-questionnaire-tray" id="tray" hidden></div>
   <div id="approvals" style="position:absolute;left:10px;right:10px;top:340px"></div>
   <div class="composer">
+    <div id="previews"></div>
+    <input type="file" id="files" multiple accept="image/*,.pdf" hidden>
     <div class="tiptap ProseMirror ui-prompt-input-editor__input" contenteditable="true" role="textbox" id="composer"></div>
     <button type="button" aria-label="Send message" id="send" disabled>Invia</button>
     <button type="button" aria-label="Stop generation" id="stop" hidden>Stop</button>
@@ -243,13 +245,36 @@
   // --- composer: Invio invia, Maiusc+Invio va a capo ---
   const comp = $('#composer');
   const send = $('#send');
-  const refreshSend = () => { send.disabled = comp.innerText.trim() === ''; };
+  const previews = $('#previews');
+  const refreshSend = () => { send.disabled = comp.innerText.trim() === '' && previews.children.length === 0; };
   comp.addEventListener('input', refreshSend);
+  // Allegati: come Cursor, ogni immagine ha un'anteprima `.ui-prompt-input-image-preview` con "Remove image".
+  $('#files').addEventListener('change', (ev) => {
+    if (S.noPreview) return;
+    for (const f of ev.target.files) {
+      const box = document.createElement('div');
+      box.className = 'ui-prompt-input-image-preview';
+      box.style.cssText = 'display:inline-flex;gap:4px';
+      const img = document.createElement('img');
+      img.alt = f.name; img.width = 24; img.height = 24;
+      img.src = 'data:image/gif;base64,R0lGODlhAQABAAAAACw=';
+      const rm = document.createElement('button');
+      rm.type = 'button'; rm.setAttribute('aria-label', 'Remove image'); rm.textContent = 'x';
+      rm.style.cssText = 'width:18px;height:18px';
+      rm.addEventListener('click', () => { box.remove(); refreshSend(); });
+      box.append(img, rm);
+      previews.append(box);
+    }
+    ev.target.value = '';
+    refreshSend();
+  });
   function doSend() {
     const text = comp.innerText.replace(/\n+$/, '');
-    if (!text.trim()) return;
-    S.sent.push({ chat: S.current, text });
+    const images = previews.children.length;
+    if (!text.trim() && !images) return;
+    S.sent.push(images ? { chat: S.current, text, images } : { chat: S.current, text });
     comp.replaceChildren();
+    previews.replaceChildren();
     refreshSend();
   }
   comp.addEventListener('keydown', (ev) => {
@@ -292,7 +317,8 @@
 
   window.__mock = {
     reset(cfg) {
-      S = { current: cfg.current ?? null, chats: cfg.chats, qstate: {}, done: {}, submitted: [], skipped: [], sent: [], clicks: 0, log: [], decided: {}, stopped: [], renamed: [], archived: [], unarchived: [], showArchived: false, renaming: null };
+      document.querySelector('#previews').replaceChildren();
+      S = { current: cfg.current ?? null, chats: cfg.chats, qstate: {}, done: {}, submitted: [], skipped: [], sent: [], clicks: 0, log: [], decided: {}, stopped: [], renamed: [], archived: [], unarchived: [], showArchived: false, renaming: null, noPreview: cfg.noPreview === true };
       for (const [id, c] of Object.entries(S.chats)) {
         S.qstate[id] = { step: 0, selections: JSON.parse(JSON.stringify(cfg.initialSelections?.[id] ?? {})), freeform: { ...(cfg.initialFreeform?.[id] ?? {}) } };
         if (c.questions) {

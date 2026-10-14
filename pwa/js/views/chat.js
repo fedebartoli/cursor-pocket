@@ -383,9 +383,9 @@ export function mountChat(root, id) {
     if (force && changed && renaming) document.getElementById('rename-input')?.focus();
   }
 
-  async function sendMessage(text) {
+  async function sendMessage(text, images = []) {
     try {
-      const res = await api.post(`/api/chats/${enc}/message`, { text });
+      const res = await api.post(`/api/chats/${enc}/message`, images.length ? { text, images } : { text });
       markActed(Date.now());
       refreshSoon();
       load();
