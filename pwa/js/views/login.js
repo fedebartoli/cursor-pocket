@@ -1,4 +1,4 @@
-// Abbinamento del dispositivo con il codice generato sul Mac (`npm run pair`) e schermata "daemon non raggiungibile".
+// Device pairing with code generated on the Mac (`npm run pair`) and "daemon unreachable" screen.
 import { api } from '../api.js';
 import { logoImg } from '../components.js';
 import { h, replace } from '../dom.js';

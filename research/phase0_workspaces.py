@@ -1,11 +1,11 @@
 #!/usr/bin/env python3
 """
-Fase 0 - risoluzione chat -> cartella/workspace (SOLA LETTURA).
-Misura la copertura di tre sorgenti, in ordine di priorita':
-  1. agentLocation.environment.uri (chat create nella Agents Window)
+Phase 0 - chat -> folder/workspace resolution (READ ONLY).
+Measures coverage of three sources, in priority order:
+  1. agentLocation.environment.uri (chats created in the Agents Window)
   2. workspaceIdentifier.uri
-  3. workspaceStorage/<workspaceId>/workspace.json (campo `folder` o `workspace`)
-Stampa solo conteggi e forme: nessun percorso.
+  3. workspaceStorage/<workspaceId>/workspace.json (`folder` or `workspace` field)
+Prints counts and shapes only: no paths.
 """
 import collections, json, os, sqlite3
 from urllib.parse import unquote, urlparse
@@ -45,7 +45,7 @@ def main():
         if j.get("isDraft") or not (lu or 0):
             continue
         cands.append((cid, wsid, j))
-    print("chat candidate (non archiviate, non sottoagenti, non bozze, con attivita'):", len(cands))
+    print("candidate chats (not archived, not subagents, not drafts, with activity):", len(cands))
 
     src = C()
     wsj_shapes = C()
@@ -71,24 +71,24 @@ def main():
         elif "configPath" in wi:
             src["5_configPath (multi-root)"] += 1
         else:
-            src["6_NON RISOLTA"] += 1
+            src["6_UNRESOLVED"] += 1
             unresolved_ws.add(wsid)
     for k, n in sorted(src.items()):
         print(f"  {n:4d}  {k}")
-    print("forme workspace.json usate:", dict(wsj_shapes))
-    print("workspace non risolti (distinti):", len(unresolved_ws))
+    print("workspace.json shapes used:", dict(wsj_shapes))
+    print("unresolved workspaces (distinct):", len(unresolved_ws))
 
-    # Cartelle in workspaceStorage e relativa risolubilita'
+    # Folders in workspaceStorage and how often they resolve
     entries = [e for e in os.listdir(WS) if os.path.isdir(os.path.join(WS, e))]
     kinds = C()
     for e in entries:
         wj = ws_json(e)
-        kinds["manca workspace.json" if wj is None else ("folder" if "folder" in wj else ("workspace" if "workspace" in wj else "altro"))] += 1
-    print("\nworkspaceStorage: cartelle =", len(entries), "->", dict(kinds))
+        kinds["missing workspace.json" if wj is None else ("folder" if "folder" in wj else ("workspace" if "workspace" in wj else "other"))] += 1
+    print("\nworkspaceStorage: folders =", len(entries), "->", dict(kinds))
 
-    # workspace non risolti: hanno cartella in workspaceStorage?
+    # Unresolved: do they have a folder in workspaceStorage?
     in_storage = sum(1 for w in unresolved_ws if os.path.isdir(os.path.join(WS, w)))
-    print("di quelli non risolti, con cartella in workspaceStorage:", in_storage, "su", len(unresolved_ws))
+    print("of unresolved, with folder in workspaceStorage:", in_storage, "of", len(unresolved_ws))
 
 
 if __name__ == "__main__":

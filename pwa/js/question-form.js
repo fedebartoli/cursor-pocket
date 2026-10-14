@@ -1,7 +1,7 @@
-// Questionario interattivo (Fase 2): risposta a una domanda di `ask_question` dal telefono.
+// Interactive questionnaire (Phase 2): answer an `ask_question` prompt from the phone.
 //
-// Il DOM si costruisce UNA volta per domanda (identificata da `key`, il toolCallId) e poi si aggiorna sul posto:
-// niente ridisegni che farebbero perdere la selezione, il focus o il testo scritto quando arriva un aggiornamento live.
+// DOM is built ONCE per question (identified by `key`, the toolCallId) then updated in place:
+// no redraws that would lose selection, focus, or typed text when a live update arrives.
 import { AnswerState, FREEFORM_MAX, optionBadge } from './answers.js';
 import { h } from './dom.js';
 import { timeAgo } from './format.js';
@@ -11,9 +11,9 @@ const SKIP_ARM_MS = 4000;
 
 /**
  * @param {object} p
- * @param {string} p.key         toolCallId della domanda
+ * @param {string} p.key         question toolCallId
  * @param {object} p.question    { title, questions: [{ id, prompt, options: [{id, label}], allowMultiple }] }
- * @param {() => void} p.onSubmit  (answers) => void|Promise, con `answers` pronto per POST /answer
+ * @param {() => void} p.onSubmit  (answers) => void|Promise, with `answers` ready for POST /answer
  * @param {() => void} p.onSkip
  * @param {() => void} p.onIgnore
  */
@@ -96,7 +96,7 @@ export function createQuestionForm({ key, question, onSubmit, onSkip, onIgnore }
     h('div', { class: 'panel-actions' }, submitBtn, h('div.split', null, skipBtn, ignoreBtn)),
   );
 
-  // Il contenuto di un pulsante si rifa' solo se cambia davvero: durante un tocco i figli non devono sparire.
+  // Button content is rebuilt only when it actually changes: children must not disappear during a tap.
   const btnSig = new WeakMap();
   function setBtn(btn, iconName, label, spin = false) {
     const sig = `${iconName}|${label}|${spin}`;
@@ -141,7 +141,7 @@ export function createQuestionForm({ key, question, onSubmit, onSkip, onIgnore }
     if (busy || sent) return;
     const on = state.toggleOther(qid);
     sync();
-    // Il tocco e' un gesto dell'utente: il focus apre subito la tastiera su iOS.
+    // Tap is a user gesture: focus opens the keyboard immediately on iOS.
     if (on) others.find((o) => o.qid === qid)?.text.focus();
   }
 
@@ -172,10 +172,10 @@ export function createQuestionForm({ key, question, onSubmit, onSkip, onIgnore }
   return {
     el,
     key,
-    /** Titolo e orario (si aggiornano con la chat, senza toccare le scelte). */
+    /** Title and time (update with the chat, without touching choices). */
     update({ heading, since, ignored = false, stale = false }) {
       if (heading && headingEl.textContent !== heading) headingEl.textContent = heading;
-      // Domanda ignorata: lo stesso pulsante la rimette tra quelle che richiedono attenzione.
+      // Ignored question: the same button puts it back among those needing attention.
       ignoredState = Boolean(ignored);
       el.classList.toggle('muted-attention', Boolean(stale));
       sync();
@@ -192,7 +192,7 @@ export function createQuestionForm({ key, question, onSubmit, onSkip, onIgnore }
       sent = Boolean(v);
       sync();
     },
-    /** `{ text, error }` oppure null. */
+    /** `{ text, error }` or null. */
     setNotice(n) {
       noticeEl.hidden = !n;
       noticeEl.textContent = n?.text ?? '';

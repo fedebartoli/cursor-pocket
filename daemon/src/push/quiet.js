@@ -1,11 +1,11 @@
-// "Orari senza notifiche": una fascia giornaliera (es. 22:00 - 07:00, anche a cavallo della mezzanotte) in cui il daemon
-// non invia push. Le richieste restano visibili nell'app; niente viene accodato e rinviato.
+// "Quiet hours": a daily window (e.g. 22:00 - 07:00, including across midnight) when the daemon
+// does not send push. Requests stay visible in the app; nothing is queued for later.
 
 const HHMM = /^([01]\d|2[0-3]):([0-5]\d)$/;
 
 export const DEFAULT_QUIET = Object.freeze({ enabled: false, from: '22:00', to: '07:00' });
 
-/** Valida e normalizza `{enabled, from, to}` (null se non valido). */
+/** Validate and normalize `{enabled, from, to}` (null if invalid). */
 export function normalizeQuiet(v) {
   if (!v || typeof v !== 'object' || typeof v.enabled !== 'boolean') return null;
   const from = typeof v.from === 'string' ? v.from : DEFAULT_QUIET.from;
@@ -16,7 +16,7 @@ export function normalizeQuiet(v) {
 
 const minutes = (hhmm) => Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3));
 
-/** Vero se `date` (ora locale del Mac) cade nella fascia. Con inizio = fine la fascia e' vuota. */
+/** True if `date` (Mac local time) falls in the window. If start equals end, the window is empty. */
 export function isQuiet(q, date) {
   if (!q?.enabled) return false;
   const now = date.getHours() * 60 + date.getMinutes();

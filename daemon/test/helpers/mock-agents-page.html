@@ -4,11 +4,11 @@
 <meta charset="utf-8">
 <title>Cursor Agents (mock di prova)</title>
 <!--
-  Pagina FINTA che imita la struttura dell'Agents Window di Cursor letta nel bundle (non e' Cursor):
-  sidebar con righe `data-sidebar-item-key="row:<id>"`, tray del questionario (`glass-questionnaire-tray`, opzioni
-  `ui-tray-option`, campo libero `questionnaire-freeform-option`, footer primario/secondario) e composer Lexical-like.
-  La logica di selezione ricalca le funzioni del bundle: Weg (singola: un secondo clic deseleziona), Jnl (avanzamento o invio),
-  ie (la scelta singola avanza da sola). Serve solo a provare agents-ui.js in un Chromium vero.
+  FAKE page mimicking the Agents Window structure read from Cursor's bundle (not Cursor itself):
+  sidebar rows `data-sidebar-item-key="row:<id>"`, questionnaire tray (`glass-questionnaire-tray`, options
+  `ui-tray-option`, freeform `questionnaire-freeform-option`, primary/secondary footer) and Lexical-like composer.
+  Selection logic mirrors bundle functions: Weg (single: second click deselects), Jnl (advance or submit),
+  ie (single choice auto-advances). Used only to exercise agents-ui.js in real Chromium.
 -->
 <style>
   * { box-sizing: border-box; }
@@ -52,7 +52,7 @@
     <button type="button" aria-label="Stop generation" id="stop" hidden>Stop</button>
   </div>
 </main>
-<!-- Come in Cursor 3.24: i pannelli delle altre chat restano vivi ma nascosti, con un loro composer (il piu' in basso). -->
+<!-- As in Cursor 3.24: other chat panels stay alive but hidden, each with its own composer (bottommost wins). -->
 <div data-keep-alive-hidden="">
   <div data-agent-panel-conversation-shell data-glass-agent-id="decoy" style="position:absolute;left:0;right:0;bottom:0;height:30px">
     <div class="tiptap ProseMirror ui-prompt-input-editor__input decoy-input" contenteditable="true" id="decoy-composer"></div>
@@ -64,7 +64,7 @@
 (() => {
   const FREE = '__freeform_other__';
   const LETTERS = 'ABCDEFGHIJKL';
-  // --- logica del bundle di Cursor (nomi originali tra parentesi) ---
+  // --- Cursor bundle logic (original names in parentheses) ---
   const allAnswered = (qs, sel) => qs.every((q) => (sel[q.id]?.length ?? 0) > 0); // Qnl
   const nextUnanswered = (qs, qid, sel) => { // eil
     const i = qs.findIndex((q) => q.id === qid);
@@ -152,7 +152,7 @@
     }
   }
 
-  // Menu (role=menu / menuitem) come quelli di Cursor: si chiude con Esc; le voci "checkbox" lo lasciano aperto.
+  // Menu (role=menu / menuitem) like Cursor's: closes on Esc; "checkbox" items keep it open.
   function menu(items) {
     const root = $('#menu-root');
     root.replaceChildren();
@@ -248,7 +248,7 @@
     title.className = 'ui-tray-step-title';
     title.textContent = q.prompt;
     el.append(title);
-    q.options.filter((o) => !isOther(o.label)).forEach((o, i) => { // uis/Ylk: le opzioni "Other" non si mostrano
+    q.options.filter((o) => !isOther(o.label)).forEach((o, i) => { // uis/Ylk: "Other" options are not shown
       const b = document.createElement('button');
       b.type = 'button';
       b.className = 'ui-tray-option';
@@ -326,13 +326,13 @@
     }
   }
 
-  // --- composer: Invio invia, Maiusc+Invio va a capo ---
+  // --- composer: Enter sends, Shift+Enter newline ---
   const comp = $('#composer');
   const send = $('#send');
   const previews = $('#previews');
   const refreshSend = () => { send.disabled = comp.innerText.trim() === '' && previews.children.length === 0; };
   comp.addEventListener('input', refreshSend);
-  // Allegati: come Cursor, ogni immagine ha un'anteprima `.ui-prompt-input-image-preview` con "Remove image".
+  // Attachments: like Cursor, each image has a `.ui-prompt-input-image-preview` preview with "Remove image".
   $('#files').addEventListener('change', (ev) => {
     if (S.noPreview) return;
     for (const f of ev.target.files) {
@@ -363,7 +363,7 @@
       S.choices.push({ branch: S.branch, model: S.model });
       S.newChat = null;
       S.current = id;
-      // Come Cursor: per un attimo c'e' anche una riga "bozza" (altro id) che poi sparisce.
+      // Like Cursor: briefly a "draft" row (other id) appears then disappears.
       S.chats['draft-' + id] = { name: 'Bozza' };
       setTimeout(() => { delete S.chats['draft-' + id]; sidebar(); }, 500);
       comp.replaceChildren();
@@ -382,8 +382,8 @@
   });
   send.addEventListener('click', doSend);
 
-  // Carte dei comandi di terminale in attesa di approvazione: riga con `data-message-id`, carta `.ui-shell-tool-call`, pulsanti
-  // "Skip" e "Run" (con il simbolo di Invio). Dopo la decisione i pulsanti spariscono, come in Cursor.
+  // Terminal command cards awaiting approval: row with `data-message-id`, `.ui-shell-tool-call` card, buttons
+  // "Skip" and "Run" (with Enter symbol). After decision buttons disappear, as in Cursor.
   function approvals() {
     const box = $('#approvals');
     box.replaceChildren();
@@ -408,7 +408,7 @@
     }
   }
 
-  // Mentre la chat "lavora" compare "Stop generation"; il clic la ferma.
+  // While chat is "working" shows "Stop generation"; click stops it.
   const stopBtn = $('#stop');
   function running() { stopBtn.hidden = !(S.chats[S.current]?.running && !S.stopped.includes(S.current)); }
   stopBtn.addEventListener('click', () => { S.stopped.push(S.current); S.log.push(`stop:${S.current}`); running(); });

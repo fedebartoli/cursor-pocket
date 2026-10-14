@@ -30,7 +30,7 @@ function memStore() {
   return { getMeta: (k) => m.get(k) ?? null, setMeta: (k, v) => m.set(k, v) };
 }
 
-/** Power finto: registra le chiamate e simula sudo, schermo, batteria e luminosita'. */
+/** Fake Power: records calls and simulates sudo, lid, battery and brightness. */
 function fakePower(over = {}) {
   const s = { sudo: true, lid: false, battery: { onAC: true, percent: 100 }, brightness: 0.8, sleepDisabled: false, log: [], ...over };
   return {
@@ -61,42 +61,42 @@ function make({ power = fakePower(), grace = 50, poll = 20 } = {}) {
   return { a, f, store, power };
 }
 
-test('Mac sveglio: spento di default; acceso parte solo se una chat lavora, con -w del daemon e senza schermo', async () => {
+test('awake Mac: off by default; on starts only when a chat is working, with daemon -w and no display', async () => {
   const { a, f } = make();
   a.update(3);
-  assert.equal(f.caffeinate().length, 0, 'spento: nessun processo');
+  assert.equal(f.caffeinate().length, 0, 'off: no process');
   a.enabled = true;
-  assert.equal(f.caffeinate().length, 1, 'acceso e chat in corso: parte');
+  assert.equal(f.caffeinate().length, 1, 'on and chat running: starts');
   const args = f.caffeinate()[0].args;
   assert.deepEqual(args.slice(0, 3), ['-i', '-m', '-s']);
   assert.ok(args.includes('-w') && args.includes(String(process.pid)));
-  assert.ok(!args.includes('-d'), 'lo schermo si spegne come al solito');
+  assert.ok(!args.includes('-d'), 'display sleeps as usual');
   assert.equal((await a.describe()).active, true);
   a.update(2);
-  assert.equal(f.caffeinate().length, 1, 'un solo processo');
-  assert.equal(f.guards().length, 0, 'senza "schermo chiuso" nessuna guardia');
+  assert.equal(f.caffeinate().length, 1, 'single process');
+  assert.equal(f.guards().length, 0, 'no guard without lid closed');
   await a.close();
 });
 
-test('Mac sveglio: finito il lavoro si spegne dopo la tolleranza; se riparte nel frattempo non si ferma', async () => {
+test('awake Mac: stops after grace when work ends; if work resumes during grace does not stop', async () => {
   const { a, f } = make({ grace: 60 });
   a.enabled = true;
   a.update(1);
   a.update(0);
-  assert.equal(f.caffeinate()[0].p.killed, false, 'ancora in tolleranza');
+  assert.equal(f.caffeinate()[0].p.killed, false, 'still in grace period');
   await sleep(20);
   a.update(1);
   await sleep(80);
-  assert.equal(f.caffeinate()[0].p.killed, false, 'la tolleranza e\' stata annullata');
+  assert.equal(f.caffeinate()[0].p.killed, false, 'grace was cancelled');
   a.update(0);
   await sleep(100);
   assert.equal(f.caffeinate()[0].p.killed, 'SIGTERM');
   a.update(1);
-  assert.equal(f.caffeinate().length, 2, 'riparte con un nuovo processo');
+  assert.equal(f.caffeinate().length, 2, 'restarts with new process');
   await a.close();
 });
 
-test('Mac sveglio: disattivarlo ferma subito; senza comando non e\' disponibile; errore di avvio = non disponibile', async () => {
+test('awake Mac: disabling stops immediately; without command unavailable; start error = unavailable', async () => {
   const { a, f } = make({ grace: 10_000 });
   a.enabled = true;
   a.update(1);
@@ -118,30 +118,30 @@ test('Mac sveglio: disattivarlo ferma subito; senza comando non e\' disponibile;
   assert.equal(d.active, false);
 });
 
-test('a schermo chiuso: disablesleep 1 solo mentre un agente lavora, poi 0; guardia armata e poi fermata', async () => {
+test('lid closed: disablesleep 1 only while agent works, then 0; guard armed then stopped', async () => {
   const { a, f, power } = make();
   a.enabled = true;
   a.closedEnabled = true;
   a.update(1);
   await sleep(60);
   assert.deepEqual(power.s.log, ['sleep:true']);
-  assert.equal(f.guards().length, 1, 'processo di guardia');
+  assert.equal(f.guards().length, 1, 'guard process');
   const g = f.guards()[0];
   assert.equal(g.opts.detached, true);
-  assert.equal(g.args[3], String(process.pid), 'la guardia segue il pid del daemon');
+  assert.equal(g.args[3], String(process.pid), 'guard follows daemon pid');
   assert.equal((await a.describe()).closed.active, true);
   assert.equal(a.store.getMeta('awake_sleep_disabled'), '1');
 
   a.update(0);
   await sleep(120);
   assert.equal(power.s.log.at(-1), 'sleep:false');
-  assert.equal(g.p.killed, 'SIGTERM', 'guardia fermata');
+  assert.equal(g.p.killed, 'SIGTERM', 'guard stopped');
   assert.equal(a.store.getMeta('awake_sleep_disabled'), '0');
   assert.equal((await a.describe()).closed.active, false);
   await a.close();
 });
 
-test('a schermo chiuso: senza la regola sudoers non si tocca pmset; batteria bassa rilascia e risale con margine', async () => {
+test('lid closed: without sudoers rule pmset untouched; low battery releases and re-engages with hysteresis', async () => {
   const noSudo = make({ power: fakePower({ sudo: false }) });
   noSudo.a.enabled = true;
   noSudo.a.closedEnabled = true;
@@ -159,11 +159,11 @@ test('a schermo chiuso: senza la regola sudoers non si tocca pmset; batteria bas
   assert.equal(power.s.sleepDisabled, true);
   power.s.battery = { onAC: false, percent: 15 };
   await sleep(80);
-  assert.equal(power.s.sleepDisabled, false, 'batteria sotto soglia: il Mac torna a poter dormire');
+  assert.equal(power.s.sleepDisabled, false, 'battery below threshold: Mac can sleep again');
   assert.equal((await a.describe()).lowBattery, true);
   power.s.battery = { onAC: false, percent: 22 };
   await sleep(80);
-  assert.equal(power.s.sleepDisabled, false, 'serve un margine prima di riprendere');
+  assert.equal(power.s.sleepDisabled, false, 'hysteresis before re-engaging');
   power.s.battery = { onAC: false, percent: 40 };
   await sleep(80);
   assert.equal(power.s.sleepDisabled, true);
@@ -171,31 +171,31 @@ test('a schermo chiuso: senza la regola sudoers non si tocca pmset; batteria bas
   assert.equal(power.s.sleepDisabled, false);
 });
 
-test('a schermo chiuso: se qualcosa rimette il sonno normale mentre l\'agente lavora, il daemon lo riporta a 1', async () => {
+test('lid closed: if something restores normal sleep while agent works, daemon sets it back to 1', async () => {
   const { a, power } = make();
   a.enabled = true;
   a.closedEnabled = true;
   a.update(1);
   await sleep(60);
-  power.s.sleepDisabled = false; // es. la guardia di un daemon precedente
+  power.s.sleepDisabled = false; // e.g. previous daemon guard
   await sleep(60);
   assert.equal(power.s.sleepDisabled, true);
   await a.close();
 });
 
-test('luminosita\' a zero: solo a schermo chiuso, ripristinata all\'apertura e a fine lavoro; salvata anche in meta per i crash', async () => {
+test('zero brightness: only with lid closed, restored on open and when work ends; also saved in meta for crashes', async () => {
   const { a, f, power, store } = make();
   a.enabled = true;
   a.dimEnabled = true;
   a.update(1);
   await sleep(60);
-  assert.deepEqual(power.s.log, [], 'schermo aperto: niente');
+  assert.deepEqual(power.s.log, [], 'lid open: nothing');
   power.s.lid = true;
   await sleep(60);
   assert.equal(power.s.brightness, 0);
   assert.equal(store.getMeta('awake_saved_brightness'), '0.8');
   const guard = f.guards().at(-1);
-  assert.equal(guard.args[5], '0.8', 'la guardia sa quale luminosita\' ripristinare');
+  assert.equal(guard.args[5], '0.8', 'guard knows brightness to restore');
   power.s.lid = false;
   await sleep(60);
   assert.equal(power.s.brightness, 0.8);
@@ -205,10 +205,10 @@ test('luminosita\' a zero: solo a schermo chiuso, ripristinata all\'apertura e a
   assert.equal(power.s.brightness, 0);
   a.update(0);
   await a.close();
-  assert.equal(power.s.brightness, 0.8, 'a fine lavoro torna com\'era');
+  assert.equal(power.s.brightness, 0.8, 'restored when work ends');
 });
 
-test('avvio dopo un arresto brusco: sospensione e luminosita\' lasciate indietro vengono ripristinate', async () => {
+test('startup after crash: sleep and brightness left behind are restored', async () => {
   const { a, power, store } = make();
   store.setMeta('awake_sleep_disabled', '1');
   store.setMeta('awake_saved_brightness', '0.6');
@@ -218,7 +218,7 @@ test('avvio dopo un arresto brusco: sospensione e luminosita\' lasciate indietro
   assert.equal(store.getMeta('awake_saved_brightness'), '');
 });
 
-test('Power: legge schermo, batteria e sospensione dall\'output di macOS; senza regola sudo non e\' disponibile', async () => {
+test('Power: reads lid, battery and sleep from macOS output; unavailable without sudo rule', async () => {
   const outs = {
     '/usr/sbin/ioreg': '  |   "AppleClamshellState" = Yes\n',
     '/usr/bin/pmset': "Now drawing from 'Battery Power'\n -InternalBattery-0 (id=1)\t63%; discharging; 4:10 remaining present: true\n SleepDisabled\t\t1\n",
@@ -238,7 +238,7 @@ test('Power: legge schermo, batteria e sospensione dall\'output di macOS; senza 
   assert.equal(denied.brightnessAvailable, false);
 });
 
-test('Mac sveglio via HTTP: impostazioni, stato, requisiti dei livelli, conteggio delle chat in corso dal daemon', async () => {
+test('keep awake via HTTP: settings, status, tier requirements, running chat count from daemon', async () => {
   const f = fakeSpawnFactory();
   const power = fakePower({ sudo: false });
   const h = await startHarness({ actionsDeps: { awake: { spawn: f.spawn, exists: () => true, power } } });
@@ -258,7 +258,7 @@ test('Mac sveglio via HTTP: impostazioni, stato, requisiti dei livelli, conteggi
     h.fx.chat(ID, { name: 'Lavora', lastUpdatedAt: T0 - 500, header: { unfinishedRunAt: T0 - 1000 } });
     h.fx.conversation(ID, [{ id: 'b1', type: 1, createdAt: T0 - 3000, text: 'Fai' }, { id: 'b2', type: 2, createdAt: T0 - 2000, text: '...' }], { status: 'generating' });
     h.tick();
-    assert.equal(f.caffeinate().length, 0, 'funzione spenta: niente anche se la chat lavora');
+    assert.equal(f.caffeinate().length, 0, 'feature off: nothing even if chat is working');
 
     const on = await post({ enabled: true });
     assert.equal(on.status, 200);
@@ -266,7 +266,7 @@ test('Mac sveglio via HTTP: impostazioni, stato, requisiti dei livelli, conteggi
     assert.equal(f.caffeinate().length, 1);
 
     power.s.sudo = true;
-    h.app.awake.describe(); // aggiorna la cache
+    h.app.awake.describe(); // refresh cache
     await sleep(5);
     const off = await post({ enabled: false });
     assert.equal(off.json().active, false);

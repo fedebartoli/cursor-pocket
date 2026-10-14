@@ -1,17 +1,17 @@
-// Client minimale del Chrome DevTools Protocol (CDP) verso la porta di debug di Cursor (Fase 2).
+// Minimal Chrome DevTools Protocol (CDP) client to Cursor's debug port (Phase 2).
 //
-// Nessuna dipendenza: usa fetch e il WebSocket globali di Node 22.
-// Sicurezza (vedi docs/ARCHITECTURE.md):
-//  - ci si collega SOLO a loopback e alla porta configurata: l'URL del WebSocket restituito da /json/list viene
-//    ricontrollato (host, porta, percorso), quindi un servizio diverso su quella porta non puo' dirottare il daemon;
-//  - la sessione dura quanto una singola azione e non lascia nulla nella pagina (nessun `Runtime.enable`, nessun
-//    breakpoint, nessuna variabile globale);
-//  - mai log di contenuti: gli errori portano solo un codice e un messaggio fisso.
+// No dependencies: uses Node 22 global fetch and WebSocket.
+// Security (see docs/ARCHITECTURE.md):
+//  - connect ONLY to loopback and the configured port: the WebSocket URL from /json/list is
+//    re-validated (host, port, path), so another service on that port cannot hijack the daemon;
+//  - session lasts one action and leaves nothing in the page (no `Runtime.enable`, no
+//    breakpoints, no global variables);
+//  - never log content: errors carry only a code and a fixed message.
 //
-// Questo modulo non conosce Cursor: i selettori e gli script di pagina stanno in `agents-ui.js`.
+// This module does not know Cursor: selectors and page scripts live in `agents-ui.js`.
 
 export class CdpError extends Error {
-  /** @param {string} code  codice stabile (`unavailable`, `timeout`, `closed`, `cdp_error`, `page_exception`, ...) */
+  /** @param {string} code  stable code (`unavailable`, `timeout`, `closed`, `cdp_error`, `page_exception`, ...) */
   constructor(code, message) {
     super(message || code);
     this.name = 'CdpError';
@@ -21,7 +21,7 @@ export class CdpError extends Error {
 
 const LOOPBACK_HOSTS = new Set(['127.0.0.1', 'localhost', '[::1]']);
 
-/** Valida l'URL WebSocket di un target: solo ws://loopback:<porta>/devtools/page/<id>. */
+/** Validates a target WebSocket URL: only ws://loopback:<port>/devtools/page/<id>. */
 export function safeWsUrl(raw, port) {
   let u;
   try {
@@ -52,7 +52,7 @@ async function getJson(port, path, timeoutMs) {
   }
 }
 
-/** La porta di debug risponde? Una sola richiesta HTTP breve, mai un'eccezione. */
+/** Does the debug port respond? One short HTTP request, never throws. */
 export async function probeCdp(port, { timeoutMs = 1500 } = {}) {
   try {
     const v = await getJson(port, '/json/version', timeoutMs);
@@ -62,7 +62,7 @@ export async function probeCdp(port, { timeoutMs = 1500 } = {}) {
   }
 }
 
-/** Target di tipo `page` con URL WebSocket valido: `{id, title, url, wsUrl}`. */
+/** `page` targets with valid WebSocket URL: `{id, title, url, wsUrl}`. */
 export async function listPageTargets(port, { timeoutMs = 2000 } = {}) {
   const list = await getJson(port, '/json/list', timeoutMs);
   if (!Array.isArray(list)) throw new CdpError('unavailable', 'elenco dei target non valido');
@@ -81,7 +81,7 @@ export async function listPageTargets(port, { timeoutMs = 2000 } = {}) {
   return out;
 }
 
-/** Tasti usati dalle azioni (valori standard di CDP). */
+/** Keys used by actions (standard CDP values). */
 export const KEYS = Object.freeze({
   enter: { key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13, text: '\r' },
   escape: { key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 },
@@ -89,8 +89,8 @@ export const KEYS = Object.freeze({
 export const MODIFIER = Object.freeze({ alt: 1, ctrl: 2, meta: 4, shift: 8 });
 
 /**
- * Sessione su un singolo target. Ogni richiesta ha una scadenza; alla chiusura quelle in volo falliscono.
- * `WebSocketImpl` e' iniettabile per i test.
+ * Session on a single target. Each request has a timeout; on close in-flight ones fail.
+ * `WebSocketImpl` is injectable for tests.
  */
 export class CdpSession {
   #ws;
@@ -119,7 +119,7 @@ export class CdpSession {
         try {
           ws.close();
         } catch {
-          // gia' chiuso
+          // already closed
         }
         reject(new CdpError('timeout', 'connessione scaduta'));
       }, connectTimeoutMs);
@@ -145,7 +145,7 @@ export class CdpSession {
     } catch {
       return;
     }
-    if (typeof msg?.id !== 'number') return; // gli eventi non servono
+    if (typeof msg?.id !== 'number') return; // events are not needed
     const p = this.#pending.get(msg.id);
     if (!p) return;
     this.#pending.delete(msg.id);
@@ -163,7 +163,7 @@ export class CdpSession {
     }
   }
 
-  /** Invia un comando e attende la risposta. */
+  /** Sends a command and waits for the response. */
   send(method, params = {}, { timeoutMs = 10_000 } = {}) {
     if (this.#closed) return Promise.reject(new CdpError('closed', 'connessione chiusa'));
     const id = ++this.#next;
@@ -184,8 +184,8 @@ export class CdpSession {
   }
 
   /**
-   * Esegue un'espressione nella pagina e restituisce il valore (solo JSON). Un'eccezione nella pagina diventa
-   * `CdpError('page_exception')` con un messaggio troncato: gli script di pagina non mettono mai contenuti nei messaggi.
+   * Evaluates an expression in the page and returns the value (JSON only). A page exception becomes
+   * `CdpError('page_exception')` with a truncated message: page scripts never put content in messages.
    */
   async evaluate(expression, { timeoutMs = 10_000 } = {}) {
     const r = await this.send(
@@ -200,7 +200,7 @@ export class CdpSession {
     return r.result?.value;
   }
 
-  /** Clic "vero" (eventi di input affidabili, come un utente) alle coordinate CSS della finestra. */
+  /** Real click (reliable input events, like a user) at CSS window coordinates. */
   async click(x, y, { clickCount = 1 } = {}) {
     const base = { x, y, button: 'left', clickCount };
     await this.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x, y });
@@ -208,12 +208,12 @@ export class CdpSession {
     await this.send('Input.dispatchMouseEvent', { ...base, type: 'mouseReleased', buttons: 0 });
   }
 
-  /** Inserisce testo nell'elemento che ha il focus (come un incolla/IME: genera `beforeinput` e `input`). */
+  /** Inserts text into the focused element (like paste/IME: fires `beforeinput` and `input`). */
   insertText(text) {
     return this.send('Input.insertText', { text });
   }
 
-  /** Pressione di un tasto (keyDown + keyUp). `modifiers` e' una maschera di MODIFIER. */
+  /** Key press (keyDown + keyUp). `modifiers` is a MODIFIER bitmask. */
   async pressKey(def, { modifiers = 0 } = {}) {
     await this.send('Input.dispatchKeyEvent', { type: def.text ? 'keyDown' : 'rawKeyDown', modifiers, ...def });
     await this.send('Input.dispatchKeyEvent', { type: 'keyUp', modifiers, key: def.key, code: def.code, windowsVirtualKeyCode: def.windowsVirtualKeyCode, nativeVirtualKeyCode: def.nativeVirtualKeyCode });
@@ -224,7 +224,7 @@ export class CdpSession {
     try {
       this.#ws.close();
     } catch {
-      // gia' chiuso
+      // already closed
     }
     this.#fail(new CdpError('closed', 'sessione chiusa'));
   }

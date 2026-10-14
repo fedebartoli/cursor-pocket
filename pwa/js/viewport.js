@@ -1,31 +1,30 @@
-// Comportamento del viewport su Safari/iOS (e browser mobili in generale).
+// Viewport behavior on Safari/iOS (and mobile browsers in general).
 //
-//  1. Doppio tocco: iOS lo usa per fare zoom. `touch-action: manipulation` (CSS) lo spegne quasi ovunque, ma non sui
-//     tocchi che cadono fuori da elementi con quella proprieta' ne' in tutte le versioni di iOS: qui c'e' la rete di
-//     sicurezza. Il pinch NON si tocca (zoom per accessibilita' ancora possibile). I campi di testo sono esclusi: il
-//     doppio tocco serve a selezionare le parole.
-//  2. Tastiera: su iOS la tastiera non ridimensiona la pagina ma solo il "visual viewport"; si calcola quanto copre e
-//     lo si espone come `--kb` (CSS), cosi' il compositore dei messaggi resta sopra la tastiera.
+//  1. Double tap: iOS uses it to zoom. `touch-action: manipulation` (CSS) disables it almost everywhere, but not on
+//     taps that land outside elements with that property nor on all iOS versions: this is the safety net. Pinch is
+//     NOT touched (zoom for accessibility still possible). Text fields are excluded: double tap selects words.
+//  2. Keyboard: on iOS the keyboard does not resize the page but only the "visual viewport"; we compute how much it
+//     covers and expose it as `--kb` (CSS), so the message composer stays above the keyboard.
 //
-// Tutto e' CSSOM/eventi: nessuno stile inline nel markup (la CSP lo vieta).
+// All via CSSOM/events: no inline styles in markup (CSP forbids them).
 
 const DOUBLE_TAP_MS = 350;
 const DOUBLE_TAP_PX = 36;
 const TAP_MAX_MOVE_PX = 10;
 const TAP_MAX_MS = 300;
-const KEYBOARD_MIN_PX = 80; // sotto questa soglia e' la barra del browser che appare/scompare, non la tastiera
+const KEYBOARD_MIN_PX = 80; // below this threshold it is the browser bar showing/hiding, not the keyboard
 
 const EDITABLE = 'input, textarea, select, [contenteditable=""], [contenteditable="true"]';
 
 /**
- * Decide se un tocco appena finito e' il secondo di un doppio tocco. Funzione pura (si prova in Node).
- * @param {{x: number, y: number, t: number, moved: number, duration: number} | null} last  ultimo tocco "pulito"
- * @param {{x: number, y: number, t: number, moved: number, duration: number}} tap          tocco appena finito
+ * Decide whether a tap that just ended is the second of a double tap. Pure function (testable in Node).
+ * @param {{x: number, y: number, t: number, moved: number, duration: number} | null} last  last "clean" tap
+ * @param {{x: number, y: number, t: number, moved: number, duration: number}} tap          tap that just ended
  * @returns {{double: boolean, remember: object | null}}
  */
 export function classifyTap(last, tap) {
   const clean = tap.moved <= TAP_MAX_MOVE_PX && tap.duration <= TAP_MAX_MS;
-  if (!clean) return { double: false, remember: null }; // trascinamento o pressione lunga: non e' un tocco
+  if (!clean) return { double: false, remember: null }; // drag or long press: not a tap
   if (last && tap.t - last.t <= DOUBLE_TAP_MS && Math.hypot(tap.x - last.x, tap.y - last.y) <= DOUBLE_TAP_PX) {
     return { double: true, remember: null };
   }
@@ -33,20 +32,20 @@ export function classifyTap(last, tap) {
 }
 
 /**
- * Quanto la barra fissa in basso va spostata (px, positivo = in giu') per restare incollata al fondo di CIO' CHE SI VEDE.
- * Con il visual viewport allineato (nessun pinch-zoom, nessuna tastiera) vale 0. Se iOS lo sposta rispetto al viewport di
- * layout (rimbalzo, tastiera chiusa male, barre di Safari) la barra seguirebbe il layout e finirebbe a meta' schermo.
- * Funzione pura.
+ * How much the fixed bottom bar must shift (px, positive = down) to stay glued to the bottom of WHAT IS VISIBLE.
+ * With the visual viewport aligned (no pinch-zoom, no keyboard) this is 0. If iOS moves it relative to the layout
+ * viewport (bounce, keyboard dismissed badly, Safari bars) the bar would follow layout and end up mid-screen.
+ * Pure function.
  */
 export function bottomShift({ innerHeight, vvHeight, vvOffsetTop, vvScale = 1 }) {
-  if (vvScale > 1.01) return 0; // pinch-zoom: la barra resta dove sta, come ogni elemento fisso
+  if (vvScale > 1.01) return 0; // pinch-zoom: bar stays put, like any fixed element
   const shift = Math.round(vvOffsetTop + vvHeight - innerHeight);
   return Math.abs(shift) <= 1 ? 0 : shift;
 }
 
-/** Altezza coperta dalla tastiera, dato il visual viewport (0 se non c'e'). Funzione pura. */
+/** Height covered by the keyboard, given the visual viewport (0 if none). Pure function. */
 export function keyboardHeight({ innerHeight, vvHeight, vvOffsetTop, vvScale = 1 }) {
-  if (vvScale > 1.01) return 0; // pinch-zoom in corso: il visual viewport e' piu' piccolo, ma non e' la tastiera
+  if (vvScale > 1.01) return 0; // pinch-zoom active: visual viewport is smaller, but it is not the keyboard
   const covered = Math.round(innerHeight - vvHeight - vvOffsetTop);
   return covered >= KEYBOARD_MIN_PX ? covered : 0;
 }
@@ -60,7 +59,7 @@ function guardDoubleTap(doc = document) {
     (ev) => {
       if (ev.touches.length > 1) {
         starts.clear();
-        last = null; // pinch: niente doppio tocco
+        last = null; // pinch: no double tap
         return;
       }
       const t = ev.changedTouches[0];
@@ -85,7 +84,7 @@ function guardDoubleTap(doc = document) {
       const tap = { x: t.clientX, y: t.clientY, t: ev.timeStamp, moved: Math.hypot(t.clientX - s.x, t.clientY - s.y), duration: ev.timeStamp - s.at };
       const r = classifyTap(last, tap);
       last = r.remember;
-      // Il secondo tocco ravvicinato non diventa ne' zoom ne' click: cosi' un doppio tocco su "Invia" non invia due volte.
+      // The second quick tap must not become zoom or click: so double tap on "Send" does not send twice.
       if (r.double && ev.cancelable) ev.preventDefault();
     },
     { passive: false },
@@ -105,7 +104,7 @@ function trackKeyboard(win = window, doc = document) {
     frame = 0;
     const m = { innerHeight: win.innerHeight, vvHeight: vv.height, vvOffsetTop: vv.offsetTop, vvScale: vv.scale };
     const kb = keyboardHeight(m);
-    // Con la tastiera aperta la barra in basso si nasconde (CSS): non si sposta sopra la tastiera.
+    // With keyboard open the bottom bar is hidden (CSS): do not shift above the keyboard.
     const shift = kb > 0 ? 0 : bottomShift(m);
     if (shift !== currentShift) {
       currentShift = shift;

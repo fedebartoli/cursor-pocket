@@ -1,7 +1,7 @@
-// Prova agents-ui.js su un DOM vero: Chromium headless (se presente) con la pagina finta `mock-agents-page.html`, che imita
-// il questionario e il composer dell'Agents Window di Cursor. Senza Chromium i test vengono saltati.
-// Cosa dimostra: la logica di selezione (un secondo clic deseleziona), l'avanzamento, il campo libero, l'invio del messaggio
-// e il ripristino della chat aperta. Cosa NON dimostra: che i selettori coincidano con quelli di Cursor (vedi FINDINGS sez. 10).
+// Tests agents-ui.js on a real DOM: headless Chromium (when available) with fake page `mock-agents-page.html`, mimicking
+// the questionnaire and composer of Cursor's Agents Window. Without Chromium, tests are skipped.
+// What it proves: selection logic (second click deselects), advancing, freeform field, sending a message,
+// and restoring the previously open chat. What it does NOT prove: selectors match Cursor's (see FINDINGS sec. 10).
 import assert from 'node:assert/strict';
 import { after, before, describe, it } from 'node:test';
 import fs from 'node:fs';
@@ -14,7 +14,7 @@ import { findChromium, launchChromium } from './helpers/chromium.js';
 
 const here = path.dirname(fileURLToPath(import.meta.url));
 const HTML = path.join(here, 'helpers', 'mock-agents-page.html');
-const skip = findChromium() ? false : 'Chromium non disponibile';
+const skip = findChromium() ? false : 'Chromium not available';
 
 const RAW_Q1 = {
   id: 'q1',
@@ -23,7 +23,7 @@ const RAW_Q1 = {
     { id: 'a', label: 'PostgreSQL' },
     { id: 'b', label: 'SQLite' },
     { id: 'c', label: 'MySQL' },
-    { id: 'x', label: 'Other' }, // Cursor non la mostra: c'e' sempre la sua voce "Other..."
+    { id: 'x', label: 'Other' }, // Cursor does not show it: it always has its own "Other..." entry
   ],
 };
 const RAW_Q2 = {
@@ -38,13 +38,13 @@ const RAW_Q2 = {
 };
 const norm = (raw) => normalizeQuestionParams({ questions: raw });
 
-describe('promptMatches / currentQuestionIndex (senza browser)', () => {
-  it('riconosce il prompt anche se Markdown e punteggiatura differiscono', () => {
+describe('promptMatches / currentQuestionIndex (no browser)', () => {
+  it('recognizes the prompt when Markdown and punctuation differ', () => {
     assert.equal(promptMatches('Domanda: Quale **database** vuoi usare? PostgreSQL SQLite Skip', 'Quale `database` vuoi usare per il progetto?'), true);
     assert.equal(promptMatches('Tutt\'altro testo sulle funzioni', 'Quale database vuoi usare per il progetto?'), false);
     assert.equal(promptMatches('qualsiasi', ''), false);
   });
-  it('sceglie la domanda mostrata tra piu\' domande', () => {
+  it('picks the question on screen among multiple questions', () => {
     const qs = norm([RAW_Q1, RAW_Q2]).questions;
     assert.equal(currentQuestionIndex({ text: 'Quale database vuoi usare per il progetto? PostgreSQL SQLite MySQL Other... Continue Skip' }, qs), 0);
     assert.equal(currentQuestionIndex({ text: 'Quali funzioni vuoi attivare? Cache Log strutturati Metriche Other... Next Skip' }, qs), 1);
@@ -52,7 +52,7 @@ describe('promptMatches / currentQuestionIndex (senza browser)', () => {
   });
 });
 
-describe('AgentsUi su Chromium con la pagina finta', { skip }, () => {
+describe('AgentsUi on Chromium with the fake page', { skip }, () => {
   let browser;
   let ui;
   before(async () => {
@@ -70,17 +70,17 @@ describe('AgentsUi su Chromium con la pagina finta', { skip }, () => {
     chats: { 'chat-a': { name: 'Chat A', questions }, 'chat-b': { name: 'Chat B' }, 'chat-c': { name: 'Chat C' } },
   });
 
-  it('inspect: conta gli elementi chiave e non restituisce testi', async () => {
+  it('inspect: counts key elements and does not return text content', async () => {
     await reset({ ...withQ([RAW_Q1]), current: 'chat-a' });
     const r = await ui.inspect();
     assert.equal(r.up, true);
     assert.match(r.targets[0].title, /Agents/);
-    assert.deepEqual(r.page.counts, { tray: 1, options: 3, freeform: 1, primary: 1, secondary: 1, rows: 3, composers: 2, send: 2 }); // +1 composer/pulsante: pannello nascosto (decoy)
+    assert.deepEqual(r.page.counts, { tray: 1, options: 3, freeform: 1, primary: 1, secondary: 1, rows: 3, composers: 2, send: 2 }); // +1 composer/button: hidden panel (decoy)
     assert.equal(r.page.selectedKey, 'row:chat-a');
-    assert.ok(!JSON.stringify(r).includes('PostgreSQL'), 'la diagnostica non deve contenere i testi della chat');
+    assert.ok(!JSON.stringify(r).includes('PostgreSQL'), 'diagnostics must not contain chat text');
   });
 
-  it('readTray: opzioni (senza "Other"), selezione, pulsante primario disattivo finche\' non si risponde', async () => {
+  it('readTray: options (without "Other"), selection, primary button disabled until answered', async () => {
     await reset({ ...withQ([RAW_Q1]), current: 'chat-a', initialSelections: { 'chat-a': {} } });
     const v = await ui.readTray();
     assert.deepEqual(v.options.map((o) => [o.badge, o.label, o.selected]), [['A', 'PostgreSQL', false], ['B', 'SQLite', false], ['C', 'MySQL', false]]);
@@ -90,7 +90,7 @@ describe('AgentsUi su Chromium con la pagina finta', { skip }, () => {
     assert.equal(v.secondary.label, 'Skip');
   });
 
-  it('answer: scelta singola, poi Continue; la chat aperta torna quella di prima', async () => {
+  it('answer: single choice, then Continue; previously open chat is restored', async () => {
     await reset(withQ([RAW_Q1]));
     const question = norm([RAW_Q1]);
     const r = await ui.answer({ composerId: 'chat-a', question, answers: [{ optionIds: ['b'] }] });
@@ -98,10 +98,10 @@ describe('AgentsUi su Chromium con la pagina finta', { skip }, () => {
     const s = await state();
     assert.deepEqual(s.submitted.map((x) => [x.chat, x.selections]), [['chat-a', { q1: ['b'] }]]);
     assert.deepEqual(s.log.filter((l) => l.startsWith('pick') || l.startsWith('primary')), ['pick:q1:b', 'primary:submit']);
-    assert.equal(s.current, 'chat-b', 'dopo l\'azione si riapre la chat che era aperta prima');
+    assert.equal(s.current, 'chat-b', 'after the action the chat that was open before is reopened');
   });
 
-  it('answer: un\'opzione gia\' selezionata NON si clicca (la deselezionerebbe)', async () => {
+  it('answer: an already selected option is NOT clicked (would deselect it)', async () => {
     await reset({ ...withQ([RAW_Q1]), initialSelections: { 'chat-a': { q1: ['b'] } } });
     await ui.answer({ composerId: 'chat-a', question: norm([RAW_Q1]), answers: [{ optionIds: ['b'] }] });
     const s = await state();
@@ -109,13 +109,13 @@ describe('AgentsUi su Chromium con la pagina finta', { skip }, () => {
     assert.deepEqual(s.submitted[0].selections, { q1: ['b'] });
   });
 
-  it('answer: scelta singola con bozza diversa -> sostituisce la selezione', async () => {
+  it('answer: single choice with different draft -> replaces selection', async () => {
     await reset({ ...withQ([RAW_Q1]), initialSelections: { 'chat-a': { q1: ['a'] } } });
     await ui.answer({ composerId: 'chat-a', question: norm([RAW_Q1]), answers: [{ optionIds: ['c'] }] });
     assert.deepEqual((await state()).submitted[0].selections, { q1: ['c'] });
   });
 
-  it('answer: due domande (singola con avanzamento automatico, poi multipla)', async () => {
+  it('answer: two questions (single with auto-advance, then multiple)', async () => {
     await reset(withQ([RAW_Q1, RAW_Q2]));
     await ui.answer({ composerId: 'chat-a', question: norm([RAW_Q1, RAW_Q2]), answers: [{ optionIds: ['c'] }, { optionIds: ['a', 'c'] }] });
     const s = await state();
@@ -126,13 +126,13 @@ describe('AgentsUi su Chromium con la pagina finta', { skip }, () => {
     );
   });
 
-  it('answer: scelta multipla con bozza -> si toglie cio\' che non serve e si aggiunge il resto', async () => {
+  it('answer: multiple choice with draft -> removes what is not needed and adds the rest', async () => {
     await reset({ ...withQ([RAW_Q2]), initialSelections: { 'chat-a': { q2: ['b'] } } });
     await ui.answer({ composerId: 'chat-a', question: norm([RAW_Q2]), answers: [{ optionIds: ['a', 'c'] }] });
     assert.deepEqual((await state()).submitted[0].selections.q2.sort(), ['a', 'c']);
   });
 
-  it('answer: risposta libera (con a capo) in scelta singola, togliendo la bozza gia\' selezionata', async () => {
+  it('answer: freeform (with newlines) in single choice, clearing an already selected draft', async () => {
     await reset({ ...withQ([RAW_Q1]), initialSelections: { 'chat-a': { q1: ['a'] } } });
     const text = 'prima riga\nseconda riga';
     await ui.answer({ composerId: 'chat-a', question: norm([RAW_Q1]), answers: [{ optionIds: [FREEFORM_ID], freeform: text }] });
@@ -141,23 +141,23 @@ describe('AgentsUi su Chromium con la pagina finta', { skip }, () => {
     assert.equal(s.submitted[0].freeform.q1, text);
   });
 
-  it('answer: la domanda sbagliata non viene toccata (mismatch)', async () => {
+  it('answer: wrong question is left alone (mismatch)', async () => {
     await reset(withQ([RAW_Q1]));
     const other = norm([{ id: 'q9', prompt: 'Completamente un\'altra domanda sul deploy in produzione?', options: [{ id: 'z', label: 'Mai' }] }]);
     await assert.rejects(ui.answer({ composerId: 'chat-a', question: other, answers: [{ optionIds: ['z'] }] }), (e) => e instanceof UiError && e.code === 'mismatch');
     const s = await state();
     assert.equal(s.clicks, 0);
     assert.deepEqual(s.submitted, []);
-    assert.equal(s.current, 'chat-b', 'anche dopo un errore la chat aperta viene ripristinata');
+    assert.equal(s.current, 'chat-b', 'even after an error the open chat is restored');
   });
 
-  it('answer: chat inesistente -> row_not_found; chat senza questionario -> no_tray', async () => {
+  it('answer: missing chat -> row_not_found; chat without questionnaire -> no_tray', async () => {
     await reset(withQ([RAW_Q1]));
     await assert.rejects(ui.answer({ composerId: 'chat-zzz', question: norm([RAW_Q1]), answers: [{ optionIds: ['a'] }] }), (e) => e.code === 'row_not_found');
     await assert.rejects(ui.answer({ composerId: 'chat-c', question: norm([RAW_Q1]), answers: [{ optionIds: ['a'] }] }), (e) => e.code === 'no_tray');
   });
 
-  it('skip: preme "Skip" e il questionario sparisce', async () => {
+  it('skip: presses "Skip" and the questionnaire disappears', async () => {
     await reset(withQ([RAW_Q1]));
     assert.deepEqual(await ui.skip({ composerId: 'chat-a', question: norm([RAW_Q1]) }), { skipped: true });
     const s = await state();
@@ -165,7 +165,7 @@ describe('AgentsUi su Chromium con la pagina finta', { skip }, () => {
     assert.deepEqual(s.submitted, []);
   });
 
-  it('sendMessage: scrive (a capo con Maiusc+Invio), invia, il campo si svuota e la chat precedente torna aperta', async () => {
+  it('sendMessage: types (newline with Shift+Enter), sends, field clears and previous chat is reopened', async () => {
     await reset(withQ([RAW_Q1]));
     const text = 'Ciao, controlla i test.\nPoi fai il commit.';
     assert.deepEqual(await ui.sendMessage({ composerId: 'chat-c', text }), { sent: true });
@@ -174,7 +174,7 @@ describe('AgentsUi su Chromium con la pagina finta', { skip }, () => {
     assert.equal(s.current, 'chat-b');
   });
 
-  it('sendMessage con immagini: allega, scrive, invia; con solo immagini invia lo stesso; le anteprime spariscono', async () => {
+  it('sendMessage with images: attach, type, send; images-only still sends; previews disappear', async () => {
     const f = path.join(os.tmpdir(), `cp-test-${process.pid}.png`);
     fs.writeFileSync(f, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64'));
     try {
@@ -189,7 +189,7 @@ describe('AgentsUi su Chromium con la pagina finta', { skip }, () => {
     }
   });
 
-  it('sendMessage con immagini: se Cursor non le mostra, errore e nessun invio; con bozza di immagini non si mescola', async () => {
+  it('sendMessage with images: if Cursor does not show them, error and no send; does not mix with image draft', async () => {
     const f = path.join(os.tmpdir(), `cp-test2-${process.pid}.png`);
     fs.writeFileSync(f, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64'));
     try {
@@ -204,7 +204,7 @@ describe('AgentsUi su Chromium con la pagina finta', { skip }, () => {
     }
   });
 
-  it('attachImages: allega e toglie tutto senza inviare', async () => {
+  it('attachImages: attach and remove all without sending', async () => {
     const f = path.join(os.tmpdir(), `cp-test3-${process.pid}.png`);
     fs.writeFileSync(f, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64'));
     try {
@@ -216,19 +216,19 @@ describe('AgentsUi su Chromium con la pagina finta', { skip }, () => {
     }
   });
 
-  it('sendMessage: non mescola il messaggio con una bozza dell\'utente', async () => {
+  it('sendMessage: does not mix message with user draft', async () => {
     await reset({ ...withQ([RAW_Q1]), draft: 'bozza scritta sul Mac' });
     await assert.rejects(ui.sendMessage({ composerId: 'chat-c', text: 'x' }), (e) => e.code === 'draft_not_empty');
     assert.deepEqual((await state()).sent, []);
   });
 
-  it('sendMessage: con una domanda in attesa non scrive (question_pending)', async () => {
+  it('sendMessage: with pending question does not write (question_pending)', async () => {
     await reset(withQ([RAW_Q1]));
     await assert.rejects(ui.sendMessage({ composerId: 'chat-a', text: 'x' }), (e) => e.code === 'question_pending');
     assert.deepEqual((await state()).sent, []);
   });
 
-  describe('approvazione di un comando', () => {
+  describe('command approval', () => {
     const cfg = (extra = {}) => ({
       current: 'chat-b',
       chats: {
@@ -237,43 +237,43 @@ describe('AgentsUi su Chromium con la pagina finta', { skip }, () => {
       },
     });
 
-    it('"approve" preme Run sulla carta del bubble indicato (non su un\'altra) e riapre la chat di prima', async () => {
+    it('"approve" presses Run on the indicated bubble card (not another) and reopens the previous chat', async () => {
       await reset(cfg());
       const r = await ui.approval({ composerId: 'chat-a', bubbleId: 'm-2', decision: 'approve' });
       assert.equal(r.clicked, true);
       assert.equal(r.settled, true);
       const st = await state();
       assert.deepEqual(st.decided, { 'm-2': 'approve' });
-      assert.equal(st.current, 'chat-b', 'la chat che l\'utente aveva aperta viene ripristinata');
+      assert.equal(st.current, 'chat-b', 'the chat the user had open is restored');
     });
 
-    it('"reject" preme Skip', async () => {
+    it('"reject" presses Skip', async () => {
       await reset(cfg());
       await ui.approval({ composerId: 'chat-a', bubbleId: 'm-1', decision: 'reject' });
       assert.deepEqual((await state()).decided, { 'm-1': 'reject' });
     });
 
-    it('senza la carta di quel bubble: errore e nessun clic', async () => {
+    it('without that bubble card: error and no click', async () => {
       await reset(cfg());
       await assert.rejects(() => ui.approval({ composerId: 'chat-a', bubbleId: 'm-9', decision: 'approve' }), (e) => e instanceof UiError && e.code === 'no_approval');
       assert.deepEqual((await state()).decided, {});
     });
 
-    it('con pulsanti diversi da Run/Skip non preme nulla', async () => {
+    it('with buttons other than Run/Skip does not press anything', async () => {
       await reset(cfg({ approvals: [{ messageId: 'm-1', command: 'x', order: [['Altro', 'approve'], ['Boh', 'reject']] }] }));
       await assert.rejects(() => ui.approval({ composerId: 'chat-a', bubbleId: 'm-1', decision: 'approve' }), (e) => e instanceof UiError && e.code === 'no_approval');
       assert.deepEqual((await state()).decided, {});
     });
 
-    it('decisione non valida: nessun accesso a Cursor', async () => {
+    it('invalid decision: no access to Cursor', async () => {
       await assert.rejects(() => ui.approval({ composerId: 'chat-a', bubbleId: 'm-1', decision: 'boh' }), (e) => e.code === 'bad_decision');
     });
   });
 
-  describe('ferma l\'agente', () => {
+  describe('stop agent', () => {
     const cfg = (running = true) => ({ current: 'chat-b', chats: { 'chat-a': { name: 'Chat A', running }, 'chat-b': { name: 'Chat B', running: true } } });
 
-    it('preme "Stop generation" nella chat indicata (non nel pannello nascosto), poi riapre la chat di prima', async () => {
+    it('presses "Stop generation" in the indicated chat (not the hidden panel), then reopens the previous chat', async () => {
       await reset(cfg());
       const r = await ui.stop({ composerId: 'chat-a' });
       assert.deepEqual(r, { clicked: true, settled: true });
@@ -282,17 +282,17 @@ describe('AgentsUi su Chromium con la pagina finta', { skip }, () => {
       assert.equal(st.current, 'chat-b');
     });
 
-    it('se la chat non sta lavorando: not_running e nessun clic', async () => {
+    it('when chat is not working: not_running and no click', async () => {
       await reset(cfg(false));
       await assert.rejects(() => ui.stop({ composerId: 'chat-a' }), (e) => e instanceof UiError && e.code === 'not_running');
       assert.deepEqual((await state()).stopped, []);
     });
   });
 
-  describe('menu della riga: rinomina, archivia, ripristina', () => {
+  describe('row menu: rename, archive, unarchive', () => {
     const cfg = () => ({ current: 'chat-b', chats: { 'chat-a': { name: 'Chat A' }, 'chat-b': { name: 'Chat B' }, 'chat-z': { name: 'Chat Z', archived: true } } });
 
-    it('rinomina: tasto destro, "Rename", testo scritto al posto di quello selezionato, Invio; non cambia la chat aperta', async () => {
+    it('rename: right-click, "Rename", text replaces selection, Enter; does not change open chat', async () => {
       await reset(cfg());
       const r = await ui.rename({ composerId: 'chat-a', name: 'Nome nuovo' });
       assert.equal(r.clicked, true);
@@ -302,53 +302,53 @@ describe('AgentsUi su Chromium con la pagina finta', { skip }, () => {
       assert.equal(st.current, 'chat-b');
     });
 
-    it('rinomina: chat non in sidebar -> row_not_found; nome vuoto -> bad_name', async () => {
+    it('rename: chat not in sidebar -> row_not_found; empty name -> bad_name', async () => {
       await reset(cfg());
       await assert.rejects(() => ui.rename({ composerId: 'chat-x', name: 'x' }), (e) => e.code === 'row_not_found');
       await assert.rejects(() => ui.rename({ composerId: 'chat-a', name: '  ' }), (e) => e.code === 'bad_name');
       assert.deepEqual((await state()).renamed, []);
     });
 
-    it('archivia: voce "Archive" del menu della riga', async () => {
+    it('archive: row menu "Archive" item', async () => {
       await reset(cfg());
       await ui.archive({ composerId: 'chat-a' });
       assert.deepEqual((await state()).archived, ['chat-a']);
     });
 
-    it('ripristina: accende il filtro "Archived", usa "Unarchive" e RIMETTE il filtro com\'era', async () => {
+    it('unarchive: enables "Archived" filter, uses "Unarchive" and RESTORES filter as before', async () => {
       await reset(cfg());
       const r = await ui.unarchive({ composerId: 'chat-z' });
       assert.equal(r.clicked, true);
       const st = await state();
       assert.deepEqual(st.unarchived, ['chat-z']);
-      assert.equal(st.showArchived, false, 'il filtro delle archiviate torna spento');
+      assert.equal(st.showArchived, false, 'archived filter is turned off again');
     });
 
-    it('ripristina con il filtro gia\' acceso: lo lascia acceso', async () => {
+    it('unarchive with filter already on: leaves it on', async () => {
       await reset(cfg());
       await browser.evalPage(`document.querySelector('#customize').click(); document.querySelector('[role="menuitemcheckbox"]').click(); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); 0`);
       await ui.unarchive({ composerId: 'chat-z' });
       assert.equal((await state()).showArchived, true);
     });
 
-    it('ripristina una chat che non c\'e\': row_not_found e filtro rimesso a posto', async () => {
+    it('unarchive missing chat: row_not_found and filter restored', async () => {
       await reset(cfg());
       await assert.rejects(() => ui.unarchive({ composerId: 'chat-nope' }), (e) => e.code === 'row_not_found');
       assert.equal((await state()).showArchived, false);
     });
   });
 
-  describe('fissa chat (Pin)', () => {
+  describe('pin chat (Pin)', () => {
     const cfg = (extra = {}) => ({ current: 'chat-b', projects: ['Progetto A'], chats: { 'chat-a': { name: 'Chat A' }, 'chat-b': { name: 'Chat B', pinned: true } }, ...extra });
 
-    it('legge se la chat e\' fissata (sta prima delle intestazioni dei progetti)', async () => {
+    it('reads whether chat is pinned (before project headers)', async () => {
       await reset(cfg());
       assert.deepEqual(await ui.pinState({ composerId: 'chat-a' }), { pinned: false });
       assert.deepEqual(await ui.pinState({ composerId: 'chat-b' }), { pinned: true });
       await assert.rejects(() => ui.pinState({ composerId: 'chat-nope' }), (e) => e.code === 'row_not_found');
     });
 
-    it('fissa e toglie dai fissati usando la voce giusta del menu, e non fa nulla se e\' gia\' cosi\'', async () => {
+    it('pin and unpin via the correct menu item, and no-op when already in that state', async () => {
       await reset(cfg());
       assert.deepEqual(await ui.setPinned({ composerId: 'chat-a', pinned: true }), { pinned: true, changed: true });
       assert.deepEqual(await ui.pinState({ composerId: 'chat-a' }), { pinned: true });
@@ -357,26 +357,26 @@ describe('AgentsUi su Chromium con la pagina finta', { skip }, () => {
       assert.deepEqual((await state()).pins, [{ id: 'chat-a', pinned: true }, { id: 'chat-b', pinned: false }]);
     });
 
-    it('rifiuta un valore non booleano', async () => {
+    it('rejects non-boolean value', async () => {
       await reset(cfg());
       await assert.rejects(() => ui.setPinned({ composerId: 'chat-a', pinned: 'si' }), (e) => e.code === 'bad_pin');
     });
   });
 
-  describe('nuova chat su un progetto', () => {
+  describe('new chat on a project', () => {
     const cfg = (extra = {}) => ({ current: 'chat-b', projects: ['Progetto A', 'Progetto B'], chats: { 'chat-a': { name: 'Chat A' }, 'chat-b': { name: 'Chat B' } }, ...extra });
 
-    it('apre "New Agent" del progetto giusto, controlla progetto e ambiente, scrive, invia e ridà l\'id della chat nuova', async () => {
+    it('opens the right project "New Agent", checks project and environment, types, sends and returns new chat id', async () => {
       await reset(cfg());
       const r = await ui.newChat({ project: 'Progetto B', text: 'Crea un README\ncon le istruzioni' });
       assert.deepEqual(r, { composerId: 'new-1' });
       const s = await state();
       assert.deepEqual(s.newChats, [{ id: 'new-1', project: 'Progetto B', text: 'Crea un README\ncon le istruzioni', images: 0 }]);
       assert.deepEqual(s.sent, []);
-      assert.equal(s.current, 'chat-b', 'la chat che era aperta torna aperta');
+      assert.equal(s.current, 'chat-b', 'the chat that was open stays open');
     });
 
-    it('con sole immagini (niente testo) crea la chat lo stesso', async () => {
+    it('with images only (no text) still creates the chat', async () => {
       const f = path.join(os.tmpdir(), `cp-test4-${process.pid}.png`);
       fs.writeFileSync(f, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64'));
       try {
@@ -388,7 +388,7 @@ describe('AgentsUi su Chromium con la pagina finta', { skip }, () => {
       }
     });
 
-    it('rifiuta senza inviare: progetto assente, nome doppio, ambiente non locale', async () => {
+    it('rejects without sending: missing project, duplicate name, non-local environment', async () => {
       await reset(cfg());
       await assert.rejects(ui.newChat({ project: 'Inesistente', text: 'x' }), (e) => e.code === 'project_not_found');
       await reset(cfg({ projects: ['Progetto A', 'Progetto A'] }));
@@ -397,34 +397,34 @@ describe('AgentsUi su Chromium con la pagina finta', { skip }, () => {
       await assert.rejects(ui.newChat({ project: 'Progetto A', text: 'x' }), (e) => e.code === 'not_local');
       const after = await state();
       assert.deepEqual(after.newChats, []);
-      assert.equal(after.current, 'chat-b', 'dopo un errore la chat che era aperta torna aperta (non resta la schermata nuova chat)');
+      assert.equal(after.current, 'chat-b', 'after an error the previously open chat is restored (not stuck on new-chat screen)');
     });
 
-    it('newChatOptions legge ramo e modello senza scegliere nulla e riapre la chat di prima', async () => {
+    it('newChatOptions reads branch and model without choosing and reopens previous chat', async () => {
       await reset(cfg({ branches: ['main', 'sviluppo'], branch: 'main', models: ['Auto', 'Composer 2.5', 'Claude Sonnet 5.5 High', 'Claude Opus 4.6 High'], model: 'Claude Sonnet 5.5 High' }));
       const r = await ui.newChatOptions({ project: 'Progetto A' });
       assert.deepEqual(r, { branch: { current: 'main', options: ['main', 'sviluppo'] }, model: { current: 'Claude Sonnet 5.5 High', options: ['Auto', 'Composer 2.5', 'Claude Sonnet 5.5 High', 'Claude Opus 4.6 High'] } });
       const s = await state();
-      assert.deepEqual(s.picks, [], 'nessuna scelta fatta');
-      assert.equal(s.current, 'chat-b', 'la chat di prima torna aperta');
+      assert.deepEqual(s.picks, [], 'no choices made');
+      assert.equal(s.current, 'chat-b', 'previous chat is reopened');
     });
 
-    it('newChat con ramo e modello: li sceglie prima di scrivere e li passa alla chat creata; se sono gia\' quelli, non tocca nulla', async () => {
+    it('newChat with branch and model: picks them before typing and passes them to created chat; no-op when already set', async () => {
       await reset(cfg({ branches: ['main', 'sviluppo'], branch: 'main' }));
       const r = await ui.newChat({ project: 'Progetto B', text: 'ciao', branch: 'sviluppo', model: 'Claude Opus 4.6 High' });
       assert.equal(r.composerId, 'new-1');
       const s = await state();
-      // scelte per la chat nuova, poi i predefiniti di Cursor rimessi com'erano (Cursor ricorda l'ultima scelta)
+      // choices for new chat, then Cursor defaults restored (Cursor remembers last choice)
       assert.deepEqual(s.picks, [{ branch: 'sviluppo' }, { model: 'Claude Opus 4.6 High' }, { branch: 'main' }, { model: 'Claude Sonnet 5.5 High' }]);
-      assert.deepEqual(s.choices, [{ branch: 'sviluppo', model: 'Claude Opus 4.6 High' }], 'la chat parte con le scelte fatte');
-      assert.deepEqual([s.branch, s.model], ['main', 'Claude Sonnet 5.5 High'], 'predefiniti di prima ripristinati');
+      assert.deepEqual(s.choices, [{ branch: 'sviluppo', model: 'Claude Opus 4.6 High' }], 'chat starts with chosen branch/model');
+      assert.deepEqual([s.branch, s.model], ['main', 'Claude Sonnet 5.5 High'], 'previous defaults restored');
       assert.equal(s.current, 'chat-b');
       await reset(cfg({ branches: ['main', 'sviluppo'], branch: 'main' }));
       await ui.newChat({ project: 'Progetto B', text: 'ciao', branch: 'main', model: 'Claude Sonnet 5.5 High' });
-      assert.deepEqual((await state()).picks, [], 'gia\' impostati: nessun clic');
+      assert.deepEqual((await state()).picks, [], 'already set: no clicks');
     });
 
-    it('ramo o modello inesistenti: errore, nessun invio, chat di prima riaperta', async () => {
+    it('missing branch or model: error, no send, previous chat reopened', async () => {
       await reset(cfg({ branches: ['main'] }));
       await assert.rejects(ui.newChat({ project: 'Progetto B', text: 'x', branch: 'non-esiste' }), (e) => e.code === 'branch_not_found');
       await assert.rejects(ui.newChat({ project: 'Progetto B', text: 'x', model: 'Modello Inventato' }), (e) => e.code === 'model_not_found');
@@ -434,7 +434,7 @@ describe('AgentsUi su Chromium con la pagina finta', { skip }, () => {
       assert.equal(s.current, 'chat-b');
     });
 
-    it('errore dopo aver scelto ramo e modello: i predefiniti tornano com\'erano e nulla viene inviato', async () => {
+    it('error after choosing branch and model: defaults restored and nothing sent', async () => {
       await reset(cfg({ branches: ['main', 'sviluppo'], branch: 'main' }));
       await assert.rejects(ui.newChat({ project: 'Progetto B', text: '', branch: 'sviluppo', model: 'Composer 2.5' }), (e) => e.code === 'send_disabled');
       const s = await state();
@@ -443,16 +443,16 @@ describe('AgentsUi su Chromium con la pagina finta', { skip }, () => {
       assert.equal(s.current, 'chat-b');
     });
 
-    it('dryRun con scelte: le applica e le riporta, senza inviare', async () => {
+    it('dryRun with choices: applies and reports them without sending', async () => {
       await reset(cfg({ branches: ['main', 'sviluppo'], branch: 'main' }));
       const r = await ui.newChat({ project: 'Progetto A', text: 'x', dryRun: true, branch: 'sviluppo', model: 'Composer 2.5' });
       assert.deepEqual(r.chosen, { branch: 'sviluppo', model: 'Composer 2.5' });
       const s = await state();
       assert.deepEqual(s.newChats, []);
-      assert.deepEqual([s.branch, s.model], ['main', 'Claude Sonnet 5.5 High'], 'predefiniti ripristinati anche in prova');
+      assert.deepEqual([s.branch, s.model], ['main', 'Claude Sonnet 5.5 High'], 'defaults restored in dry run too');
     });
 
-    it('dryRun: arriva ai controlli e non invia', async () => {
+    it('dryRun: reaches controls and does not send', async () => {
       await reset(cfg());
       const r = await ui.newChat({ project: 'Progetto A', text: 'x', dryRun: true });
       assert.equal(r.dryRun, true);

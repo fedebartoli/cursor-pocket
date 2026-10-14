@@ -1,5 +1,5 @@
-// Chat archiviate in Cursor (solo locali): elenco con "Ripristina". Il ripristino passa dal menu della riga di Cursor
-// (il daemon accende per un attimo il filtro "Archived" della sidebar e lo rimette com'era).
+// Chats archived in Cursor (local only): list with "Ripristina". Restore goes through Cursor's row menu
+// (daemon briefly toggles sidebar "Archived" filter and restores it).
 import { describeActionError } from '../action-errors.js';
 import { api } from '../api.js';
 import { appbar, banner, emptyState, skeleton } from '../components.js';

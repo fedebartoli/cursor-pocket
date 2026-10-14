@@ -11,7 +11,7 @@ import {
 } from '../src/push/webpush.js';
 import { b64u } from '../src/util.js';
 
-// Vettore di test di RFC 8291, appendice A.
+// Test vector from RFC 8291, appendix A.
 const V = {
   plaintext: 'When I grow up, I want to be a watermelon',
   uaPrivate: 'q1dXpw3UpT5VOmu_cf_v6ih07Aems3njxI-JWgLcM94',
@@ -32,7 +32,7 @@ function ecdhFromPrivate(privB64) {
   return e;
 }
 
-/** Decifratura indipendente (RFC 8188 + 8291) lato user agent, per il round-trip. */
+/** Independent decryption (RFC 8188 + 8291) on the user-agent side, for round-trip. */
 function decrypt(body, uaEcdh, authSecret) {
   const salt = body.subarray(0, 16);
   const idlen = body[20];
@@ -47,11 +47,11 @@ function decrypt(body, uaEcdh, authSecret) {
   const d = crypto.createDecipheriv('aes-128-gcm', cek, nonce);
   d.setAuthTag(data.subarray(data.length - 16));
   const plain = Buffer.concat([d.update(data.subarray(0, data.length - 16)), d.final()]);
-  assert.equal(plain[plain.length - 1], 0x02, 'delimitatore dell\'ultimo record');
+  assert.equal(plain[plain.length - 1], 0x02, 'last record delimiter');
   return plain.subarray(0, plain.length - 1);
 }
 
-test('RFC 8291: le chiavi del vettore sono coerenti e il segreto ECDH coincide', () => {
+test('RFC 8291: vector keys are consistent and ECDH secret matches', () => {
   const as = ecdhFromPrivate(V.asPrivate);
   assert.equal(b64u.encode(as.getPublicKey()), V.asPublic);
   assert.equal(b64u.encode(as.computeSecret(b64u.decode(V.uaPublic))), V.ecdhSecret);
@@ -59,7 +59,7 @@ test('RFC 8291: le chiavi del vettore sono coerenti e il segreto ECDH coincide',
   assert.equal(b64u.encode(ua.getPublicKey()), V.uaPublic);
 });
 
-test('RFC 8291: la cifratura riproduce byte per byte il messaggio del vettore', () => {
+test('RFC 8291: encryption reproduces the vector message byte for byte', () => {
   const body = encryptPayload({
     payload: Buffer.from(V.plaintext),
     uaPublic: b64u.decode(V.uaPublic),
@@ -70,18 +70,18 @@ test('RFC 8291: la cifratura riproduce byte per byte il messaggio del vettore', 
   assert.equal(b64u.encode(body), V.body);
 });
 
-test('round-trip: decifratura indipendente con chiavi casuali', () => {
+test('round-trip: independent decryption with random keys', () => {
   const ua = crypto.createECDH('prime256v1');
   ua.generateKeys();
   const auth = crypto.randomBytes(16);
   for (const text of ['', 'a', 'Domanda in attesa \u2013 progetto', 'x'.repeat(MAX_PAYLOAD_BYTES)]) {
     const body = encryptPayload({ payload: Buffer.from(text), uaPublic: ua.getPublicKey(), authSecret: auth });
-    assert.ok(body.length <= 4096, 'il corpo cifrato totale non supera 4096 byte');
+    assert.ok(body.length <= 4096, 'total ciphertext body does not exceed 4096 bytes');
     assert.equal(decrypt(body, ua, auth).toString(), text);
   }
 });
 
-test('payload troppo grande o chiavi non valide vengono rifiutati', () => {
+test('oversized payload or invalid keys are rejected', () => {
   const ua = crypto.createECDH('prime256v1');
   ua.generateKeys();
   const auth = crypto.randomBytes(16);
@@ -90,7 +90,7 @@ test('payload troppo grande o chiavi non valide vengono rifiutati', () => {
   assert.throws(() => encryptPayload({ payload: Buffer.from('x'), uaPublic: ua.getPublicKey(), authSecret: Buffer.alloc(8) }), TypeError);
 });
 
-test('VAPID: il JWT e\' ES256 valido e verificabile con la chiave pubblica', () => {
+test('VAPID: JWT is valid ES256 and verifiable with public key', () => {
   const keys = generateVapidKeys();
   assert.equal(b64u.decode(keys.publicKey).length, 65);
   const now = 1_700_000_000_000;
@@ -102,7 +102,7 @@ test('VAPID: il JWT e\' ES256 valido e verificabile con la chiave pubblica', () 
     now,
   });
   const m = /^vapid t=([\w-]+)\.([\w-]+)\.([\w-]+), k=([\w-]+)$/.exec(header);
-  assert.ok(m, 'formato `vapid t=<jwt>, k=<chiave>`');
+  assert.ok(m, 'format `vapid t=<jwt>, k=<key>`');
   const [, h, c, s, k] = m;
   assert.equal(k, keys.publicKey);
   assert.deepEqual(JSON.parse(b64u.decode(h).toString()), { typ: 'JWT', alg: 'ES256' });
@@ -115,7 +115,7 @@ test('VAPID: il JWT e\' ES256 valido e verificabile con la chiave pubblica', () 
   assert.equal(ok, true);
 });
 
-test('endpoint: solo servizi push noti su HTTPS', () => {
+test('endpoint: only known push services over HTTPS', () => {
   assert.equal(isAllowedPushEndpoint('https://web.push.apple.com/x'), true);
   assert.equal(isAllowedPushEndpoint('https://fcm.googleapis.com/fcm/send/x'), true);
   assert.equal(isAllowedPushEndpoint('https://updates.push.services.mozilla.com/wpush/v2/x'), true);
@@ -128,7 +128,7 @@ test('endpoint: solo servizi push noti su HTTPS', () => {
   assert.equal(isAllowedPushEndpoint('not a url'), false);
 });
 
-test('sendPush: intestazioni corrette, 410 = sottoscrizione scaduta, endpoint non consentito non esce', async () => {
+test('sendPush: correct headers, 410 = expired subscription, disallowed endpoint never called', async () => {
   const keys = generateVapidKeys();
   const ua = crypto.createECDH('prime256v1');
   ua.generateKeys();

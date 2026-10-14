@@ -1,8 +1,8 @@
 #!/usr/bin/env python3
 """
-Fase 0 - vocabolario di stati dei tool nei bubble recenti (SOLA LETTURA, mode=ro).
-Per le N chat piu' recenti legge gli ultimi K bubble (chiavi esatte) e conta le combinazioni
-(nome tool, toolFormerData.status, additionalData.status). Nessun contenuto, nessun parametro.
+Phase 0 - vocabulary of tool states in recent bubbles (READ ONLY, mode=ro).
+For the N most recent chats reads the last K bubbles (exact keys) and counts combinations
+(tool name, toolFormerData.status, additionalData.status). No content, no parameters.
 """
 import collections, json, os, sqlite3, sys
 
@@ -58,11 +58,11 @@ def main():
             if isinstance(ad, dict):
                 for key in ad:
                     other_keys[(tf.get("name"), key)] += 1
-    print(f"chat: {len(ids)} | bubble letti: {n_bubbles}")
-    print("\n(tool, toolFormerData.status, additionalData.status) -> conteggio")
+    print(f"chats: {len(ids)} | bubbles read: {n_bubbles}")
+    print("\n(tool, toolFormerData.status, additionalData.status) -> count")
     for key, n in sorted(combos.items(), key=lambda kv: (str(kv[0][0]), -kv[1])):
         print(f"  {n:5d}  {key}")
-    print("\nchiavi di additionalData per tool (solo tool con status non-completed/success rilevanti):")
+    print("\nadditionalData keys per tool (tools with non-completed/success status only):")
     shown = C()
     for (name, key), n in other_keys.most_common():
         shown[name] += 1

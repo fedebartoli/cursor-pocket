@@ -1,4 +1,4 @@
-// Componenti di interfaccia condivisi tra le viste.
+// Shared UI components across views.
 import { h } from './dom.js';
 import { timeAgo } from './format.js';
 import { icon } from './icons.js';
@@ -18,7 +18,7 @@ export function iconButton({ label, name, onClick, href, pip = false, spin = fal
   return h('button', { ...props, type: 'button', onClick }, children);
 }
 
-/** Marchio di Cursor in alto a sinistra (file a parte, sostituibile: vedi docs/SETUP.md, "Marchio Cursor"). */
+/** Cursor brand top-left (separate file, replaceable: see docs/SETUP.md, "Cursor brand"). */
 export const logoImg = (size = 28) => h('img', { class: 'appbar-logo', src: '/icons/cursor-logo.svg', alt: '', width: size, height: size, decoding: 'async' });
 
 export function appbar({ title, backHref, actions = [], logo = false }) {
@@ -56,7 +56,7 @@ export function sectionHead({ label, count, tone, iconName, expanded, onToggle, 
   return h('button', { class: cls, type: 'button', 'aria-expanded': String(!!expanded), onClick: onToggle }, children);
 }
 
-/** Interruttore accessibile (role=switch). `onToggle(nuovoValore)`. */
+/** Accessible switch (role=switch). `onToggle(newValue)`. */
 export function switchRow({ label, sub, checked, onToggle, disabled = false }) {
   return h(
     'div.switch-row',
@@ -74,7 +74,7 @@ export function skeleton(rows = 4) {
   return h('div', { class: 'skeleton-list', 'aria-busy': 'true', 'aria-label': 'Caricamento' }, Array.from({ length: rows }, () => h('div.skel.skel-row')));
 }
 
-/** Marcatore di stato a sinistra della riga (stesso significato dei segnali di Cursor). */
+/** State marker on the left of the row (same meaning as Cursor indicators). */
 export function markFor(card) {
   switch (card.state) {
     case STATE.RUNNING:
@@ -90,7 +90,7 @@ export function markFor(card) {
   }
 }
 
-/** Parti della riga secondaria legate allo stato. */
+/** Secondary row parts tied to state. */
 export function stateParts(card) {
   const a = card.attention;
   switch (card.state) {
@@ -117,10 +117,10 @@ export const STATE_PILL = Object.freeze({
 
 const KIND_ICON = { domanda: 'question', approvazione: 'approval', piano: 'plan' };
 
-/** Riga di una chat: titolo, progetto, stato (con icona del tipo di richiesta) e anteprima della domanda. */
+/** Chat row: title, project, state (with request-type icon) and question preview. */
 export function chatRow(card, { showWorkspace = false, showPrompt = false } = {}) {
   const labels = stateParts(card);
-  // Il progetto compare nelle liste miste; dentro un gruppo, se non c'e' uno stato da dire, si mostra il sottotitolo.
+  // Project shows in mixed lists; inside a group, if there is no state to show, show the subtitle.
   const meta = showWorkspace ? card.workspaceName : labels.length ? '' : card.subtitle;
   let stateIcon = null;
   if (card.state === STATE.ATTENTION) stateIcon = icon(KIND_ICON[card.attention?.kind] ?? 'alert', { size: 15 });

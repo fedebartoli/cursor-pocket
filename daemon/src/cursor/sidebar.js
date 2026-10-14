@@ -1,17 +1,17 @@
-// Ordine e stato (compresso/espanso) dei gruppi nella sidebar dell'Agents Window.
+// Order and state (collapsed/expanded) of groups in the Agents Window sidebar.
 //
-// Cursor salva la configurazione in `ItemTable` (db globale), chiave `cursor/glassSidebarSettings`:
+// Cursor saves settings in `ItemTable` (global db), key `cursor/glassSidebarSettings`:
 //   { groupBy, sortGroupsBy: "manual"|"updated", sortAgentsBy, sectionOrderByGroupBy:{<groupBy>:[id]},
 //     collapsedSectionIdsByGroupBy:{<groupBy>:[id]}, removedSectionIds:[id] }
 //
-// Algoritmo di ordinamento "manual" (dal bundle, funzioni s3v/LO0/o3v, da confermare visivamente con l'utente):
-//   [sezioni NON presenti nell'ordine salvato, in ordine predefinito] + [ordine salvato filtrato sulle sezioni presenti]
-// Ordine predefinito: ultima attivita' (max lastUpdatedAt) decrescente, a parita' per etichetta.
+// "manual" sort algorithm (from the bundle, functions s3v/LO0/o3v, to be confirmed visually with the user):
+//   [sections NOT in saved order, in default order] + [saved order filtered to present sections]
+// Default order: last activity (max lastUpdatedAt) descending, then by label.
 //
-// Limite noto: `removedSectionIds` (sezioni rimosse a mano dalla sidebar) non e' gestito: nessun caso reale
-// nei dati dell'utente. Dettaglio interno di Cursor: tenuto in `daemon/src/cursor/`.
+// Known limit: `removedSectionIds` (sections manually removed from the sidebar) is not handled: no real case
+// in the user's data. Cursor internal detail: keep in `daemon/src/cursor/`.
 
-/** Ordina `sections` ([{id, label, lastUpdatedAt}]) come farebbe la sidebar. Ritorna un nuovo array. */
+/** Sorts `sections` ([{id, label, lastUpdatedAt}]) as the sidebar would. Returns a new array. */
 export function orderSections(sections, settings, groupBy = 'workspace') {
   const byDefault = [...sections].sort((a, b) => {
     if (b.lastUpdatedAt !== a.lastUpdatedAt) return b.lastUpdatedAt - a.lastUpdatedAt;

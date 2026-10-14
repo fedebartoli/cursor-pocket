@@ -1,4 +1,4 @@
-// Avvio dell'app: sessione, router a hash, connessione live, service worker.
+// App bootstrap: session, hash router, live connection, service worker.
 import { api, onUnauthorized } from './api.js';
 import { forgetCommit, h } from './dom.js';
 import { icon } from './icons.js';
@@ -21,12 +21,12 @@ const TITLE = 'Cursor Pocket';
 let mode = 'boot'; // 'boot' | 'login' | 'app'
 let view = null;
 let currentKey = '';
-let navigated = false; // vero dopo la prima schermata: da li' in poi il focus segue la navigazione
+let navigated = false; // true after the first screen: from then on focus follows navigation
 let unsubscribeLive = null;
 const scrollMemory = new Map();
 
-// Barra in basso (raggiungibile col pollice): Attenzione, Chat, Preferite, Impostazioni. Si vede solo fuori dalle chat,
-// dove in fondo c'e' il compositore.
+// Bottom bar (thumb-reachable): Attention, Chats, Favorites, Settings. Visible only outside chats,
+// where the composer sits at the bottom.
 const tabBadge = h('span', { class: 'tab-badge', hidden: true });
 const tabDefs = [
   { route: 'home', href: '#/', label: 'Attenzione', icon: 'inbox', badge: tabBadge },
@@ -44,7 +44,7 @@ function updateTabbar(routeName) {
   const visible = mode === 'app' && routeName !== 'chat' && routeName !== 'history' && routeName !== 'newchat';
   tabbar.hidden = !visible;
   document.body.classList.toggle('has-tabbar', visible);
-  const active = routeName === 'help' || routeName === 'archive' ? 'settings' : routeName === 'newchat' ? 'chats' : routeName; // "Come funziona" sta sotto Impostazioni
+  const active = routeName === 'help' || routeName === 'archive' ? 'settings' : routeName === 'newchat' ? 'chats' : routeName; // "How it works" lives under Settings
   for (const [route, el] of tabEls) {
     if (visible && route === active) el.setAttribute('aria-current', 'page');
     else el.removeAttribute('aria-current');
@@ -65,7 +65,7 @@ function parseRoute() {
       const id = decodeURIComponent(chat[1]);
       if (id) return { name: 'chat', id, key: `chat:${id}` };
     } catch {
-      // identificativo malformato: si torna all'elenco
+      // malformed id: return to the list
     }
   }
   const hist = /^#\/chat\/([^/?]+)\/storia$/.exec(hash);
@@ -74,7 +74,7 @@ function parseRoute() {
       const id = decodeURIComponent(hist[1]);
       if (id) return { name: 'history', id, key: `history:${id}` };
     } catch {
-      // identificativo malformato: si torna all'elenco
+      // malformed id: return to the list
     }
   }
   if (hash === '#/impostazioni') return { name: 'settings', key: 'settings' };
@@ -90,7 +90,7 @@ function mountRoute() {
   if (mode !== 'app') return;
   scrollMemory.set(currentKey, scrollTop());
   view?.destroy?.();
-  forgetCommit(root); // la nuova vista deve sempre sostituire il contenuto, anche se identico al precedente
+  forgetCommit(root); // new view must always replace content, even if identical to the previous one
   const route = parseRoute();
   currentKey = route.key;
   updateTabbar(route.name);
@@ -101,15 +101,15 @@ function mountRoute() {
   else if (route.name === 'archive') view = mountArchive(root);
   else if (route.name === 'newchat') view = mountNewChat(root);
   else view = mountHome(root, route.name === 'home' ? 'attention' : route.name);
-  // Si ripristina la posizione degli elenchi; le altre schermate partono dall'alto.
+  // Restore list scroll position; other screens start at the top.
   const isList = ['home', 'chats', 'favorites'].includes(route.name);
   scrollToY(isList ? (scrollMemory.get(route.key) ?? 0) : 0);
-  // Accessibilita': dopo un cambio di schermata il lettore vocale parte dal titolo della nuova schermata.
+  // Accessibility: after a screen change the screen reader starts at the new screen title.
   if (navigated) {
     root.querySelector('.appbar-title')?.focus({ preventScroll: true });
-    // Dissolvenza breve (solo opacita': una trasformazione sposterebbe il compositore fisso); spenta da "Riduci movimento".
+    // Brief fade (opacity only: a transform would move the fixed composer); off with "Reduce motion".
     root.classList.remove('enter');
-    void root.offsetWidth; // riavvia l'animazione
+    void root.offsetWidth; // restart animation
     root.classList.add('enter');
   }
   navigated = true;
@@ -136,7 +136,7 @@ function showLogin() {
   try {
     navigator.clearAppBadge?.()?.catch?.(() => {});
   } catch {
-    // badge non supportato
+    // badge not supported
   }
   mountLogin(root, {
     onSuccess() {
@@ -151,15 +151,15 @@ async function enterApp() {
   mode = 'app';
   unsubscribeLive?.();
   unsubscribeLive = subscribe(onLive);
-  mountRoute(); // mostra subito lo scheletro: i dati arrivano da startLive
+  mountRoute(); // show skeleton immediately: data arrives from startLive
   await startLive();
-  if (mode === 'app') resyncPush(); // dopo un nuovo abbinamento, ripristina la registrazione push gia' presente
+  if (mode === 'app') resyncPush(); // after re-pairing, restore existing push registration
 }
 
 function registerServiceWorker() {
   if (!('serviceWorker' in navigator)) return;
   navigator.serviceWorker.register('/sw.js', { scope: '/', updateViaCache: 'none' }).catch(() => {});
-  // Il tocco su una notifica chiede alla finestra aperta di aprire la chat giusta.
+  // Tap on a notification asks the open window to open the right chat.
   navigator.serviceWorker.addEventListener('message', (ev) => {
     const data = ev.data;
     if (data?.type === 'navigate' && typeof data.hash === 'string' && /^#\/[\w\-/%.]*$/.test(data.hash)) {
@@ -188,7 +188,7 @@ initViewport();
 registerServiceWorker();
 onUnauthorized(showLogin);
 window.addEventListener('hashchange', mountRoute);
-// Gli orari relativi ("3 min fa") si aggiornano anche senza nuovi dati.
+// Relative times ("3 min ago") update even without new data.
 setInterval(() => {
   if (mode === 'app' && document.visibilityState === 'visible') view?.update?.(getLive());
 }, 30_000);

@@ -1,5 +1,5 @@
-// Conversazione intera di una chat, SOLO LETTURA, a pagine dal fondo: si parte dagli ultimi messaggi e si caricano i precedenti
-// su richiesta. I tool compaiono come righe discrete (tipo di azione, mai comandi o percorsi).
+// Full chat conversation, READ-ONLY, paginated from the bottom: start at latest messages and load older on demand.
+// Tools appear as discrete rows (action type, never commands or paths).
 import { api } from '../api.js';
 import { CATEGORY_ICON } from '../activity.js';
 import { appbar, banner, emptyState, skeleton } from '../components.js';
@@ -33,8 +33,8 @@ function message(item) {
 
 export function mountHistory(root, id) {
   const enc = encodeURIComponent(id);
-  let items = []; // dal piu' vecchio al piu' recente
-  let from = null; // indice del primo bubble caricato
+  let items = []; // oldest to newest
+  let from = null; // index of first loaded bubble
   let hasMore = false;
   let loading = true;
   let error = null;
@@ -80,7 +80,7 @@ export function mountHistory(root, id) {
     }
     loading = false;
     render();
-    // Resta sullo stesso punto: i messaggi nuovi compaiono sopra.
+    // Stay at the same scroll position: new messages appear above.
     window.scrollTo(0, document.documentElement.scrollHeight - before);
   }
 

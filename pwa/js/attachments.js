@@ -1,5 +1,5 @@
-// Immagini da allegare a un messaggio (compositore di una chat e "nuova chat"): pulsante, anteprime e caricamento.
-// Ogni immagine si ridimensiona sul telefono e si carica subito sul daemon (resta li' al massimo 30 minuti o fino all'invio).
+// Images to attach to a message (chat composer and "new chat"): button, previews, and upload.
+// Each image is resized on the phone and uploaded immediately to the daemon (kept at most 30 minutes or until send).
 import { api } from './api.js';
 import { h } from './dom.js';
 import { icon } from './icons.js';
@@ -55,7 +55,7 @@ export function createAttachments({ onChange, onError, onNote }) {
       onChange();
       try {
         const blob = await prepareImage(file);
-        if (!items.includes(it)) continue; // tolta nel frattempo
+        if (!items.includes(it)) continue; // removed in the meantime
         URL.revokeObjectURL(it.url);
         it.url = URL.createObjectURL(blob);
         const r = await api.upload(blob);
@@ -92,7 +92,7 @@ export function createAttachments({ onChange, onError, onNote }) {
       locked = Boolean(v);
       refreshButton();
     },
-    /** Dopo un invio riuscito il daemon ha gia' cancellato i file: si toglie solo l'anteprima. */
+    /** After a successful send the daemon already deleted the files: only remove the preview. */
     clearLocal() {
       for (const it of [...items]) remove(it, { remote: false });
     },

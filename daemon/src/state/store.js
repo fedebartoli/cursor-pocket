@@ -1,6 +1,6 @@
-// Archivio locale del daemon (SQLite proprio, `daemon/data/store.db`). NON e' il database di Cursor.
-// Contiene: chat ignorate, sottoscrizioni push, notifiche gia' inviate, codici di abbinamento, sessioni, chiavi VAPID.
-// Il file e' creato con permessi 0600 (directory 0700): contiene il segreto VAPID e gli hash delle sessioni.
+// Local daemon store (own SQLite, `daemon/data/store.db`). NOT Cursor's database.
+// Holds: ignored chats, push subscriptions, sent notifications, pairing codes, sessions, VAPID keys.
+// File is created with mode 0600 (directory 0700): contains VAPID secret and session hashes.
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -37,7 +37,7 @@ export class Store {
       try {
         fs.chmodSync(dir, 0o700);
       } catch {
-        // directory non nostra: ignoriamo
+        // not our directory: ignore
       }
     }
     this.#db = new DatabaseSync(file);
@@ -49,7 +49,7 @@ export class Store {
         try {
           fs.chmodSync(f, 0o600);
         } catch {
-          // il file wal/shm puo' non esistere ancora
+          // wal/shm file may not exist yet
         }
       }
     }
@@ -100,7 +100,7 @@ export class Store {
     this.#db.close();
   }
 
-  // --- meta (chiavi VAPID, ecc.) ---
+  // --- meta (VAPID keys, etc.) ---
   getMeta(k) {
     return this.#q.getMeta.get(k)?.v ?? null;
   }
@@ -108,14 +108,14 @@ export class Store {
     this.#q.setMeta.run(k, String(v));
   }
 
-  // --- ignorati ---
+  // --- ignored ---
   addIgnored(composerId, key, now) {
     this.#q.addIgnore.run(composerId, key, now);
   }
   removeIgnored(composerId, key) {
     return this.#q.delIgnore.run(composerId, key).changes > 0;
   }
-  /** @returns {Set<string>} coppie `composerId|key` (vedi ignoreKey) */
+  /** @returns {Set<string>} `composerId|key` pairs (see ignoreKey) */
   ignoredSet() {
     return new Set(this.#q.listIgnore.all().map((r) => ignoreKey(r.composer_id, r.tool_call_key)));
   }
@@ -126,8 +126,8 @@ export class Store {
     return this.#q.pruneIgnore.run(olderThan).changes;
   }
 
-  // --- preferenze per chat (solo locali al daemon: Cursor non ne sa nulla) ---
-  /** Aggiorna `favorite` e/o `muted` di una chat (i campi non indicati restano come sono). */
+  // --- per-chat prefs (daemon-local only: Cursor does not know) ---
+  /** Updates `favorite` and/or `muted` for a chat (omitted fields stay unchanged). */
   setChatPrefs(composerId, patch, now) {
     const cur = this.#q.getPrefs.get(composerId) ?? { favorite: 0, muted: 0 };
     const favorite = typeof patch.favorite === 'boolean' ? Number(patch.favorite) : cur.favorite;
@@ -135,12 +135,12 @@ export class Store {
     this.#q.setPrefs.run(composerId, favorite, muted, now);
     return { favorite: favorite === 1, muted: muted === 1 };
   }
-  /** @returns {Map<string, {favorite: boolean, muted: boolean}>} solo le chat con almeno un flag acceso */
+  /** @returns {Map<string, {favorite: boolean, muted: boolean}>} only chats with at least one flag set */
   chatPrefs() {
     return new Map(this.#q.listPrefs.all().map((r) => [r.composer_id, { favorite: r.favorite === 1, muted: r.muted === 1 }]));
   }
 
-  // --- sottoscrizioni push ---
+  // --- push subscriptions ---
   upsertSubscription({ endpoint, p256dh, auth }, sessionHash, now) {
     this.#q.upsertSub.run(endpoint, p256dh, auth, sessionHash ?? null, now);
   }
@@ -163,7 +163,7 @@ export class Store {
     this.#q.subFail.run(endpoint);
   }
 
-  // --- notifiche gia' inviate (deduplica) ---
+  // --- already-sent notifications (dedupe) ---
   hasNotified(key) {
     return this.#q.hasNotified.get(key) !== undefined;
   }
@@ -174,7 +174,7 @@ export class Store {
     return this.#q.pruneNotified.run(olderThan).changes;
   }
 
-  // --- abbinamento e sessioni (si salvano solo gli hash) ---
+  // --- pairing and sessions (only hashes stored) ---
   addPairingCode(codeHash, expiresAt) {
     this.#q.addPairing.run(codeHash, expiresAt);
   }

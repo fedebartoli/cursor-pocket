@@ -1,7 +1,7 @@
-// Messaggi in italiano per gli errori delle azioni (risposta, salta, messaggio). Logica pura (si prova in Node).
+// Italian messages for action errors (answer, skip, message). Pure logic (testable in Node).
 //
-// Il daemon risponde gia' con testi chiari per quasi tutti i codici; qui si sostituiscono solo quelli che dipendono
-// da cio' che la schermata fa dopo (es. "ho aggiornato la vista") o che nascono nel client.
+// The daemon already returns clear text for almost all codes; here we only replace those that depend on
+// what the screen does next (e.g. "I refreshed the view") or that originate in the client.
 const CUSTOM = Object.freeze({
   network: 'Daemon non raggiungibile. Controlla la connessione e riprova.',
   stale: 'La richiesta \u00e8 cambiata o \u00e8 gi\u00e0 stata risolta: ho aggiornato la vista.',
@@ -13,7 +13,7 @@ const CUSTOM = Object.freeze({
   http: 'Operazione non riuscita. Riprova.',
 });
 
-/** Codici dopo i quali conviene riscaricare lo stato (la situazione sul Mac e' cambiata). */
+/** Codes after which reloading state is worthwhile (the situation on the Mac changed). */
 const REFRESH_AFTER = new Set(['stale', 'no_question', 'mismatch', 'already_sent', 'not_found', 'not_running', 'timeout']);
 
 export function describeActionError(err) {
@@ -25,7 +25,7 @@ export function describeActionError(err) {
 
 export const shouldRefreshAfter = (err) => REFRESH_AFTER.has(err?.code);
 
-/** Esito di un invio riuscito -> testo per l'utente. `res`: risposta del daemon. */
+/** Successful send outcome -> user-facing text. `res`: daemon response. */
 export function describeAnswerResult(res) {
   if (res?.warning === 'differs') return 'Risposta inviata, ma Cursor ha registrato una scelta diversa. Controlla sul Mac.';
   if (res?.verified === false) return 'Risposta inviata. Non riesco ancora a confermare che Cursor l\u2019abbia registrata.';

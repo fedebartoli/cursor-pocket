@@ -1,20 +1,20 @@
 #!/bin/bash
-# Permette al daemon di tenere il Mac sveglio ANCHE con lo schermo chiuso e a batteria, SOLO mentre un agente lavora.
+# Lets the daemon keep the Mac awake EVEN with the lid closed and on battery, ONLY while an agent is working.
 #
-# Cosa fa: aggiunge una regola sudoers (/etc/sudoers.d/cursor-pocket-pmset) che consente al TUO utente di eseguire, senza
-# password, esattamente questi due comandi e nient'altro:
+# What it does: adds a sudoers rule (/etc/sudoers.d/cursor-pocket-pmset) allowing YOUR user to run, without
+# password, exactly these two commands and nothing else:
 #     /usr/bin/pmset -a disablesleep 1
 #     /usr/bin/pmset -a disablesleep 0
-# Il daemon li usa cosi': 1 quando un agente lavora (e la funzione e' accesa in Impostazioni), 0 appena finisce, se il daemon
-# si ferma, o se la batteria scende sotto la soglia. Un processo di guardia rimette 0 anche se il daemon muore all'improvviso.
+# The daemon uses them as: 1 while an agent works (and the feature is on in Settings), 0 when it finishes, if the daemon
+# stops, or if battery drops below the threshold. A watchdog process sets 0 even if the daemon dies unexpectedly.
 #
-#   sudo tools/mac/power-setup.sh install     crea la regola (controllata con visudo prima di attivarla)
-#   sudo tools/mac/power-setup.sh uninstall   la rimuove e rimette disablesleep a 0
-#   tools/mac/power-setup.sh status           dice se la regola c'e' e il valore attuale di disablesleep
+#   sudo tools/mac/power-setup.sh install     create the rule (validated with visudo before enabling)
+#   sudo tools/mac/power-setup.sh uninstall   remove it and set disablesleep back to 0
+#   tools/mac/power-setup.sh status           whether the rule exists and the current disablesleep value
 #
-# ATTENZIONE: con disablesleep a 1 il Mac NON va in stop nemmeno chiudendo lo schermo: in una borsa si scalda. Per questo il
-# daemon lo tiene a 1 solo mentre un agente lavora e lo rimette a 0 con quattro protezioni (fine lavoro, spegnimento del daemon,
-# processo di guardia, batteria bassa). Se mai restasse a 1:  sudo pmset -a disablesleep 0
+# WARNING: with disablesleep at 1 the Mac does NOT sleep even with the lid closed: it heats up in a bag. That is why the
+# daemon keeps it at 1 only while an agent works and restores 0 with four safeguards (work finished, daemon shutdown,
+# watchdog process, low battery). If it ever stays at 1:  sudo pmset -a disablesleep 0
 set -euo pipefail
 
 RULE="/etc/sudoers.d/cursor-pocket-pmset"
@@ -22,29 +22,29 @@ cmd="${1:-status}"
 
 case "$cmd" in
   status)
-    if [ -f "$RULE" ]; then echo "Regola sudoers: presente ($RULE)"; else echo "Regola sudoers: assente"; fi
-    echo "Stato attuale: $(pmset -g | awk '/SleepDisabled|disablesleep/ {print $1 "=" $2}' | head -1)"
-    echo "Prova senza password: $(sudo -n -l /usr/bin/pmset -a disablesleep 1 >/dev/null 2>&1 && echo consentita || echo non consentita)"
+    if [ -f "$RULE" ]; then echo "Sudoers rule: present ($RULE)"; else echo "Sudoers rule: absent"; fi
+    echo "Current state: $(pmset -g | awk '/SleepDisabled|disablesleep/ {print $1 "=" $2}' | head -1)"
+    echo "Passwordless test: $(sudo -n -l /usr/bin/pmset -a disablesleep 1 >/dev/null 2>&1 && echo allowed || echo not allowed)"
     ;;
   install)
-    [ "$(id -u)" -eq 0 ] || { echo "Esegui con sudo: sudo $0 install" >&2; exit 1; }
+    [ "$(id -u)" -eq 0 ] || { echo "Run with sudo: sudo $0 install" >&2; exit 1; }
     USER_NAME="${SUDO_USER:-}"
-    [ -n "$USER_NAME" ] && [ "$USER_NAME" != "root" ] || { echo "Lancia il comando con sudo da un utente normale (serve SUDO_USER)." >&2; exit 1; }
+    [ -n "$USER_NAME" ] && [ "$USER_NAME" != "root" ] || { echo "Run the command with sudo as a normal user (SUDO_USER required)." >&2; exit 1; }
     TMP="$(mktemp)"
     printf '%s ALL=(root) NOPASSWD: /usr/bin/pmset -a disablesleep 1, /usr/bin/pmset -a disablesleep 0\n' "$USER_NAME" > "$TMP"
-    visudo -cf "$TMP" >/dev/null || { rm -f "$TMP"; echo "La regola non e' valida: nessuna modifica." >&2; exit 1; }
+    visudo -cf "$TMP" >/dev/null || { rm -f "$TMP"; echo "Rule is invalid: no changes made." >&2; exit 1; }
     install -m 0440 -o root -g wheel "$TMP" "$RULE"
     rm -f "$TMP"
-    echo "Regola creata per l'utente $USER_NAME: $RULE"
+    echo "Rule created for user $USER_NAME: $RULE"
     ;;
   uninstall)
-    [ "$(id -u)" -eq 0 ] || { echo "Esegui con sudo: sudo $0 uninstall" >&2; exit 1; }
+    [ "$(id -u)" -eq 0 ] || { echo "Run with sudo: sudo $0 uninstall" >&2; exit 1; }
     /usr/bin/pmset -a disablesleep 0
     rm -f "$RULE"
-    echo "Regola rimossa e disablesleep rimesso a 0."
+    echo "Rule removed and disablesleep set back to 0."
     ;;
   *)
-    echo "Uso: [sudo] $0 install | uninstall | status" >&2
+    echo "Usage: [sudo] $0 install | uninstall | status" >&2
     exit 64
     ;;
 esac

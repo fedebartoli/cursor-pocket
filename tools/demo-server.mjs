@@ -1,11 +1,11 @@
 #!/usr/bin/env node
-// Server dimostrativo: il daemon vero, ma su un database di Cursor SINTETICO (titoli inventati) e con invii push
-// simulati (nessuna rete). Serve a provare e documentare la PWA senza toccare i dati reali di Cursor.
+// Demo server: same as the real daemon, but on a SYNTHETIC Cursor database (made-up titles) with simulated push
+// delivery (no network). Use it to try and document the PWA without touching real Cursor data.
 //
-// Uso:  node --disable-warning=ExperimentalWarning tools/demo-server.mjs [--port 8799] [--animate] [--no-actions]
-//   --animate     dopo l'avvio una chat finisce e ne compare una con una nuova domanda (per vedere gli aggiornamenti live)
-//   --no-actions  simula Cursor SENZA porta di debug (la PWA resta in sola lettura). Di default un "Cursor" finto
-//                 accetta risposte e messaggi e li scrive nel database sintetico, come farebbe quello vero.
+// Usage:  node --disable-warning=ExperimentalWarning tools/demo-server.mjs [--port 8799] [--animate] [--no-actions]
+//   --animate     after startup one chat finishes and another gets a new question (to see live updates)
+//   --no-actions  simulates Cursor WITHOUT a debug port (PWA stays read-only). By default a fake "Cursor"
+//                 accepts answers and messages and writes them to the synthetic database, like the real one.
 import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
@@ -26,7 +26,7 @@ const withActions = !args.includes('--no-actions');
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cp-demo-'));
 const fx = new CursorFixture(dir);
-fx.db.exec('PRAGMA journal_mode=WAL'); // come il vero database di Cursor: i lettori non bloccano chi scrive
+fx.db.exec('PRAGMA journal_mode=WAL'); // like the real Cursor database: readers do not block writers
 
 const ago = (minutes) => Date.now() - minutes * 60_000;
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
@@ -70,7 +70,7 @@ const LONG_TEXT = [
 ].join('\n');
 
 const chatSpecs = new Map(); // n -> { name, where, minutesAgo }
-const bubblesOf = new Map(); // n -> bubble[] (per aggiungerne altri)
+const bubblesOf = new Map(); // n -> bubble[] (to append more)
 
 function chat(n, name, where, minutesAgo, header = {}) {
   chatSpecs.set(n, { name, where, minutesAgo });
@@ -86,13 +86,13 @@ function talk(n, minutesAgo, assistantText, tool) {
   fx.conversation(id(n), bubbles);
 }
 
-// Negozio online
+// Online store
 chat(1, 'Correggi il calcolo del carrello', 'negozio', 4, { hasBlockingPendingActions: true });
 talk(1, 4, 'Prima di continuare mi serve una decisione sugli sconti.', { name: 'ask_question', status: 'loading', toolCallId: 'tc-demo-1', params: QUESTION });
 chat(2, 'Migrazione della tabella ordini', 'negozio', 1, { unfinishedRunAt: ago(3) });
 talk(2, 1, 'Sto aggiornando le query che leggono lo storico ordini.');
 {
-  // Qualche passo dell'agente per la sezione "Attivita' recente" (comandi e percorsi inventati: non escono dal daemon)
+  // A few agent steps for the "Recent activity" section (made-up commands and paths: not emitted by the daemon)
   const b = bubblesOf.get(2);
   const t = ago(1);
   b.push(
@@ -115,7 +115,7 @@ talk(7, 60 * 24 * 4, 'Aggiornate le librerie minori; restano due major da valuta
 chat(8, 'Documentazione delle API', 'negozio', 60 * 24 * 9);
 talk(8, 60 * 24 * 9, 'Ho generato la documentazione a partire dagli schemi.');
 {
-  // Conversazione lunga (oltre una pagina) per provare "Messaggi precedenti".
+  // Long conversation (more than one page) to exercise "Earlier messages".
   const t0 = ago(60 * 24 * 9);
   const long = [];
   for (let i = 0; i < 44; i++) {
@@ -129,7 +129,7 @@ talk(8, 60 * 24 * 9, 'Ho generato la documentazione a partire dagli schemi.');
   fx.conversation(id(8), long);
 }
 
-// App mobile
+// Mobile app
 chat(9, 'Tema scuro nelle impostazioni', 'app', 25, { hasUnreadMessages: true });
 talk(9, 25, LONG_TEXT);
 chat(10, 'Refactor dell\u2019autenticazione', 'app', 180, { hasBlockingPendingActions: true });
@@ -137,7 +137,7 @@ talk(10, 180, 'Il refactor \u00e8 concluso, resta solo la revisione.', { name: '
 chat(11, 'Schermata di avvio animata', 'app', 60 * 6);
 talk(11, 60 * 6, 'L\u2019animazione dura 900 ms e rispetta la riduzione del movimento.');
 
-// Due domande insieme: una a scelta singola e una multipla (prova del questionario completo)
+// Two questions together: one single-choice and one multiple-choice (full questionnaire test)
 chat(14, 'Preferenze di notifica', 'app', 2, { hasBlockingPendingActions: true });
 talk(14, 2, 'Per configurare le notifiche mi servono due scelte.', {
   name: 'ask_question',
@@ -152,7 +152,7 @@ talk(14, 2, 'Per configurare le notifiche mi servono due scelte.', {
   },
 });
 
-// Un comando in attesa di approvazione (reviewData Requested): l'agente e' fermo finche' non decidi sul Mac
+// One command awaiting approval (reviewData Requested): agent is paused until you decide on the Mac
 chat(15, 'Pubblicazione del pacchetto', 'negozio', 1, { hasBlockingPendingActions: true, unfinishedRunAt: ago(3) });
 talk(15, 1, 'Pubblico la nuova versione sul registro.', {
   name: 'run_terminal_command_v2',
@@ -162,7 +162,7 @@ talk(15, 1, 'Pubblico la nuova versione sul registro.', {
   additionalData: { reviewData: { status: 'Requested', approvalType: 'user' } },
 });
 
-// Altri due comandi in attesa: uno da rifiutare e uno non di terminale (da qui non si decide)
+// Two more pending commands: one to reject and one non-terminal (not decided from here)
 chat(17, 'Pulizia della cartella temporanea', 'app', 2, { hasBlockingPendingActions: true, unfinishedRunAt: ago(4) });
 talk(17, 2, 'Svuoto la cartella temporanea prima di rigenerare i file.', {
   name: 'run_terminal_command_v2',
@@ -188,11 +188,11 @@ talk(18, 2.5, 'Interrogo il servizio di prova.', {
   additionalData: { reviewData: { status: 'Requested', approvalType: 'user' } },
 });
 
-// Domanda appena creata: Cursor ne scrive il testo solo a fine turno (qui params vuoti, come nei dati reali per 10-30 s)
+// Fresh question: Cursor only writes the text at end of turn (empty params here, like real data for 10-30 s)
 chat(16, 'Scelta del fornitore di pagamenti', 'negozio', 0.1, { hasBlockingPendingActions: true });
 talk(16, 0.1, 'Mi serve una scelta sul fornitore.', { name: 'ask_question', status: 'loading', toolCallId: 'tc-demo-16', params: '' });
 
-// Sito vetrina (gruppo compresso nella sidebar)
+// Showcase site (collapsed group in the sidebar)
 chat(12, 'Vecchio esperimento sul menu', 'sito', 60 * 24 * 3, { hasBlockingPendingActions: true });
 talk(12, 60 * 24 * 3, 'Ho provato due varianti del menu laterale.', { name: 'edit_file', status: 'completed', toolCallId: 'tc-demo-12' });
 chat(13, 'Testi della pagina iniziale', 'sito', 60 * 24 * 5);
@@ -221,7 +221,7 @@ const config = loadConfig({
 let pushes = 0;
 let newChats = 0;
 
-// "Cursor" finto per le azioni dal telefono: scrive nel database sintetico quello che scriverebbe Cursor vero.
+// Fake "Cursor" for phone actions: writes to the synthetic database what real Cursor would write.
 const numOf = (composerId) => Number(composerId.slice(-12));
 const pinnedDemo = new Set();
 const demoUi = {
@@ -242,10 +242,10 @@ const demoUi = {
       currentSelections[q.id] = answers[i].optionIds;
       if (answers[i].freeform) freeformTexts[q.id] = answers[i].freeform;
     });
-    await new Promise((r) => setTimeout(r, 700)); // il tempo di cliccare nella finestra di Cursor
+    await new Promise((r) => setTimeout(r, 700)); // time to click in the Cursor window
     talk(n, spec.minutesAgo, bubblesOf.get(n).find((b) => b.id === 'b2')?.text, { ...old.tool, status: 'completed', additionalData: { status: 'submitted', currentSelections, freeformTexts } });
     chat(n, spec.name, spec.where, 0, { hasBlockingPendingActions: false });
-    console.log('[demo] risposta registrata nella chat', n);
+    console.log('[demo] answer recorded in chat', n);
     return { submitted: true };
   },
   async skip({ composerId }) {
@@ -263,11 +263,11 @@ const demoUi = {
     const spec = chatSpecs.get(n);
     const old = bubblesOf.get(n)?.find((b) => b.tool);
     if (!spec || !old) throw Object.assign(new Error('demo'), { code: 'no_tray' });
-    await new Promise((r) => setTimeout(r, 600)); // il tempo di cliccare nella finestra di Cursor
+    await new Promise((r) => setTimeout(r, 600)); // time to click in the Cursor window
     const done = decision === 'approve' ? { status: 'completed', review: 'Done' } : { status: 'cancelled', review: 'Done' };
     talk(n, spec.minutesAgo, bubblesOf.get(n).find((b) => b.id === 'b2')?.text, { ...old.tool, status: done.status, additionalData: { reviewData: { status: done.review, approvalType: 'user' } } });
     chat(n, spec.name, spec.where, 0, { hasBlockingPendingActions: false, unfinishedRunAt: decision === 'approve' ? Date.now() : undefined });
-    console.log('[demo] approvazione registrata:', decision, 'chat', n);
+    console.log('[demo] approval recorded:', decision, 'chat', n);
     return {};
   },
   async stop({ composerId }) {
@@ -277,7 +277,7 @@ const demoUi = {
     await new Promise((r) => setTimeout(r, 500));
     fx.conversation(composerId, bubblesOf.get(n), { status: 'aborted' });
     chat(n, spec.name, spec.where, 0, { unfinishedRunAt: undefined });
-    console.log('[demo] agente fermato, chat', n);
+    console.log('[demo] agent stopped, chat', n);
     return { clicked: true, settled: true };
   },
   async newChat({ project, text, branch, model }) {
@@ -335,7 +335,7 @@ const demoUi = {
     const next = [...bubbles, { id: `u${bubbles.length}`, type: 1, createdAt: Date.now(), text: 'messaggio dal telefono' }];
     bubblesOf.set(n, next);
     fx.conversation(composerId, next);
-    chat(n, spec.name, spec.where, 0, { unfinishedRunAt: Date.now() }); // l'agente si mette al lavoro
+    chat(n, spec.name, spec.where, 0, { unfinishedRunAt: Date.now() }); // agent starts working
     setTimeout(() => {
       const done = [...next, { id: `a${next.length}`, type: 2, createdAt: Date.now(), text: 'Ho letto il tuo messaggio e riprendo il lavoro da l\u00ec.' }];
       bubblesOf.set(n, done);
@@ -349,13 +349,13 @@ const demoUi = {
 const app = createApp({
   config,
   logger: createLogger({ level: 'warn', stream: process.stderr }),
-  // "Mac sveglio" finto: nessun processo vero.
+  // Fake "keep Mac awake": no real process.
   actionsDeps: {
     ...(withActions ? { ui: demoUi } : { ui: { probe: async () => ({ up: false }), hasWindow: async () => false } }),
     awake: {
       spawn: () => Object.assign(new EventEmitter(), { kill() {}, unref() {} }),
       exists: () => true,
-      // Mac finto: nessun comando di sistema, nessuna modifica reale.
+      // Fake Mac: no system commands, no real changes.
       power: {
         brightnessCmd: '', brightnessAvailable: true,
         canControlSleep: async () => true, setSleepDisabled: async () => {}, sleepDisabled: async () => true,
@@ -364,25 +364,25 @@ const app = createApp({
       },
     },
   },
-  // Nessun invio reale: si conta solo.
+  // No real delivery: count only.
   send: async () => {
     pushes += 1;
-    console.log(`[demo] push simulato n. ${pushes}`);
+    console.log(`[demo] simulated push #${pushes}`);
     return { ok: true, status: 201 };
   },
 });
 await app.start();
-// Un secondo dispositivo gia' abbinato, per mostrare l'elenco in Impostazioni.
+// A second device already paired, to show the list in Settings.
 app.auth.pair(app.auth.createPairingCode().code, { label: 'iPad' });
 const { code } = app.auth.createPairingCode();
-console.log(`Demo attiva: http://127.0.0.1:${port}/`);
+console.log(`Demo running: http://127.0.0.1:${port}/`);
 console.log(`Codice di abbinamento (15 min): ${code}`);
 
 if (animate) {
   setTimeout(() => {
     chat(2, 'Migrazione della tabella ordini', 'negozio', 0, { unfinishedRunAt: undefined, hasUnreadMessages: true });
     talk(2, 0, 'La migrazione \u00e8 completata: 1.248 righe aggiornate, nessun errore.');
-    console.log('[demo] la chat "Migrazione della tabella ordini" e\' finita');
+    console.log('[demo] chat "Migrazione della tabella ordini" finished');
   }, 15_000);
   setTimeout(() => {
     chat(11, 'Schermata di avvio animata', 'app', 0, { hasBlockingPendingActions: true });
@@ -392,7 +392,7 @@ if (animate) {
       toolCallId: 'tc-demo-11',
       params: { title: 'Primo avvio', questions: [{ id: 'q1', prompt: 'Mostro la schermata di benvenuto a ogni avvio o solo la prima volta?', options: [{ id: 'a', label: 'Solo la prima volta' }, { id: 'b', label: 'A ogni avvio' }], allowMultiple: false }] },
     });
-    console.log('[demo] nuova domanda in "Schermata di avvio animata"');
+    console.log('[demo] new question in "Schermata di avvio animata"');
   }, 30_000);
 }
 

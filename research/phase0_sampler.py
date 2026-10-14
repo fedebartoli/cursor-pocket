@@ -1,12 +1,12 @@
 #!/usr/bin/env python3
 """
-Fase 0 - campionatore in sola lettura (mode=ro) che registra i CAMBIAMENTI di stato delle chat.
+Phase 0 - read-only sampler (mode=ro) that records chat STATE CHANGES.
 
-Serve a osservare dal vivo come cambiano header, composerData e ultimo bubble quando una chat
-parte, pone una domanda, riceve risposta, finisce. Scrive su un file solo metadati
-(nomi di campo, valori booleani/numerici/stati, id abbreviati). Mai titoli, mai testi, mai tool params.
+Observes live how headers, composerData, and the last bubble change when a chat
+starts, asks a question, gets an answer, finishes. Writes metadata only to a file
+(field names, boolean/numeric/state values, abbreviated ids). Never titles, text, or tool params.
 
-Uso:
+Usage:
   python3 research/phase0_sampler.py --out /tmp/cp-sampler.log --interval 0.5 --duration 7200
 """
 import argparse, hashlib, json, os, signal, sqlite3, sys, time
@@ -99,7 +99,7 @@ def main():
     ap.add_argument("--out", required=True)
     ap.add_argument("--interval", type=float, default=0.5)
     ap.add_argument("--duration", type=float, default=7200)
-    ap.add_argument("--hot", type=int, default=6, help="quante chat recenti seguire a livello composerData")
+    ap.add_argument("--hot", type=int, default=6, help="how many recent chats to follow at composerData level")
     args = ap.parse_args()
 
     stop = {"v": False}
@@ -113,16 +113,16 @@ def main():
         out.write(f"{ts()} {msg}\n")
 
     hdr_prev, cd_prev = {}, {}
-    watch = {}  # cid -> scadenza (chat nuove, sottoagenti inclusi, seguite per 20 minuti)
+    watch = {}  # cid -> expiry (new chats, subagents included, watched for 20 minutes)
     t_end = time.time() + args.duration
     first = True
-    log(f"# avvio campionatore pid={os.getpid()} interval={args.interval}")
+    log(f"# sampler start pid={os.getpid()} interval={args.interval}")
     while time.time() < t_end and not stop["v"]:
         t0 = time.time()
         try:
             rows = con.execute("select composerId, isArchived, isSubagent, recency, value from composerHeaders").fetchall()
         except sqlite3.OperationalError as e:
-            log(f"# errore lettura header: {e}")
+            log(f"# header read error: {e}")
             time.sleep(1)
             continue
         hot = []
@@ -138,7 +138,7 @@ def main():
                 log(f"HDR {short(cid)} " + " ".join(diff(prev, sig)))
                 watch[cid] = time.time() + 1200
             elif prev is None and not first:
-                log(f"HDR {short(cid)} NUOVO " + json.dumps(sig, sort_keys=True))
+                log(f"HDR {short(cid)} NEW " + json.dumps(sig, sort_keys=True))
                 watch[cid] = time.time() + 1200
             hdr_prev[cid] = sig
             if not arch and (j.get("unfinishedRunAt") or j.get("hasBlockingPendingActions")):
@@ -148,7 +148,7 @@ def main():
         hot.sort(reverse=True)
         chosen = []
         seen = set()
-        # tutte le chat in corso / bloccate + le piu' recenti + quelle osservate perche' nuove o cambiate
+        # all in-progress / blocked chats + most recent + those watched because new or changed
         for rec, cid in hot:
             j = hdr_prev[cid]
             if (j.get("unfinishedRunAt") or j.get("hasBlockingPendingActions")) and cid not in seen:
@@ -167,11 +167,11 @@ def main():
             try:
                 s = cd_sig(con, cid)
             except sqlite3.OperationalError as e:
-                log(f"# errore composerData {short(cid)}: {e}")
+                log(f"# composerData error {short(cid)}: {e}")
                 continue
             prev = cd_prev.get(cid)
             if prev is None and s is not None and not first:
-                log(f"CD  {short(cid)} INIZIO-OSSERVAZIONE " + json.dumps(s, sort_keys=True, default=str))
+                log(f"CD  {short(cid)} START-WATCH " + json.dumps(s, sort_keys=True, default=str))
             if prev is not None and s is not None and prev != s:
                 d = diff({k: v for k, v in prev.items() if k != 'last'}, {k: v for k, v in s.items() if k != 'last'})
                 dl = diff(prev.get("last"), s.get("last"))
@@ -186,7 +186,7 @@ def main():
         first = False
         dt = time.time() - t0
         time.sleep(max(0.0, args.interval - dt))
-    log("# fine campionatore")
+    log("# sampler end")
 
 
 if __name__ == "__main__":

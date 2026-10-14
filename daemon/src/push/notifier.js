@@ -1,6 +1,6 @@
-// Notifiche push: compone il messaggio, lo invia a tutte le sottoscrizioni, deduplica e ripulisce quelle scadute.
+// Push notifications: compose the message, send to all subscriptions, dedupe and prune expired ones.
 //
-// I log NON contengono mai testi di chat, endpoint o chiavi: solo conteggi (vedi src/log.js).
+// Logs NEVER contain chat text, endpoints, or keys: counts only (see src/log.js).
 import { sendPush, generateVapidKeys } from './webpush.js';
 import { toolActionLabel } from '../state/present.js';
 import { DEFAULT_QUIET, isQuiet, normalizeQuiet } from './quiet.js';
@@ -27,8 +27,8 @@ export class Notifier {
    * @param {import('../state/store.js').Store} p.store
    * @param {object} p.config
    * @param {object} p.logger
-   * @param {Function} [p.send]   sostituibile nei test (default: sendPush)
-   * @param {() => number} [p.badge] numero di chat che richiedono attenzione (per il badge dell'icona)
+   * @param {Function} [p.send]   injectable in tests (default: sendPush)
+   * @param {() => number} [p.badge] number of chats needing attention (for icon badge)
    */
   constructor({ store, config, logger, send = sendPush, now = Date.now, sleep = realSleep, badge = () => 0 }) {
     this.#store = store;
@@ -40,7 +40,7 @@ export class Notifier {
     this.#badge = badge;
   }
 
-  /** Chiavi VAPID: generate al primo avvio e salvate nello store (permessi 0600). */
+  /** VAPID keys: generated on first run and stored (mode 0600). */
   get vapid() {
     if (this.#vapid) return this.#vapid;
     const pub = this.#store.getMeta('vapid_public');
@@ -61,7 +61,7 @@ export class Notifier {
     return this.vapid.publicKey;
   }
 
-  /** Compone titolo/testo/destinazione per un evento del watcher. */
+  /** Build title/body/destination for a watcher event. */
   compose(event) {
     const chat = event.chat;
     const where = `${oneLine(chat.name, 70)} - ${oneLine(chat.workspaceName, 40)}`;
@@ -73,10 +73,10 @@ export class Notifier {
         return { ...base, kind: 'domanda', title: 'Domanda in attesa', body: prompt ? `${where}\n${prompt}` : where };
       }
       if (a.kind === 'approvazione') {
-        // Solo il TIPO di azione (comando, modifica, MCP...): mai il comando in chiaro sul blocco schermo.
+        // Action TYPE only (command, edit, MCP...): never the raw command on the lock screen.
         return { ...base, kind: 'approvazione', title: 'Approvazione richiesta', body: `${where}\n${toolActionLabel(a.toolName)}` };
       }
-      // Il watcher notifica solo domande e approvazioni (FINDINGS 9.1, 11); un tipo sconosciuto riceve un messaggio generico.
+      // The watcher notifies questions and approvals only (FINDINGS 9.1, 11); unknown types get a generic message.
       return { ...base, kind: 'attenzione', title: 'Richiede attenzione', body: where };
     }
     if (event.type === 'done') return { ...base, kind: 'finita', title: 'Chat finita', body: where };
@@ -109,7 +109,7 @@ export class Notifier {
     const started = this.#now();
     const subs = this.#store.listSubscriptions();
     if (!subs.length) {
-      this.#log.info('push_skipped', { reason: 'nessuna sottoscrizione', kind: label });
+      this.#log.info('push_skipped', { reason: 'no subscriptions', kind: label });
       return { sent: 0, failed: 0, removed: 0 };
     }
     const payload = JSON.stringify(message);
@@ -134,7 +134,7 @@ export class Notifier {
     return { sent, failed, removed };
   }
 
-  /** Orari senza notifiche (salvati nello store del daemon). */
+  /** Quiet hours (stored in the daemon store). */
   get quiet() {
     return normalizeQuiet(safeJsonParse(this.#store.getMeta('quiet_hours'), null)) ?? { ...DEFAULT_QUIET };
   }
@@ -144,7 +144,7 @@ export class Notifier {
     this.#store.setMeta('quiet_hours', JSON.stringify(q));
   }
 
-  /** Perche' questo evento non va notificato (chat o progetto silenziati, fascia oraria), o null. */
+  /** Why this event is not notified (muted chat/project, quiet hours), or null. */
   #silencedReason(event) {
     const prefs = this.#store.chatPrefs();
     if (prefs.get(event.chat.id)?.muted) return 'chat silenziata';
@@ -153,25 +153,25 @@ export class Notifier {
     return null;
   }
 
-  /** Invia la notifica di un evento (una sola volta per `dedupeKey`). */
+  /** Send the notification for an event (once per `dedupeKey`). */
   async notify(event) {
     const now = this.#now();
     if (this.#store.hasNotified(event.dedupeKey)) return { skipped: 'duplicato' };
     this.#store.markNotified(event.dedupeKey, now);
-    // Segnato come gia' notificato anche se silenziato: togliendo il silenzio non arriva una raffica di notifiche vecchie.
+    // Marked notified even when silenced: unmuting must not trigger a burst of old notifications.
     const silenced = this.#silencedReason(event);
     if (silenced) {
       this.#log.info('push_skipped', { reason: silenced, kind: event.type });
       return { skipped: silenced };
     }
     const message = this.compose(event);
-    // Nel log va il TIPO (domanda, approvazione, finita), mai il contenuto: serve a capire cosa e' partito e quando.
-    // `detectMs`: dall'inizio della richiesta (bubble) a quando il daemon l'ha notificata; `sendMs`: durata dell'invio.
+    // Log the TYPE (domanda, approvazione, finita), never content: shows what was sent and when.
+    // `detectMs`: from bubble start until the daemon notified; `sendMs`: send duration.
     const detectMs = Number.isFinite(event.since) ? Math.max(0, event.at - event.since) : undefined;
     return this.#broadcast(message, message.kind, { detectMs });
   }
 
-  /** Notifica di prova (non deduplicata). */
+  /** Test notification (not deduplicated). */
   async sendTest() {
     const message = {
       kind: 'info',

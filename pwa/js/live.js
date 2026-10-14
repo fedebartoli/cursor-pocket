@@ -1,4 +1,4 @@
-// Stato "vivo": snapshot dal daemon, aggiornato via SSE (EventSource) con riconnessione e ricarico al ritorno in primo piano.
+// Live state: snapshot from the daemon, updated via SSE (EventSource) with reconnect and reload on foreground.
 import { api } from './api.js';
 
 const OFFLINE_GRACE_MS = 3000;
@@ -8,8 +8,8 @@ const live = {
   payload: null, // { version, state, status }
   loaded: false,
   connection: 'connecting', // 'ok' | 'connecting'
-  offline: false, // vero solo se non connesso da piu' di OFFLINE_GRACE_MS
-  // Diagnostica (mostrata nelle Impostazioni): dove si perde tempo tra il Mac e il telefono.
+  offline: false, // true only if disconnected for longer than OFFLINE_GRACE_MS
+  // Diagnostics (shown in Settings): where time is lost between Mac and phone.
   stats: { sseEvents: 0, lastSseAt: 0, lastSseLagMs: null, pollWins: 0, lastPollWinLagMs: null, lastRttMs: null, lastRefreshAt: 0 },
 };
 
@@ -32,7 +32,7 @@ function emit() {
     try {
       fn(live);
     } catch {
-      // un subscriber difettoso non deve fermare gli altri
+      // a faulty subscriber must not stop the others
     }
   }
 }
@@ -42,7 +42,7 @@ function setBadge(count) {
     if (count > 0) navigator.setAppBadge?.(count)?.catch?.(() => {});
     else navigator.clearAppBadge?.()?.catch?.(() => {});
   } catch {
-    // badge non supportato
+    // badge not supported
   }
 }
 
@@ -64,13 +64,13 @@ function setConnection(value) {
 function apply(payload, force = false, via = 'poll') {
   if (!payload || typeof payload.version !== 'number') return;
   if (!force && payload.version <= live.version) return;
-  const lag = typeof payload.at === 'number' ? Math.max(0, Date.now() - payload.at) : null; // stima: dipende dagli orologi
+  const lag = typeof payload.at === 'number' ? Math.max(0, Date.now() - payload.at) : null; // estimate: depends on clocks
   if (via === 'sse') {
     live.stats.sseEvents += 1;
     live.stats.lastSseAt = Date.now();
     live.stats.lastSseLagMs = lag;
   } else if (live.version >= 0 && payload.version > live.version) {
-    // Il controllo periodico ha trovato uno stato che il flusso live non aveva ancora consegnato.
+    // Periodic poll found state the live stream had not delivered yet.
     live.stats.pollWins += 1;
     live.stats.lastPollWinLagMs = lag;
   }
@@ -81,7 +81,7 @@ function apply(payload, force = false, via = 'poll') {
   emit();
 }
 
-/** Scarica lo snapshot corrente. Lancia ApiError (401 incluso: lo gestisce l'app). */
+/** Fetch the current snapshot. Throws ApiError (401 included: handled by the app). */
 export async function refresh() {
   const t0 = performance.now();
   const payload = await api.get('/api/state');
@@ -108,7 +108,7 @@ function scheduleRestart() {
     try {
       await refresh();
     } catch (err) {
-      if (err.status === 401) return; // l'app mostra il login
+      if (err.status === 401) return; // app shows login
       setConnection('connecting');
       scheduleRestart();
       return;
@@ -123,7 +123,7 @@ function openStream() {
   stream = es;
   es.addEventListener('open', () => {
     retry = 0;
-    live.version = -1; // dopo una riconnessione la numerazione puo' ripartire (riavvio del daemon)
+    live.version = -1; // after reconnect numbering may restart (daemon restart)
     setConnection('ok');
   });
   es.addEventListener('state', (ev) => {
@@ -131,12 +131,12 @@ function openStream() {
       apply(JSON.parse(ev.data), false, 'sse');
       setConnection('ok');
     } catch {
-      // evento malformato: si ignora
+      // malformed event: ignore
     }
   });
   es.addEventListener('error', () => {
     setConnection('connecting');
-    // Se il browser ha rinunciato (CLOSED), si riprova a mano con attesa crescente.
+    // If the browser gave up (CLOSED), retry manually with backoff.
     if (es.readyState === EventSource.CLOSED) scheduleRestart();
   });
 }
@@ -164,7 +164,7 @@ export function stopLive() {
   live.offline = false;
 }
 
-// iOS sospende le PWA in background senza avvisare la connessione: al ritorno in primo piano si riparte da capo.
+// iOS suspends PWAs in background without closing the connection: on foreground, start over.
 document.addEventListener('visibilitychange', () => {
   if (document.visibilityState !== 'visible' || !running) return;
   refresh()

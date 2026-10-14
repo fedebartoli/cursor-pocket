@@ -1,4 +1,4 @@
-// Harness per i test di integrazione HTTP: app completa su porta effimera, con database Cursor sintetico.
+// Harness for HTTP integration tests: full app on ephemeral port, with synthetic Cursor database.
 import fs from 'node:fs';
 import http from 'node:http';
 import path from 'node:path';
@@ -69,11 +69,11 @@ export async function startHarness({ configOverrides = {}, files = {}, actionsDe
       clock.t += ms;
       app.watcher.tick();
     },
-    /** Abbina un "telefono" e restituisce l'intestazione Cookie. */
+    /** Pairs a "phone" and returns the Cookie header value. */
     async pair() {
       const { code } = app.auth.createPairingCode();
       const r = await request(port, { method: 'POST', path: '/api/pair', body: { code } });
-      if (r.status !== 200) throw new Error(`pair fallito: ${r.status}`);
+      if (r.status !== 200) throw new Error(`pair failed: ${r.status}`);
       return r.headers['set-cookie'][0].split(';')[0];
     },
     async stop() {

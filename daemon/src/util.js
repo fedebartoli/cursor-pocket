@@ -1,4 +1,4 @@
-// Funzioni di utilita' senza dipendenze.
+// Dependency-free utility functions.
 import crypto from 'node:crypto';
 
 export const b64u = {
@@ -34,7 +34,7 @@ export function safeJsonParse(text, fallback = null) {
   }
 }
 
-/** Ultimo componente di un percorso (gestisce anche barre finali). */
+/** Last component of a path (also handles trailing slashes). */
 export function basenameOf(p) {
   if (!p) return '';
   const parts = String(p).split('/').filter(Boolean);

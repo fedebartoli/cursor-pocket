@@ -1,5 +1,5 @@
-// "Attivita' recente" di una chat: cosa sta facendo l'agente (tipo di azione, mai comandi o percorsi) e gli ultimi
-// messaggi. Il daemon manda gia' etichette italiane e categorie: qui si sceglie solo l'icona.
+// Chat "recent activity": what the agent is doing (action type, never commands or paths) and latest
+// messages. The daemon already sends Italian labels and categories: here we only pick the icon.
 import { h } from './dom.js';
 import { timeAgo } from './format.js';
 import { icon } from './icons.js';
@@ -49,11 +49,11 @@ function row(item) {
 }
 
 /**
- * Pannello dell'attivita'. `mode`:
- *  - 'working': la chat sta lavorando (o un'azione e' in corso);
- *  - 'waiting': si e' appena risposto o scritto e l'agente non ha ancora lasciato tracce;
- *  - 'idle': solo cronologia recente.
- * Con elenco vuoto e modo 'idle' non si mostra nulla.
+ * Activity panel. `mode`:
+ *  - 'working': chat is working (or an action is in progress);
+ *  - 'waiting': just answered or sent and the agent has not left traces yet;
+ *  - 'idle': recent history only.
+ * With empty list and mode 'idle' shows nothing.
  */
 export function activityPanel(items, mode) {
   const list = items ?? [];

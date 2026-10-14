@@ -1,4 +1,4 @@
-// Hub SSE: tiene l'ultimo stato presentato e lo invia ai client collegati SOLO quando cambia.
+// SSE hub: holds the latest presented state and sends it to connected clients ONLY when it changes.
 import crypto from 'node:crypto';
 
 const HEARTBEAT_MS = 25_000;
@@ -10,7 +10,7 @@ export class Hub {
   #payload = null;
   #beat = null;
 
-  /** Ultimo payload `{version, state, status}` (null prima della prima scansione). */
+  /** Latest `{version, state, status}` payload (null before the first scan). */
   get current() {
     return this.#payload;
   }
@@ -19,15 +19,15 @@ export class Hub {
     return this.#clients.size;
   }
 
-  /** Aggiorna lo stato; ritorna true se e' cambiato (e quindi e' stato inviato ai client). */
+  /** Updates state; returns true if it changed (and was sent to clients). */
   update(state, status, at = Date.now()) {
     const body = JSON.stringify({ state, status });
     const h = crypto.createHash('sha1').update(body).digest('hex');
     if (h === this.#hash) return false;
     this.#hash = h;
     this.#version += 1;
-    // `at` (quando il daemon ha generato lo stato) resta FUORI dall'hash: serve alla diagnostica del ritardo, non deve
-    // far considerare "cambiato" uno stato uguale.
+    // `at` (when the daemon generated the state) stays OUTSIDE the hash: used for latency diagnostics, must not
+    // make an identical state look "changed".
     this.#payload = { version: this.#version, at, state, status };
     const frame = Hub.frame(this.#payload);
     for (const res of this.#clients) this.#write(res, frame);
@@ -46,7 +46,7 @@ export class Hub {
     }
   }
 
-  /** Registra una risposta come flusso SSE e invia subito lo stato corrente. */
+  /** Registers a response as an SSE stream and sends the current state immediately. */
   addClient(req, res, headers = {}) {
     res.writeHead(200, {
       ...headers,
@@ -76,7 +76,7 @@ export class Hub {
       try {
         res.end();
       } catch {
-        // gia' chiusa
+        // already closed
       }
     }
     this.#clients.clear();

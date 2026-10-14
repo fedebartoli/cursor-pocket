@@ -1,11 +1,11 @@
-// Azioni dalla PWA verso Cursor (Fase 2): rispondere a una domanda, saltarla, scrivere un messaggio.
+// Actions from the PWA to Cursor (Phase 2): answer a question, skip it, send a message.
 //
-// Principi (vedi docs/ARCHITECTURE.md, sezione "Azioni"):
-//  - si agisce solo su cio' che il daemon vede ORA: la risposta cita la chiave (toolCallId) della domanda che
-//    l'utente ha visto; se nel frattempo e' cambiata o e' stata risolta sul Mac, nessuna azione (409 `stale`);
-//  - un'azione alla volta (coda): manipolano la stessa finestra di Cursor;
-//  - il database di Cursor (sola lettura) e' la fonte di verita': dopo l'azione si rilegge per confermarla;
-//  - nessun contenuto di chat nei log: solo tipo di azione, esito e codici.
+// Principles (see docs/ARCHITECTURE.md, "Azioni" section):
+//  - act only on what the daemon sees NOW: the answer references the key (toolCallId) of the question the
+//    user saw; if it changed or was resolved on the Mac in the meantime, no action (409 `stale`);
+//  - one action at a time (queue): they manipulate the same Cursor window;
+//  - Cursor's database (read-only) is the source of truth: after the action it is re-read to confirm;
+//  - no chat content in logs: only action type, outcome, and codes.
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { SHELL_TOOLS } from './cursor/model.js';
@@ -27,13 +27,13 @@ export const LIMITS = Object.freeze({ messageChars: 8000, freeformChars: 4000, n
 
 const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
 
-/** Testo "pulito": solo `\n` come a capo, niente caratteri di controllo. */
+/** "Clean" text: only `\n` as line breaks, no control characters. */
 export function cleanText(value) {
   return String(value ?? '').replace(/\r\n?/g, '\n').replace(CONTROL_CHARS, '');
 }
 
 /**
- * Controlla le risposte dell'utente contro la domanda vera (letta dal database) e le allinea alle domande.
+ * Validates user answers against the real question (read from the database) and aligns them to the questions.
  * @returns {{questionId: string, optionIds: string[], freeform: string}[]}
  */
 export function validateAnswers(question, raw) {
@@ -62,7 +62,7 @@ export function validateAnswers(question, raw) {
   return out;
 }
 
-/** Corrisponde all'esito registrato da Cursor? (insiemi di opzioni e testo libero, per ogni domanda) */
+/** Does this match the outcome recorded by Cursor? (option sets and freeform text, per question) */
 export function answersMatch(result, expected) {
   if (!result?.selections) return false;
   const nrm = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
@@ -74,7 +74,7 @@ export function answersMatch(result, expected) {
   });
 }
 
-/** Errori dell'interfaccia di Cursor -> risposta HTTP comprensibile. Il codice interno non e' mai un contenuto. */
+/** Cursor UI errors -> understandable HTTP response. The internal code is never content. */
 const UI_ERRORS = {
   unavailable: [503, 'actions_unavailable', 'Cursor non e\' raggiungibile con la porta di debug: avvialo come spiegato nelle Impostazioni.'],
   closed: [503, 'actions_unavailable', 'La connessione con Cursor si e\' interrotta. Riprova.'],
@@ -116,14 +116,14 @@ function mapUiError(err) {
   return new ActionError(502, 'ui_failed', `Cursor non ha eseguito l'azione (${code || 'errore'}). Controlla sul Mac.`);
 }
 
-// Dopo una scadenza con l'azione ancora in corso, lo stesso invio resta bloccato per questo tempo oltre il momento in cui l'errore e' stato dato.
+// After a timeout with the action still in progress, the same send stays blocked for this long past when the error was returned.
 const ORPHAN_HOLD_MS = 30_000;
 
 export class Actions extends EventEmitter {
   #chain = Promise.resolve();
   #inFlight = new Set();
-  #orphans = 0; // azioni scadute per il chiamante ma ancora in corso su Cursor
-  #recent = new Map(); // `kind:chat:key` -> istante, per non inviare due volte la stessa risposta
+  #orphans = 0; // actions timed out for the caller but still running on Cursor
+  #recent = new Map(); // `kind:chat:key` -> timestamp, to avoid sending the same answer twice
   #state = { available: false, reason: 'off' };
   #timer = null;
 
@@ -143,7 +143,7 @@ export class Actions extends EventEmitter {
     if (!config.actionsEnabled) this.#state = { available: false, reason: 'disabled' };
   }
 
-  /** `{available, reason}`; reason: ok | off (porta di debug chiusa) | no_window | disabled. */
+  /** `{available, reason}`; reason: ok | off (debug port closed) | no_window | disabled. */
   get status() {
     return this.#state;
   }
@@ -154,7 +154,7 @@ export class Actions extends EventEmitter {
     this.emit('change', next);
   }
 
-  /** Controlla se la porta di debug e la finestra Agents rispondono (solo HTTP, leggero). */
+  /** Checks whether the debug port and Agents window respond (HTTP only, lightweight). */
   async refresh() {
     if (!this.config.actionsEnabled) return this.#state;
     let reason = 'off';
@@ -181,7 +181,7 @@ export class Actions extends EventEmitter {
   }
 
   // ------------------------------------------------------------------------------------------------------------
-  // infrastruttura: una sola azione alla volta, con scadenza
+  // infrastructure: one action at a time, with timeout
   // ------------------------------------------------------------------------------------------------------------
 
   #run(kind, fn) {
@@ -199,14 +199,14 @@ export class Actions extends EventEmitter {
       } catch (err) {
         work = Promise.reject(err);
       }
-      // La coda si libera solo quando l'azione sotto ha finito DAVVERO (ha scadenze interne): mai due azioni insieme,
-      // anche se il chiamante ha gia' ricevuto l'errore di scadenza.
+      // The queue frees only when the underlying action has REALLY finished (it has internal timeouts): never two actions
+      // at once, even if the caller already received the timeout error.
       work.then(release, release);
       let timer;
       const limit = new Promise((_, reject) => {
         timer = setTimeout(() => {
-          // Il chiamante riceve l'errore, ma l'azione continua: finche' non finisce, un reinvio identico andrebbe in coda e
-          // verrebbe eseguito DOPO (messaggio doppio). `#orphans` lo segnala a `#dedupe`.
+          // The caller gets the error, but the action continues: until it finishes, an identical resend would queue and
+          // run AFTER (duplicate message). `#orphans` signals this to `#dedupe`.
           this.#orphans++;
           work.then(() => this.#orphans--, () => this.#orphans--);
           reject(new ActionError(504, 'timeout', 'Cursor non ha risposto in tempo. L\'operazione potrebbe essere andata a buon fine: controlla sul Mac prima di riprovare.'));
@@ -242,7 +242,7 @@ export class Actions extends EventEmitter {
     if (!this.#state.available) throw new ActionError(503, 'actions_unavailable', 'Cursor non e\' raggiungibile con la porta di debug: avvialo come spiegato nelle Impostazioni.');
   }
 
-  /** La stessa richiesta (stessa chat e stessa domanda) non parte due volte, ne' in contemporanea ne' subito dopo. */
+  /** The same request (same chat and same question) must not start twice, neither concurrently nor back-to-back. */
   #dedupe(kind, chatId, key, ttlMs = 60_000) {
     const id = `${kind}:${chatId}:${key}`;
     const t = this.#recent.get(id);
@@ -253,7 +253,7 @@ export class Actions extends EventEmitter {
     return {
       done: (ok) => {
         this.#inFlight.delete(id);
-        // Con un'azione scaduta ma ancora in corso l'esito e' ignoto: si blocca il reinvio ancora per un po'.
+        // With a timed-out action still running the outcome is unknown: block resend for a while longer.
         if (ok) this.#recent.set(id, this.now());
         else if (this.#orphans > 0) this.#recent.set(id, this.now() + ORPHAN_HOLD_MS);
         for (const [k, v] of this.#recent) if (this.now() - v > 120_000) this.#recent.delete(k);
@@ -261,7 +261,7 @@ export class Actions extends EventEmitter {
     };
   }
 
-  /** Domanda "viva" e azionabile di una chat, con la chiave che l'utente ha visto. */
+  /** Live, actionable question for a chat, with the key the user saw. */
   #liveQuestion(chatId, key) {
     const chat = this.#chat(chatId);
     const a = chat.attention;
@@ -273,7 +273,7 @@ export class Actions extends EventEmitter {
     return { chat, a, question };
   }
 
-  /** Rilegge il database ogni 400 ms (conta i giri, non l'orologio: stesso risultato e testabile). */
+  /** Re-reads the database every 400 ms (counts iterations, not wall clock: same result and testable). */
   async #waitFor(fn, timeoutMs) {
     for (let i = 0; ; i++) {
       const v = fn();
@@ -284,10 +284,10 @@ export class Actions extends EventEmitter {
   }
 
   // ------------------------------------------------------------------------------------------------------------
-  // azioni pubbliche
+  // public actions
   // ------------------------------------------------------------------------------------------------------------
 
-  /** Risponde alla domanda `key` della chat. `answers`: [{questionId, optionIds?, freeform?}]. */
+  /** Answers question `key` for the chat. `answers`: [{questionId, optionIds?, freeform?}]. */
   async answer(chatId, { key, answers } = {}) {
     if (typeof key !== 'string' || !key) throw new ActionError(400, 'bad_key', 'Chiave non valida');
     this.#requireReady();
@@ -298,7 +298,7 @@ export class Actions extends EventEmitter {
     try {
       const res = await this.#run('answer', async () => {
         await this.ui.answer({ composerId: chatId, question, answers: expected.map((e) => ({ optionIds: e.optionIds, freeform: e.freeform })) });
-        // Conferma dal database: il bubble della domanda passa a `submitted` con le scelte fatte.
+        // Confirm from database: the question bubble becomes `submitted` with the chosen answers.
         const r = await this.#waitFor(() => {
           const x = this.db.questionResult(chatId, a.bubbleId);
           return x?.status === 'submitted' ? x : null;
@@ -307,14 +307,14 @@ export class Actions extends EventEmitter {
         return answersMatch(r, expected) ? { ok: true, verified: true } : { ok: true, verified: false, warning: 'differs' };
       });
       ok = true;
-      this.watcher.boost?.(chatId); // dopo l'azione la chat si rilegge ogni secondo: la reazione dell'agente si vede subito
+      this.watcher.boost?.(chatId); // after the action the chat is re-read every second: agent reaction shows up quickly
       return res;
     } finally {
       slot.done(ok);
     }
   }
 
-  /** Salta la domanda (come il pulsante Skip di Cursor). */
+  /** Skips the question (like Cursor's Skip button). */
   async skip(chatId, { key } = {}) {
     if (typeof key !== 'string' || !key) throw new ActionError(400, 'bad_key', 'Chiave non valida');
     this.#requireReady();
@@ -331,7 +331,7 @@ export class Actions extends EventEmitter {
         return { ok: true, verified: Boolean(r) };
       });
       ok = true;
-      this.watcher.boost?.(chatId); // dopo l'azione la chat si rilegge ogni secondo: la reazione dell'agente si vede subito
+      this.watcher.boost?.(chatId); // after the action the chat is re-read every second: agent reaction shows up quickly
       return res;
     } finally {
       slot.done(ok);
@@ -339,9 +339,9 @@ export class Actions extends EventEmitter {
   }
 
   /**
-   * Approva o rifiuta il comando di terminale in attesa (pulsanti "Run" / "Skip" di Cursor). Solo se la richiesta e' ancora
-   * quella che l'utente ha visto (`key` = toolCallId) e solo per i comandi di terminale; nei log finiscono la decisione e
-   * l'esito, mai il comando.
+   * Approves or rejects a pending terminal command (Cursor "Run" / "Skip" buttons). Only if the request is still
+   * the one the user saw (`key` = toolCallId) and only for terminal commands; logs contain decision and
+   * outcome, never the command.
    */
   async approval(chatId, { key, decision } = {}) {
     if (typeof key !== 'string' || !key) throw new ActionError(400, 'bad_key', 'Chiave non valida');
@@ -364,16 +364,16 @@ export class Actions extends EventEmitter {
     try {
       const res = await this.#run('approval', async () => {
         const clicked = await this.ui.approval({ composerId: chatId, bubbleId: a.bubbleId, decision });
-        // Conferma: o il bubble cambia (`reviewData.status` non e' piu' `Requested`, il tool non e' piu' `loading`), oppure
-        // l'agente prosegue e Cursor non tiene piu' quella richiesta tra gli ultimi bubble (osservato dal vivo dopo "Skip":
-        // il vecchio bubble resta `Requested` e ne compaiono di nuovi).
+        // Confirm: either the bubble changes (`reviewData.status` no longer `Requested`, tool no longer `loading`), or
+        // the agent moves on and Cursor no longer keeps that request among the latest bubbles (observed live after "Skip":
+        // the old bubble stays `Requested` and new ones appear).
         const r = clicked?.settled === true ? { settled: true } : await this.#waitFor(() => {
           const b = this.db.bubbleSummary(chatId, a.bubbleId);
           if (b?.tool && (b.tool.review?.status !== 'Requested' || b.tool.status !== 'loading')) return b;
           const now = this.watcher.last?.chats.find((c) => c.id === chatId)?.attention;
           return !now || now.key !== key || now.kind !== 'approvazione' ? { moved: true } : null;
         }, 10_000);
-        // La carta di Cursor perde i pulsanti appena la decisione e' accettata (`settled`): segnale piu' rapido del database.
+        // Cursor's card loses its buttons as soon as the decision is accepted (`settled`): faster signal than the database.
         return { ok: true, verified: Boolean(r), decision };
       });
       ok = true;
@@ -386,8 +386,8 @@ export class Actions extends EventEmitter {
   }
 
   /**
-   * Ferma l'agente di una chat che sta lavorando (pulsante "Stop generation" di Cursor). Non cancella nulla: l'agente
-   * smette di generare e la conversazione resta. Con una domanda o un'approvazione aperte non serve: si risponde a quelle.
+   * Stops the agent for a chat that is working (Cursor "Stop generation" button). Does not delete anything: the agent
+   * stops generating and the conversation remains. With an open question or approval, use those instead.
    */
   async stopAgent(chatId) {
     this.#requireReady();
@@ -413,7 +413,7 @@ export class Actions extends EventEmitter {
     }
   }
 
-  /** Rinomina la chat nella sidebar di Cursor (come "Rename" dal menu della riga). Il nome si legge poi dal database per conferma. */
+  /** Renames the chat in Cursor's sidebar (like "Rename" from the row menu). The name is then read from the database to confirm. */
   async rename(chatId, { name } = {}) {
     if (typeof name !== 'string') throw new ActionError(400, 'bad_name', 'Scrivi un nome');
     const clean = cleanText(name).replace(/\s+/g, ' ').trim();
@@ -438,7 +438,7 @@ export class Actions extends EventEmitter {
     }
   }
 
-  /** Archivia una chat (non una che sta lavorando). */
+  /** Archives a chat (not one that is running). */
   async archive(chatId) {
     this.#requireReady();
     const chat = this.#chat(chatId);
@@ -459,14 +459,14 @@ export class Actions extends EventEmitter {
     }
   }
 
-  /** La chat e' fissata in cima alla sidebar di Cursor? (letto dalla pagina, nessuna modifica) */
+  /** Is the chat pinned to the top of Cursor's sidebar? (read from the page, no change) */
   async pinState(chatId) {
     this.#requireReady();
     this.#chat(chatId);
     return this.#run('pinstate', async () => ({ ok: true, ...(await this.ui.pinState({ composerId: chatId })) }));
   }
 
-  /** Fissa o toglie dai fissati una chat (come "Pin" nel menu della sidebar di Cursor). */
+  /** Pins or unpins a chat (like "Pin" in Cursor's sidebar menu). */
   async pin(chatId, { pinned } = {}) {
     if (typeof pinned !== 'boolean') throw new ActionError(400, 'bad_pin', 'Indica se fissare o togliere');
     this.#requireReady();
@@ -483,7 +483,7 @@ export class Actions extends EventEmitter {
     }
   }
 
-  /** Ripristina una chat archiviata (solo se risulta tra quelle archiviate e visibili). */
+  /** Restores an archived chat (only if it appears among archived and visible ones). */
   async restore(chatId) {
     this.#requireReady();
     if (!this.watcher.archived({ limit: 200 }).some((c) => c.id === chatId)) throw new ActionError(404, 'not_found', 'Chat archiviata non trovata');
@@ -503,8 +503,8 @@ export class Actions extends EventEmitter {
     }
   }
 
-  /** Avvia una chat NUOVA (locale, "This Mac") su un progetto con il primo messaggio. */
-  /** Ramo e modello attuali e possibili per la nuova chat di un progetto (sola lettura: Cursor apre i menu e li richiude). */
+  /** Starts a NEW chat (local, "This Mac") on a project with the first message. */
+  /** Current and available branch and model for a project's new chat (read-only: Cursor opens menus and closes them). */
   async newChatOptions(sectionId) {
     if (typeof sectionId !== 'string' || !sectionId) throw new ActionError(400, 'bad_project', 'Scegli un progetto');
     this.#requireReady();
@@ -538,7 +538,7 @@ export class Actions extends EventEmitter {
         const r = await this.ui.newChat({ project: known.workspaceName, text: clean, ...(files.length ? { files } : {}), ...(branch ? { branch: branch.trim() } : {}), ...(model ? { model: model.trim() } : {}) });
         const seen = await this.#waitFor(() => {
           const f = this.db.chatFlags(r.composerId);
-          return f && !f.draft && !f.archived ? true : null; // la "bozza" che Cursor crea prima dell'invio non conta
+          return f && !f.draft && !f.archived ? true : null; // the "draft" Cursor creates before send does not count
         }, 12_000);
         return { ok: true, chatId: r.composerId, verified: Boolean(seen) };
       });
@@ -553,7 +553,7 @@ export class Actions extends EventEmitter {
     }
   }
 
-  /** Scrive un messaggio nella chat. Se l'agente sta lavorando decide Cursor (coda o invio immediato, impostazione sua). */
+  /** Writes a message in the chat. If the agent is working, Cursor decides (queue or immediate send, its setting). */
   async sendMessage(chatId, { text, images } = {}) {
     const ids = images === undefined ? [] : images;
     if (!Array.isArray(ids) || ids.length > UPLOAD_LIMITS.perMessage || !ids.every((x) => typeof x === 'string')) {
@@ -570,12 +570,12 @@ export class Actions extends EventEmitter {
     if (chat.attention?.kind === 'domanda' && chat.attention.live) {
       throw new ActionError(409, 'question_pending', 'La chat ha una domanda in attesa: rispondi prima a quella.');
     }
-    // Con un'approvazione in attesa l'effetto di un nuovo messaggio dipende dalle impostazioni di Cursor (coda oppure
-    // "ferma e invia", che annullerebbe il comando in attesa): non si rischia, prima si approva o si rifiuta dal Mac.
+    // With a pending approval, a new message's effect depends on Cursor settings (queue or
+    // "stop and send", which would cancel the pending command): do not risk it; approve or reject on the Mac first.
     if (chat.attention?.kind === 'approvazione' && chat.attention.live) {
       throw new ActionError(409, 'approval_pending', 'La chat aspetta una tua approvazione in Cursor: approvala o rifiutala dal Mac prima di scrivere.');
     }
-    // Un doppio tocco sul pulsante non deve inviare due volte lo stesso testo.
+    // A double tap on the button must not send the same text twice.
     const slot = this.#dedupe('message', chatId, crypto.createHash('sha1').update(clean + '\u0000' + ids.join(',')).digest('hex').slice(0, 16), 8_000);
     let ok = false;
     try {
@@ -594,7 +594,7 @@ export class Actions extends EventEmitter {
         this.uploads?.remove(ids);
         this.logger.info('message_images', { count: ids.length });
       }
-      this.watcher.boost?.(chatId); // dopo l'azione la chat si rilegge ogni secondo: la reazione dell'agente si vede subito
+      this.watcher.boost?.(chatId); // after the action the chat is re-read every second: agent reaction shows up quickly
       return res;
     } finally {
       slot.done(ok);

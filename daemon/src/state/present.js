@@ -1,6 +1,6 @@
-// Presentazione: trasforma le chat "grezze" del modello nel payload per la PWA.
-// Funzione PURA e deterministica (stesso input -> stesso output, senza orari relativi), cosi' il daemon puo'
-// confrontare gli snapshot e notificare i client solo quando qualcosa cambia davvero.
+// Presentation: turns "raw" model chats into the PWA payload.
+// PURE deterministic function (same input -> same output, no relative times), so the daemon can
+// compare snapshots and notify clients only when something actually changed.
 import { collapsedIds, orderSections } from '../cursor/sidebar.js';
 export const STATES = Object.freeze({
   RUNNING: 'in_corso',
@@ -27,7 +27,7 @@ export function attentionLabel(a) {
   }
 }
 
-/** Cosa chiede di approvare un tool (solo il TIPO: mai il comando o i percorsi). */
+/** What a tool asks to approve (TYPE only: never the command or paths). */
 export function toolActionLabel(toolName) {
   switch (toolName) {
     case 'run_terminal_command_v2':
@@ -46,7 +46,7 @@ export function toolActionLabel(toolName) {
   }
 }
 
-// [nomi del tool, etichetta, categoria (la PWA sceglie l'icona dalla categoria)]
+// [tool names, label, category (PWA picks icon from category)]
 const TOOLS = [
   [['read_file', 'read_file_v2'], 'Legge un file', 'read'],
   [['edit_file', 'edit_file_v2', 'search_replace', 'write', 'apply_patch', 'multi_edit'], 'Modifica un file', 'edit'],
@@ -63,7 +63,7 @@ const TOOLS = [
   [['mcp', 'call_mcp_tool', 'read_mcp_resource'], 'Usa uno strumento MCP', 'tool'],
 ];
 
-/** Etichetta italiana e categoria del TIPO di azione di un tool (mai i parametri: comandi e percorsi non escono dal daemon). */
+/** Label and category for a tool action TYPE (never parameters: commands and paths do not leave the daemon). */
 export function toolActivity(name) {
   for (const [names, label, category] of TOOLS) if (names.includes(name)) return { label, category };
   return { label: 'Esegue un\u2019azione', category: 'tool' };
@@ -89,11 +89,11 @@ function toolState(status) {
   }
 }
 
-// Un tool rimasto "in corso" da molto tempo e' quasi sempre un residuo (chat interrotta): non si mostra come attivo.
+// A tool stuck "running" for a long time is almost always stale (interrupted chat): do not show as active.
 const STALE_RUNNING_MS = 15 * 60_000;
 const staleRunning = (state, at, now) => (state === 'running' && at && now - at > STALE_RUNNING_MS ? '' : state);
 
-/** Stato di un tool (done | running | error | stopped | '') tenendo conto dei residui vecchi. */
+/** Tool state (done | running | error | stopped | '') accounting for old stale entries. */
 export const toolStateOf = (status, at, now) => staleRunning(toolState(status), at, now);
 
 const firstLine = (t, n) => {
@@ -103,9 +103,9 @@ const firstLine = (t, n) => {
 };
 
 /**
- * "Attivita' recente" di una chat dai bubble (db.recentActivity), dal piu' recente al piu' vecchio:
- * `{ id (bubble), at, kind: 'user' | 'assistant' | 'tool', category (solo tool), label, state, preview }`. I tool mostrano solo il tipo di azione;
- * i bubble vuoti (senza testo ne' tool) si saltano. Un tool "in corso" da piu' di 15 minuti non e' piu' dato per attivo.
+ * Recent activity for a chat from bubbles (db.recentActivity), newest to oldest:
+ * `{ id (bubble), at, kind: 'user' | 'assistant' | 'tool', category (tools only), label, state, preview }`. Tools show action type only;
+ * empty bubbles (no text or tool) are skipped. A tool "running" for more than 15 minutes is no longer treated as active.
  */
 export function activityOf(items, now = Date.now()) {
   const out = [];
@@ -125,12 +125,12 @@ export function activityOf(items, now = Date.now()) {
 }
 
 /**
- * Stato di una chat applicando "Ignora" e la soglia "In sospeso".
+ * Chat state applying "Ignore" and the "Pending" threshold.
  *
- * Una chat che sta LAVORANDO non e' ferma in attesa di te: il flag di Cursor (`hasBlockingPendingActions`) resta spesso
- * acceso da una vecchia domanda e Cursor lo mostra come pallino anche mentre l'agente lavora (FINDINGS 9.1, 9.7).
- * Quindi durante la run conta come attenzione solo una richiesta VIVA (una domanda aperta o un'approvazione in attesa
- * adesso); un residuo o un piano non risolto tornano visibili quando la run finisce.
+ * A chat that is WORKING is not idle waiting for you: Cursor's flag (`hasBlockingPendingActions`) often stays on
+ * from an old question and Cursor shows the dot even while the agent works (FINDINGS 9.1, 9.7).
+ * So during a run only a LIVE request counts as attention (open question or approval pending now);
+ * stale or unresolved plan become visible again when the run ends.
  */
 export function stateOf(chat, { ignored, now, pendingAfterMs }) {
   const a = chat.attention;
@@ -181,10 +181,10 @@ function card(chat, label, ctx) {
 
 /**
  * @param {object} p
- * @param {object[]} p.chats      chat del modello (buildChat + attention arricchita)
- * @param {object|null} p.settings impostazioni sidebar di Cursor (puo' essere null)
- * @param {Set<string>} p.ignored  coppie ignoreKey(chatId, key)
- * @param {Map<string, {favorite: boolean, muted: boolean}>} [p.prefs] preferenze locali per chat
+ * @param {object[]} p.chats      model chats (buildChat + enriched attention)
+ * @param {object|null} p.settings Cursor sidebar settings (may be null)
+ * @param {Set<string>} p.ignored  ignoreKey(chatId, key) pairs
+ * @param {Map<string, {favorite: boolean, muted: boolean}>} [p.prefs] local per-chat prefs
  * @param {number} p.now
  * @param {number} p.pendingAfterMs
  */
@@ -192,7 +192,7 @@ export function presentState({ chats, settings, ignored, now, pendingAfterMs, pr
   const ctx = { ignored, now, pendingAfterMs, prefs };
   const groupBy = 'workspace';
 
-  // Sezioni per workspace.
+  // Sections by workspace.
   const sections = new Map();
   for (const c of chats) {
     let s = sections.get(c.sectionId);
@@ -204,7 +204,7 @@ export function presentState({ chats, settings, ignored, now, pendingAfterMs, pr
     if (c.lastUpdatedAt > s.lastUpdatedAt) s.lastUpdatedAt = c.lastUpdatedAt;
   }
 
-  // Nomi duplicati (due cartelle con lo stesso nome): aggiungo la cartella superiore.
+  // Duplicate names (two folders with the same name): append parent folder.
   const byName = new Map();
   for (const s of sections.values()) byName.set(s.name, (byName.get(s.name) || 0) + 1);
   for (const s of sections.values()) {

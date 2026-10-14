@@ -1,12 +1,12 @@
-// Risoluzione chat -> workspace (cartella) e id di sezione della sidebar dell'Agents Window.
+// Resolve chat -> workspace (folder) and Agents Window sidebar section id.
 //
-// Priorita' (verificata in Fase 0, copertura 35/35 delle chat visibili):
+// Priority (verified in Phase 0, 35/35 visible chats covered):
 //   1. agentLocation.environment.uri
 //   2. workspaceIdentifier.uri
-//   3. workspaceStorage/<workspaceId>/workspace.json (campo `folder`, oppure `workspace` per i multi-root)
-//   4. agentLocation.environment.id == "empty-window" -> "home" (finestra senza cartella)
+//   3. workspaceStorage/<workspaceId>/workspace.json (`folder` field, or `workspace` for multi-root)
+//   4. agentLocation.environment.id == "empty-window" -> "home" (window without folder)
 //
-// Dettaglio interno di Cursor: tenuto in `daemon/src/cursor/`.
+// Cursor internal detail: kept in `daemon/src/cursor/`.
 import fs from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -15,7 +15,7 @@ import { stringHash } from './hash.js';
 
 const WORKSPACE_ID_RE = /^[A-Za-z0-9._-]+$/;
 
-/** Estrae un percorso locale da un URI serializzato di VS Code (oggetto o stringa `file://`). */
+/** Extracts a local path from a serialized VS Code URI (object or `file://` string). */
 export function uriToPath(uri) {
   if (!uri) return null;
   if (typeof uri === 'string') {
@@ -34,7 +34,7 @@ export function uriToPath(uri) {
   return null;
 }
 
-/** Id della sezione nella modalita' "raggruppa per workspace": hash della chiave di gruppo. */
+/** Section id in "group by workspace" mode: hash of the group key. */
 export function sectionIdFor(key) {
   return `__environment_instance_${stringHash(key)}__`;
 }
@@ -69,14 +69,14 @@ export class WorkspaceResolver {
         if (p) value = { path: p, multiRoot: true };
       }
     } catch {
-      // workspace.json mancante: normale per chat senza cartella
+      // missing workspace.json: normal for chats without a folder
     }
     this.#cache.set(workspaceId, { at: this.#now(), value });
     return value;
   }
 
   /**
-   * @param {{workspaceId?: string, header: object}} entry riga restituita da CursorDb.listHeaders()
+   * @param {{workspaceId?: string, header: object}} entry row returned by CursorDb.listHeaders()
    * @returns {{key: string, sectionId: string, path: string|null, name: string, parent: string, home: boolean}}
    */
   resolve(entry) {

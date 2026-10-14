@@ -1,4 +1,4 @@
-// Server HTTP (solo loopback) con API JSON, flusso SSE e file statici della PWA.
+// HTTP server (loopback only) with JSON API, SSE stream, and PWA static files.
 import http from 'node:http';
 import { ActionError } from '../actions.js';
 import { clearedCookie, sessionCookie } from '../auth.js';
@@ -10,7 +10,7 @@ import { SECURITY_HEADERS, isAllowedHost, isSecureRequest, originMatchesHost, sp
 import { serveStatic } from './static.js';
 
 const MAX_BODY_BYTES = 16 * 1024;
-const MAX_ACTION_BODY_BYTES = 64 * 1024; // messaggi e risposte libere possono essere lunghi (testo non ASCII: fino a 3 byte per carattere)
+const MAX_ACTION_BODY_BYTES = 64 * 1024; // free-form messages and answers can be long (non-ASCII: up to 3 bytes per character)
 const MAX_SUBSCRIPTIONS = 10;
 const CHAT_ID_RE = /^[A-Za-z0-9-]{8,64}$/;
 const KEY_MAX_LEN = 200;
@@ -80,7 +80,7 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
     const method = req.method;
     const cookieOpts = { secure };
 
-    // --- endpoint pubblici ---
+    // --- public endpoints ---
     if (path === '/api/session' && method === 'GET') {
       return sendJson(res, 200, { authenticated: auth.authenticate(req.headers.cookie) !== null }, headers);
     }
@@ -101,7 +101,7 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
       return sendJson(res, 200, { ok: true }, { ...headers, 'Set-Cookie': sessionCookie(r.token, cookieOpts) });
     }
 
-    // --- da qui serve la sessione ---
+    // --- session required from here ---
     const session = auth.authenticate(req.headers.cookie);
     if (!session) throw new HttpError(401, 'unauthorized', 'Sessione non valida');
     const mutating = method !== 'GET' && method !== 'HEAD';
@@ -133,7 +133,7 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
       return sendJson(res, 200, { ok: true }, { ...headers, 'Set-Cookie': clearedCookie(cookieOpts) });
     }
 
-    // --- dispositivi abbinati ---
+    // --- paired devices ---
     if (path === '/api/devices' && method === 'GET') {
       return sendJson(res, 200, { devices: auth.devices(session.tokenHash) }, headers);
     }
@@ -146,7 +146,7 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
       return sendJson(res, 200, { ok: true }, headers);
     }
 
-    // --- immagini da allegare a un messaggio (corpo = i byte dell'immagine) ---
+    // --- images to attach to a message (body = raw image bytes) ---
     if (path === '/api/uploads' && method === 'POST') {
       if (!uploads) throw new HttpError(404, 'not_found', 'Non disponibile');
       const type = String(req.headers['content-type'] || '').toLowerCase();
@@ -170,13 +170,13 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
       return sendJson(res, 200, { ok: true }, headers);
     }
 
-    // --- nuova chat (locale) su un progetto ---
+    // --- new (local) chat on a project ---
     if (path === '/api/chats' && method === 'POST') {
       const body = await readJson(req, MAX_ACTION_BODY_BYTES);
       return sendJson(res, 200, await actions.newChat({ sectionId: body.sectionId, text: body.text, images: body.images, branch: body.branch, model: body.model }), headers);
     }
 
-    // --- chat archiviate ---
+    // --- archived chats ---
     if (path === '/api/archived' && method === 'GET') {
       return sendJson(res, 200, { chats: watcher.archived({ limit: 60 }) }, headers);
     }
@@ -187,7 +187,7 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
       return sendJson(res, 200, await actions.restore(ar[1]), headers);
     }
 
-    // --- chat ---
+    // --- chats ---
     const m = /^\/api\/chats\/([^/]+)(?:\/(ignore|answer|message|skip|approval|stop|rename|archive|pin|prefs|history))?$/.exec(path);
     if (m) {
       const id = m[1];
@@ -198,11 +198,11 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
 
       if (!action && method === 'GET') {
         const card = hub.current?.state?.workspaces.flatMap((w) => w.chats).find((c) => c.id === id);
-        watcher.boost(id, 15_000); // si sta guardando questa chat: la si rilegge spesso finche' la pagina e' aperta
+        watcher.boost(id, 15_000); // viewing this chat: rescan often while the page is open
         const extra = watcher.detail(id) ?? { lastMessage: null, question: null, activity: [], approval: null };
         return sendJson(res, 200, { chat: card ?? null, lastMessage: extra.lastMessage, question: extra.question, activity: extra.activity ?? [], approval: extra.approval ?? null }, headers);
       }
-      // Conversazione intera, a pagine dal fondo: `?before=<indice>&limit=<n>`. Sola lettura, solo per indice (mai per intero).
+      // Full conversation, paged from the bottom: `?before=<index>&limit=<n>`. Read-only, by index only (never whole chat).
       if (action === 'history' && method === 'GET') {
         const num = (k, dflt, max) => {
           const raw = req.searchParams?.get(k);
@@ -220,7 +220,7 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
         const key = typeof body.key === 'string' ? body.key : '';
         if (!key || key.length > KEY_MAX_LEN) throw new HttpError(400, 'bad_key', 'Chiave non valida');
         if (method === 'POST') {
-          // Si ignora solo la richiesta che l'utente ha visto: se nel frattempo e' cambiata, non si ignora nulla.
+          // Ignore only the request the user saw: if it changed in the meantime, ignore nothing.
           if (!chat.attention || chat.attention.key !== key) {
             throw new HttpError(409, 'stale', 'La richiesta e\' cambiata: aggiorna e riprova');
           }
@@ -231,7 +231,7 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
         watcher.recompute();
         return sendJson(res, 200, { ok: true, version: hub.current?.version ?? 0 }, headers);
       }
-      // Preferenze locali (preferita, silenziata): non toccano Cursor.
+      // Local prefs (favorite, muted): do not touch Cursor.
       if (action === 'prefs' && method === 'POST') {
         const body = await readJson(req);
         const patch = {};
@@ -245,7 +245,7 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
         watcher.recompute();
         return sendJson(res, 200, { ok: true, ...prefs }, headers);
       }
-      // Azioni verso Cursor (Fase 2): rispondere, saltare, scrivere un messaggio.
+      // Actions toward Cursor (Phase 2): answer, skip, send a message.
       if ((action === 'answer' || action === 'message' || action === 'skip' || action === 'approval' || action === 'stop' || action === 'rename' || action === 'archive' || action === 'pin') && method === 'POST') {
         const body = await readJson(req, MAX_ACTION_BODY_BYTES);
         let result;
@@ -262,11 +262,11 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
       throw new HttpError(405, 'method_not_allowed', 'Metodo non consentito');
     }
 
-    // Scelte possibili per la nuova chat di un progetto (ramo, modello), lette da Cursor.
+    // Options for a project's new chat (branch, model), read from Cursor.
     const nco = /^\/api\/projects\/([\w-]{1,80})\/newchat-options$/.exec(path);
     if (nco && method === 'GET') return sendJson(res, 200, await actions.newChatOptions(nco[1]), headers);
 
-    // --- preferenze di notifica ---
+    // --- notification prefs ---
     const wsm = /^\/api\/workspaces\/([\w-]{1,80})\/prefs$/.exec(path);
     if (wsm && method === 'POST') {
       const body = await readJson(req);
@@ -290,7 +290,7 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
       }
     }
 
-    // --- Mac sveglio mentre un agente lavora ---
+    // --- keep Mac awake while an agent works ---
     if (path === '/api/settings/awake') {
       if (method === 'GET') return sendJson(res, 200, await awake.describe(), headers);
       if (method === 'POST') {

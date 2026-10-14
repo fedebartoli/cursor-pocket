@@ -1,4 +1,4 @@
-// File statici della PWA, con protezione dal path traversal, ETag e `sw.js` con identificativo di build.
+// PWA static files, with path traversal protection, ETag, and `sw.js` with build id.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -16,7 +16,7 @@ const MIME = {
   '.txt': 'text/plain; charset=utf-8',
 };
 
-/** Risolve un percorso URL dentro `root`; null se esce dalla cartella o e' un file nascosto. */
+/** Resolves a URL path under `root`; null if it escapes the folder or is a hidden file. */
 export function resolveStatic(root, urlPath) {
   let decoded;
   try {
@@ -49,7 +49,7 @@ function listFiles(dir, out = []) {
   return out;
 }
 
-/** Identificativo di build: cambia quando cambia un file della PWA (esclusi i file di sviluppo). */
+/** Build id: changes when any PWA file changes (dev files excluded). */
 export function buildId(root) {
   const h = crypto.createHash('sha1');
   for (const f of listFiles(root).sort()) {
@@ -58,15 +58,15 @@ export function buildId(root) {
       const st = fs.statSync(f);
       h.update(`${path.relative(root, f)}:${st.size}:${Math.floor(st.mtimeMs)};`);
     } catch {
-      // file sparito durante la scansione
+      // file disappeared during scan
     }
   }
   return h.digest('hex').slice(0, 12);
 }
 
 /**
- * Percorsi URL dei file da tenere in cache per l'avvio offline: tutta la PWA tranne il worker, le licenze (.txt) e
- * i file con nomi insoliti (l'elenco finisce dentro un letterale JavaScript).
+ * URL paths of files to cache for offline startup: entire PWA except the worker, license (.txt) files, and
+ * files with unusual names (the list ends up inside a JavaScript literal).
  */
 export function precacheList(root) {
   const urls = [];
@@ -81,9 +81,9 @@ export function precacheList(root) {
 }
 
 /**
- * Serve un file statico. Ritorna true se ha gestito la risposta (anche 404/304).
- * `sw.js` viene servito con `__BUILD_ID__` (cosi' il service worker si aggiorna a ogni modifica) e `__PRECACHE__`
- * (elenco dei file da mettere in cache) sostituiti.
+ * Serves a static file. Returns true if it handled the response (including 404/304).
+ * `sw.js` is served with `__BUILD_ID__` (so the service worker updates on every change) and `__PRECACHE__`
+ * (list of files to cache) substituted.
  */
 export function serveStatic({ root, req, res, urlPath, headers }) {
   const abs = resolveStatic(root, urlPath);
@@ -116,7 +116,7 @@ export function serveStatic({ root, req, res, urlPath, headers }) {
     ...headers,
     'Content-Type': type,
     ETag: etag,
-    // La PWA e' locale e piccola: si rivalida sempre (ETag), cosi' gli aggiornamenti arrivano subito.
+    // PWA is local and small: always revalidate (ETag) so updates arrive quickly.
     'Cache-Control': 'no-cache',
   };
   if (isSw) h['Service-Worker-Allowed'] = '/';

@@ -1,4 +1,4 @@
-// "Come funziona": le spiegazioni che non devono stare nelle schermate di lavoro.
+// "Come funziona": explanations that do not belong on working screens.
 import { appbar } from '../components.js';
 import { h, replace } from '../dom.js';
 

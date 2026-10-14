@@ -1,20 +1,20 @@
-// Helper DOM minimale. Costruisce SOLO nodi di testo e attributi (mai innerHTML): i contenuti delle chat
-// non possono diventare markup, e la CSP vieta comunque script e stili inline.
+// Minimal DOM helper. Builds ONLY text nodes and attributes (never innerHTML): chat content
+// cannot become markup, and CSP forbids inline scripts and styles anyway.
 
 /**
- * h('div.card#id', { onClick, 'aria-label': 'x' }, figli...)
- * Il selettore accetta tag, `.classi` e `#id`.
+ * h('div.card#id', { onClick, 'aria-label': 'x' }, children...)
+ * Selector accepts tag, `.classes`, and `#id`.
  */
 export function h(selector, props, ...children) {
   const m = /^([a-z][a-z0-9-]*)?((?:[.#][\w-]+)*)$/i.exec(selector);
-  if (!m) throw new Error(`selettore non valido: ${selector}`);
+  if (!m) throw new Error(`invalid selector: ${selector}`);
   const el = document.createElement(m[1] || 'div');
   for (const part of m[2].match(/[.#][\w-]+/g) || []) {
     if (part[0] === '.') el.classList.add(part.slice(1));
     else el.id = part.slice(1);
   }
   if (props && (props.nodeType || typeof props !== 'object' || Array.isArray(props))) {
-    // props omesso: il secondo argomento e' gia' un figlio
+    // props omitted: second argument is already a child
     children.unshift(props);
     props = null;
   }
@@ -46,21 +46,21 @@ export function replace(el, ...children) {
 const committed = new WeakMap();
 
 /**
- * Sostituisce il contenuto di `root` SOLO se il markup e' cambiato. I ridisegni identici (aggiornamento periodico degli
- * orari, snapshot uguali) non toccano il DOM: cosi' non si perdono selezione del testo, tocchi in corso e animazioni.
- * Ritorna true se il DOM e' stato sostituito.
+ * Replace `root` content ONLY if markup changed. Identical redraws (periodic time updates, same snapshots)
+ * do not touch the DOM: so text selection, in-progress taps, and animations are not lost.
+ * Returns true if the DOM was replaced.
  */
 export function commit(root, ...children) {
   const holder = document.createElement('div');
   append(holder, children);
-  const signature = holder.innerHTML; // sola lettura: serve a confrontare, non a inserire markup
+  const signature = holder.innerHTML; // read-only: used to compare, not to insert markup
   if (committed.get(root) === signature) return false;
   committed.set(root, signature);
   root.replaceChildren(...holder.childNodes);
   return true;
 }
 
-/** Da chiamare quando una nuova vista prende possesso di `root`: la prima commit deve sempre sostituire. */
+/** Call when a new view takes over `root`: the first commit must always replace. */
 export function forgetCommit(root) {
   committed.delete(root);
 }

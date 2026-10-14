@@ -1,10 +1,10 @@
-// Logger a righe JSON che NON puo' scrivere contenuti di chat, chiavi o token.
+// JSON line logger that must NOT write chat contents, keys, or tokens.
 //
-// Sicuro per costruzione (vedi AGENTS.md):
-//  - numeri e booleani passano sempre;
-//  - le STRINGHE passano solo per chiavi in allow-list (valori brevi e non sensibili, es. `reason`, `kind`);
-//    qualunque altra stringa, oggetto o array diventa un segnaposto: un log scritto male non puo' far trapelare dati;
-//  - gli errori non si loggano mai col messaggio (puo' contenere frammenti di JSON o percorsi): solo nome e codice.
+// Safe by construction (see AGENTS.md):
+//  - numbers and booleans always pass through;
+//  - STRINGS pass only for allow-listed keys (short non-sensitive values, e.g. `reason`, `kind`);
+//    any other string, object, or array becomes a placeholder: a miswritten log cannot leak data;
+//  - errors are never logged with the message (may contain JSON fragments or paths): name and code only.
 
 const STRING_KEYS = new Set(['reason', 'kind', 'signal', 'error', 'errcode', 'host', 'state']);
 const LEVELS = { debug: 10, info: 20, warn: 30, error: 40 };
@@ -22,7 +22,7 @@ export function sanitizeFields(fields) {
   return out;
 }
 
-/** Campi sicuri da un errore: solo nome e codice (mai `message`). */
+/** Safe fields from an error: name and code only (never `message`). */
 export function errorFields(err) {
   return { error: String(err?.name ?? 'Error'), errcode: String(err?.code ?? err?.errstr ?? '') };
 }
@@ -31,7 +31,7 @@ export function createLogger({ level = 'info', stream = process.stdout, now = ()
   const min = LEVELS[level] ?? LEVELS.info;
   function write(lvl, event, fields) {
     if (LEVELS[lvl] < min) return;
-    // t/lvl/event vengono prima e i campi non possono sovrascriverli.
+    // t/lvl/event come first and fields cannot overwrite them.
     const rec = { t: now().toISOString(), lvl, event };
     for (const [k, v] of Object.entries(sanitizeFields(fields))) {
       if (!(k in rec)) rec[k] = v;

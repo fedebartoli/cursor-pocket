@@ -1,4 +1,4 @@
-// Impostazioni: notifiche push, informazioni sul daemon, uscita dal dispositivo.
+// Settings: push notifications, daemon info, sign out from this device.
 import { api } from '../api.js';
 import { appbar, banner, switchRow } from '../components.js';
 import { commit, h, replace } from '../dom.js';
@@ -15,7 +15,7 @@ export function mountSettings(root, { onLoggedOut }) {
   let quiet = null; // { enabled, from, to }
   let awake = null; // { supported, enabled, active }
   let devices = null; // [{ id, label, createdAt, lastSeenAt, current, notifications }]
-  let armedDevice = null; // id del dispositivo in attesa del secondo tocco
+  let armedDevice = null; // device id waiting for second tap
   let deviceTimer = null;
   let armedLogout = false;
   let armTimer = null;
@@ -65,11 +65,11 @@ export function mountSettings(root, { onLoggedOut }) {
 
   async function setAwake(key, value) {
     const prev = awake;
-    awake = key === 'enabled' ? { ...awake, enabled: value } : { ...awake, [key]: { ...awake[key], enabled: value } }; // subito, poi conferma dal daemon
+    awake = key === 'enabled' ? { ...awake, enabled: value } : { ...awake, [key]: { ...awake[key], enabled: value } }; // optimistic UI, then confirm from daemon
     render();
     try {
       awake = await api.post('/api/settings/awake', { [key]: value });
-      setTimeout(() => alive && loadAwake(), 1500); // il daemon applica il cambio subito dopo la risposta
+      setTimeout(() => alive && loadAwake(), 1500); // daemon applies change shortly after the response
     } catch (err) {
       awake = prev;
       note = { error: true, text: err.message || 'Impostazione non salvata.' };
@@ -144,7 +144,7 @@ export function mountSettings(root, { onLoggedOut }) {
   }
 
   function devicesPanel() {
-    if (!devices || devices.length < 2) return null; // con un solo dispositivo (questo) il pannello non serve
+    if (!devices || devices.length < 2) return null; // with only this device the panel is unnecessary
     const rows = devices.map((d) => {
       const meta = d.current ? 'Questo dispositivo' : `Ultimo accesso ${timeAgo(d.lastSeenAt)}`;
       const armed = armedDevice === d.id;
@@ -163,7 +163,7 @@ export function mountSettings(root, { onLoggedOut }) {
 
   async function saveQuiet(patch) {
     const next = { ...quiet, ...patch };
-    quiet = next; // subito, poi conferma dal daemon
+    quiet = next; // optimistic UI, then confirm from daemon
     render();
     try {
       quiet = await api.post('/api/settings/quiet', next);
@@ -215,13 +215,13 @@ export function mountSettings(root, { onLoggedOut }) {
     } catch (err) {
       note = { error: true, text: onError(err) };
     }
-    if (!alive) return; // es. dopo l'uscita: la vista e' gia' stata sostituita dal login
+    if (!alive) return; // e.g. after logout: view already replaced by login
     busy = null;
     await refreshPush();
     if (alive) render();
   }
 
-  // enablePush deve partire direttamente dal tocco: iOS richiede un gesto per mostrare la richiesta di permesso.
+  // enablePush must run directly from a tap: iOS requires a gesture to show the permission prompt.
   const enable = () =>
     run(
       'enable',
@@ -388,7 +388,7 @@ export function mountSettings(root, { onLoggedOut }) {
   const secs = (ms) => (ms == null ? 'n/d' : ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`);
   const ago = (t) => (t ? `${Math.max(0, Math.round((Date.now() - t) / 1000))} s fa` : 'mai');
 
-  /** Dove si perde tempo tra Mac e telefono (aggiornata ogni secondo, in una regione a parte: non tocca i pulsanti). */
+  /** Where time is lost between Mac and phone (updates every second, separate region: does not affect buttons). */
   function renderDiag() {
     const lv = getLive();
     const st = lv.stats;

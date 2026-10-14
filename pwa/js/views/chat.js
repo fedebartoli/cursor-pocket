@@ -1,9 +1,9 @@
-// Dettaglio di una chat: stato, richiesta in attesa (domanda a cui rispondere dal telefono), "Ignora"/"Ripristina",
-// ultimo messaggio dell'agente e compositore per scrivere alla chat.
+// Chat detail: state, pending request (question to answer from the phone), "Ignora"/"Ripristina",
+// last agent message, and composer to write to the chat.
 //
-// La schermata e' fatta di REGIONI persistenti (alta, pannello, messaggio, compositore): ognuna si aggiorna per conto
-// suo. Il questionario e il compositore sono nodi DOM che non vengono mai ricreati finche' la domanda e' la stessa,
-// cosi' un aggiornamento live non fa perdere selezioni, testo scritto o focus.
+// The screen uses persistent REGIONS (top, panel, message, composer): each updates on its own. The question form and
+// composer are DOM nodes that are never recreated while the question is the same, so a live refresh does not lose
+// selections, typed text, or focus.
 import { describeActionError, describeAnswerResult, describeMessageResult, shouldRefreshAfter } from '../action-errors.js';
 import { activityPanel } from '../activity.js';
 import { api } from '../api.js';
@@ -16,20 +16,20 @@ import { getLive, refresh } from '../live.js';
 import { renderMarkdown } from '../markdown.js';
 import { createQuestionForm } from '../question-form.js';
 
-// Dopo questo tempo una domanda ancora aperta, dopo un invio riuscito, torna risolvibile (il daemon rifiuta i doppi
-// invii per 60 s: oltre, ritentare ha senso).
+// After this long, a question still open after a successful submit becomes submittable again (the daemon rejects duplicate
+// submits for 60 s; beyond that, retrying makes sense).
 const RESEND_AFTER_MS = 70_000;
 const REFRESH_AFTER_ACTION_MS = [1500, 4000, 9000];
-// Con la schermata aperta e visibile si rilegge il dettaglio (attivita' e ultimo messaggio) a intervalli brevi: Cursor
-// scrive i passi dell'agente man mano e il segnale di stato arriva spesso piu' tardi.
+// While the screen is open and visible, detail (activity and last message) is reloaded on a short interval: Cursor
+// writes agent steps incrementally and the state signal often arrives later.
 const DETAIL_POLL_MS = 4000;
-// Mentre l'agente lavora o si attende la sua reazione a un invio si rilegge piu' spesso.
+// While the agent is working or we await its reaction to a send, reload more often.
 const DETAIL_POLL_FAST_MS = 1000;
-// Dopo una risposta o un messaggio, per questo tempo (o finche' non compare attivita' nuova) si mostra "in attesa".
+// After an answer or message, for this long (or until new activity appears) show "waiting".
 const WAITING_MS = 90_000;
-// Approvare/rifiutare chiede due tocchi: il primo arma il pulsante, il secondo (entro questo tempo) invia.
+// Approve/reject requires two taps: the first arms the button, the second (within this window) sends.
 const APPROVAL_ARM_MS = 5000;
-// Per quanto tempo una domanda viva senza testo si considera "in preparazione" (poi si mostra il messaggio generico).
+// How long a live question without text counts as "preparing" (then show the generic message).
 const PREPARING_MAX_MS = 120_000;
 
 function findCard(payload, id) {
@@ -54,7 +54,7 @@ function explanation(a) {
   }
 }
 
-/** Perche' le azioni non sono disponibili (stato pubblicato dal daemon) e cosa fare. */
+/** Why actions are unavailable (state published by the daemon) and what to do. */
 function unavailableReason(actions, offline) {
   if (offline) return { text: 'Daemon non raggiungibile.' };
   switch (actions) {
@@ -67,8 +67,8 @@ function unavailableReason(actions, offline) {
   }
 }
 
-// Elenco numerato di SOLA LETTURA, usato quando le azioni dal telefono non sono disponibili: niente cerchi o caselle che
-// sembrano controlli da premere. Cursor aggiunge sempre una voce finale "Altro" con risposta libera: si mostra anche qui.
+// Numbered READ-ONLY list when phone actions are unavailable: no circles or boxes that look like tappable controls.
+// Cursor always adds a final "Altro" free-text option; show it here too.
 function optionRows(options) {
   const row = (n, text, cls) => h(`li.option${cls}`, null, h('span.num', { 'aria-hidden': 'true' }, String(n)), h('span', null, text));
   return [...options.map((o, i) => row(i + 1, o.label, '')), row(options.length + 1, 'Altro: risposta libera', '.other')];
@@ -97,29 +97,29 @@ export function mountChat(root, id) {
   let detail = null;
   let detailFailed = false;
   let signature = '';
-  let busy = false; // un'azione (risposta, salta, ignora) e' in corso
-  let notice = null; // avviso in alto (es. esito di Ignora)
-  let formNotice = null; // avviso dentro il questionario: { text, error }
+  let busy = false; // an action (answer, skip, ignore) is in progress
+  let notice = null; // top banner (e.g. result of Ignora)
+  let formNotice = null; // notice inside the question form: { text, error }
   let expanded = false;
   let loadSeq = 0;
   let alive = true;
   let form = null;
-  let armed = null; // 'approve' | 'reject': primo tocco dato, serve il secondo per confermare
+  let armed = null; // 'approve' | 'reject': first tap done, second tap confirms
   let armTimer = null;
-  let renaming = false; // campo per rinominare aperto
+  let renaming = false; // rename field open
   let manageBusy = false;
   let manageNote = null; // { text, error }
   let archiveArmed = false;
   let archiveTimer = null;
-  let pinned = null; // la chat e' fissata in cima alla sidebar di Cursor? (null = non ancora letto)
+  let pinned = null; // is the chat pinned at top of Cursor sidebar? (null = not read yet)
   let pinTried = false;
-  let sentKey = null; // domanda (o approvazione) a cui si e' appena risposto
+  let sentKey = null; // question (or approval) just answered
   let sentAt = 0;
-  let actedAt = 0; // ultima risposta o messaggio inviati da questa schermata (orologio del telefono)
-  let actedBase = null; // ultimo passo (bubble) noto al momento dell'invio: si attende uno piu' recente
+  let actedAt = 0; // last answer or message sent from this screen (phone clock)
+  let actedBase = null; // latest activity bubble known at send time; wait for a newer one
   const timers = new Set();
 
-  // Regioni: `display: contents`, quindi non influiscono sul layout.
+  // Regions use `display: contents`, so they do not affect layout.
   const topHost = h('div.region');
   const panelHost = h('div.region');
   const activityHost = h('div.region');
@@ -127,7 +127,7 @@ export function mountChat(root, id) {
   const linkHost = h('div.region');
   const manageHost = h('div.region');
   const composer = createComposer({ chatId: id, onSend: sendMessage, onStop: stopAgent });
-  // Il distanziatore spinge il compositore in fondo quando il contenuto e' corto (e garantisce un minimo di respiro).
+  // Spacer pushes the composer to the bottom when content is short (and guarantees minimum breathing room).
   replace(root, h('div', { class: 'screen chat-screen' }, topHost, panelHost, activityHost, messageHost, linkHost, manageHost, h('div', { class: 'chat-spacer', 'aria-hidden': 'true' }), composer.el));
 
   let loading = false;
@@ -153,15 +153,15 @@ export function mountChat(root, id) {
     actedBase = detail?.activity?.[0]?.id ?? null;
   }
 
-  let preparing = false; // c'e' una domanda viva ma Cursor non ne ha ancora scritto il testo
-  let fast = false; // l'agente lavora o si attende la sua reazione: polling piu' frequente
+  let preparing = false; // live question exists but Cursor has not written its text yet
+  let fast = false; // agent working or awaiting reaction: poll more often
   let pollTimer = null;
   function schedulePoll() {
     pollTimer = setTimeout(() => {
       if (!alive) return;
       if (document.visibilityState === 'visible') {
         if (!loading) load();
-        // Lo stato (domanda viva, chat in corso) non dipende solo dal flusso live: se questo ritarda, qui si recupera.
+        // State (live question, running chat) does not depend only on the live stream; if that lags, recover here.
         refresh().catch(() => {});
       }
       schedulePoll();
@@ -176,7 +176,7 @@ export function mountChat(root, id) {
   };
   document.addEventListener('visibilitychange', onVisible);
 
-  /** Dopo un'azione sul Mac lo stato cambia: si riscarica a intervalli brevi, senza aspettare il ciclo del daemon. */
+  /** After an action on the Mac state changes: reload on short intervals without waiting for the daemon cycle. */
   function refreshSoon() {
     for (const ms of REFRESH_AFTER_ACTION_MS) {
       const t = setTimeout(() => {
@@ -187,7 +187,7 @@ export function mountChat(root, id) {
     }
   }
 
-  // --- azioni -------------------------------------------------------------------------------------------------
+  // --- actions ------------------------------------------------------------------------------------------------
 
   async function ignoreAction(method, card, failure) {
     busy = true;
@@ -203,7 +203,7 @@ export function mountChat(root, id) {
     render();
   }
 
-  /** Invio di una risposta o di "Salta" per la domanda corrente. */
+  /** Submit an answer or "Salta" for the current question. */
   async function questionAction(kind, body, okText) {
     const key = findCard(getLive().payload, id)?.attention?.key;
     if (!key || busy) return;
@@ -216,7 +216,7 @@ export function mountChat(root, id) {
       sentAt = Date.now();
       markActed(sentAt);
       formNotice = { text: okText(res), error: res?.warning === 'differs' };
-      // Il questionario sparisce appena il daemon vede la risposta: l'esito resta visibile nel compositore.
+      // Question form hides as soon as the daemon sees the answer; outcome stays visible in the composer.
       composer.flash(formNotice.text, formNotice.error);
       refreshSoon();
       load();
@@ -231,7 +231,7 @@ export function mountChat(root, id) {
     render();
   }
 
-  /** Primo tocco: arma il pulsante per qualche secondo. Secondo tocco sullo stesso: invia. */
+  /** First tap: arm the button for a few seconds. Second tap on the same: send. */
   function approvalTap(decision) {
     if (busy) return;
     if (armed !== decision) {
@@ -307,7 +307,7 @@ export function mountChat(root, id) {
     render();
   }
 
-  // Lo stato "fissata" si legge da Cursor una sola volta per schermata; se non si riesce, il pulsante semplicemente non c'e'.
+  // Pinned state is read from Cursor once per screen; on failure the button is simply omitted.
   function loadPin() {
     if (pinTried) return;
     pinTried = true;
@@ -432,7 +432,7 @@ export function mountChat(root, id) {
     }
   }
 
-  // --- regioni ------------------------------------------------------------------------------------------------
+  // --- regions ------------------------------------------------------------------------------------------------
 
   function attentionPanel(card, actionsStatus, offline, preparingNow) {
     const a = card.attention;
@@ -446,7 +446,7 @@ export function mountChat(root, id) {
     const ap = detail?.approval?.key === a.key ? detail.approval : null;
     const children = [h('div', { class: `panel-title${live ? ' danger' : ''}` }, preparingNow ? icon('spinner', { size: 20, className: 'spin' }) : icon(kindIcon, { size: 20 }), h('span.grow', null, preparingNow ? 'L\u2019agente sta preparando la domanda' : heading), h('span.hint', null, timeAgo(a.since)))];
     if (preparingNow) {
-      // il titolo dice gia' tutto: nessun testo in piu'
+      // title already says enough: no extra copy
     } else if (q) {
       children.push(...questionBlocks(q));
       if (live) {
@@ -533,12 +533,12 @@ export function mountChat(root, id) {
 
   function renderPanel(lv, card, actionsOk, mode) {
     const a = card?.attention;
-    // Una chat che sta lavorando non e' in attesa di te: il flag di Cursor puo' essere un residuo (vedi stateOf nel daemon).
-    // Dopo una risposta Cursor lascia acceso il flag per un po': se l'agente sta chiaramente lavorando, il "residuo" non va mostrato.
+    // A working chat is not waiting on you: Cursor's flag may be stale (see stateOf in the daemon).
+    // After an answer Cursor keeps the flag on for a while: if the agent is clearly working, do not show "residuo".
     const show = Boolean(card && a && card.state !== STATE.RUNNING && !(a.kind === 'residuo' && mode !== 'idle'));
     preparing = false;
-    // Si puo' rispondere anche a una domanda ignorata o vecchia (stato "In sospeso"), purche' Cursor la tenga ancora aperta
-    // (`live`): lo chiede la regola "rispondere anche dopo ore o giorni". Se non e' piu' aperta il daemon risponde 409.
+    // You can answer an ignored or old question ("In sospeso") while Cursor still keeps it open (`live`): required by
+    // "answer even after hours or days". If no longer open the daemon returns 409.
     const interactive =
       show &&
       actionsOk &&
@@ -569,7 +569,7 @@ export function mountChat(root, id) {
         rebuilt = true;
       }
       if (sentKey === a.key && Date.now() - sentAt >= RESEND_AFTER_MS) {
-        // La domanda e' ancora aperta molto dopo l'invio: Cursor non l'ha registrata. Si puo' riprovare.
+        // Question still open long after submit: Cursor did not record it. User can retry.
         sentKey = null;
         formNotice = { text: 'La risposta non risulta ancora registrata da Cursor: controlla sul Mac o riprova.', error: true };
       }
@@ -592,22 +592,21 @@ export function mountChat(root, id) {
       form = null;
       forgetCommit(panelHost);
     }
-    if (sentKey && a?.key !== sentKey) formNotice = null; // la domanda e' risolta: l'avviso non serve piu'
+    if (sentKey && a?.key !== sentKey) formNotice = null; // question resolved: notice no longer needed
     if (show && a.kind === 'domanda' && a.live === true && card.state === STATE.ATTENTION && !(detail?.chat?.attention?.key === a.key && detail.question)) {
-      // Cursor scrive il testo della domanda solo a fine turno (10-30 s dopo averla creata): si dice cosi', invece di
-      // un generico "apri Cursor sul Mac".
+      // Cursor writes question text only at end of turn (10–30 s after creating it): say so instead of generic "open Cursor on Mac".
       const fresh = Date.now() - a.since < PREPARING_MAX_MS;
       preparing = fresh && !detailFailed;
     }
     return commit(panelHost, show ? attentionPanel(card, lv.payload?.status?.actions, lv.offline, preparing) : null);
   }
 
-  /** Cosa sta facendo l'agente secondo i passi scritti da Cursor: 'working' | 'waiting' | 'idle'. */
+  /** What the agent is doing from steps written by Cursor: 'working' | 'waiting' | 'idle'. */
   function activityMode(card) {
     if (!card) return 'idle';
     const newest = detail?.activity?.[0];
     if (card.state === STATE.RUNNING || newest?.state === 'running') return 'working';
-    // "In attesa": si e' appena risposto/scritto e l'ultimo passo e' ancora quello noto all'invio.
+    // "Waiting": just answered/sent and the latest step is still the one known at send time.
     if (actedAt > 0 && Date.now() - actedAt < WAITING_MS && newest?.id === actedBase) return 'waiting';
     return 'idle';
   }
@@ -617,7 +616,7 @@ export function mountChat(root, id) {
       fast = false;
       return commit(activityHost, null);
     }
-    // Con una domanda o un'approvazione in attesa il pannello sopra e' gia' il centro della schermata.
+    // With a pending question or approval the panel above is already the focus of the screen.
     const needsYou = card.state === STATE.ATTENTION && mode !== 'waiting';
     fast = mode !== 'idle' || preparing;
     return commit(activityHost, needsYou ? null : activityPanel(detail?.activity ?? [], mode));
@@ -668,7 +667,7 @@ export function mountChat(root, id) {
       (card.attention?.kind === 'domanda' && card.state === STATE.ATTENTION) ||
       (card.attention?.kind === 'approvazione' && card.attention.live)
     ) {
-      // Con una domanda o un'approvazione in attesa il pannello e' li' sopra e il daemon rifiuterebbe comunque il messaggio.
+      // With pending question or approval the panel is above and the daemon would reject a message anyway.
       composer.update({ mode: 'blocked' });
     } else {
       composer.update({ mode: 'ready', running: card.state === STATE.RUNNING });
@@ -676,7 +675,7 @@ export function mountChat(root, id) {
   }
 
   function render() {
-    if (!alive) return; // chiamata tardiva dopo un cambio di schermata
+    if (!alive) return; // late call after navigating away
     const y = window.scrollY;
     const lv = getLive();
     const card = findCard(lv.payload, id);
@@ -694,7 +693,7 @@ export function mountChat(root, id) {
     const next = signatureOf(card);
     if (card && next !== signature) {
       signature = next;
-      load(); // ricarica domanda e ultimo messaggio solo quando la chat e' davvero cambiata
+      load(); // reload question and last message only when the chat actually changed
     }
     render();
   }
@@ -704,7 +703,7 @@ export function mountChat(root, id) {
     update,
     destroy() {
       alive = false;
-      loadSeq += 1; // scarta le risposte in volo
+      loadSeq += 1; // discard in-flight responses
       clearTimeout(pollTimer);
       clearTimeout(armTimer);
       clearTimeout(archiveTimer);

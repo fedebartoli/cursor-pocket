@@ -1,4 +1,4 @@
-// Notifiche push: rilevamento del supporto, sottoscrizione e sincronizzazione con il daemon.
+// Push notifications: capability detection, subscription, and sync with the daemon.
 import { api } from './api.js';
 
 export class PushError extends Error {
@@ -34,8 +34,8 @@ async function registration() {
 }
 
 /**
- * Stato per l'interfaccia:
- *  install (iOS non installata), unsupported, denied, off, on
+ * State for the UI:
+ *  install (iOS not installed), unsupported, denied, off, on
  */
 export async function getPushState() {
   const env = environment();
@@ -51,7 +51,7 @@ export async function getPushState() {
   }
 }
 
-/** Da chiamare DIRETTAMENTE da un gesto dell'utente (tocco): iOS lo richiede per il permesso. */
+/** Call DIRECTLY from a user gesture (tap): iOS requires this for permission. */
 export async function enablePush() {
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') {
@@ -61,7 +61,7 @@ export async function enablePush() {
   const { publicKey } = await api.get('/api/push/public-key');
   const key = base64UrlToBytes(publicKey);
   let sub = await reg.pushManager.getSubscription();
-  // Se il daemon ha rigenerato le chiavi VAPID, la vecchia sottoscrizione non e' piu' valida: si rinnova.
+  // If the daemon regenerated VAPID keys, the old subscription is no longer valid: renew it.
   if (sub && !sameBytes(sub.options?.applicationServerKey, key)) {
     await sub.unsubscribe();
     sub = null;
@@ -84,7 +84,7 @@ export function sendTestPush() {
   return api.post('/api/push/test');
 }
 
-/** Ripristina silenziosamente la registrazione sul daemon se il browser ha gia' una sottoscrizione. */
+/** Silently restore registration on the daemon if the browser already has a subscription. */
 export async function resyncPush() {
   const env = environment();
   if (!env.hasApis || Notification.permission !== 'granted') return;
@@ -92,6 +92,6 @@ export async function resyncPush() {
     const sub = await (await registration()).pushManager.getSubscription();
     if (sub) await api.post('/api/push/subscribe', { subscription: sub.toJSON() });
   } catch {
-    // non critico
+    // not critical
   }
 }

@@ -1,5 +1,5 @@
-// Nuova chat locale su un progetto: si sceglie il progetto, si scrive il primo messaggio (con immagini facoltative) e Cursor
-// la avvia sul Mac ("This Mac"). Il daemon controlla progetto e ambiente prima di inviare.
+// New local chat on a project: pick project, write first message (optional images), Cursor starts it on the Mac ("This Mac").
+// The daemon validates project and environment before sending.
 import { describeActionError } from '../action-errors.js';
 import { api } from '../api.js';
 import { createAttachments } from '../attachments.js';
@@ -9,7 +9,7 @@ import { icon } from '../icons.js';
 import { getLive, refresh } from '../live.js';
 import { MESSAGE_MAX } from '../composer.js';
 
-let lastSection = null; // solo in memoria: il progetto scelto l'ultima volta
+let lastSection = null; // in-memory only: last chosen project
 const FIND_CHAT_MS = 9000;
 
 export function mountNewChat(root) {
@@ -18,11 +18,11 @@ export function mountNewChat(root) {
   let note = null; // { text, error }
   let draft = '';
   let sectionId = lastSection;
-  let shown = null; // cosa c'e' in formHost: 'form' | 'noactions' | 'noprojects'
-  let opts = null; // scelte lette da Cursor per il progetto: { branch: { current, options }, model: { current, options } }
-  let optsFor = null; // progetto a cui si riferiscono
+  let shown = null; // what formHost shows: 'form' | 'noactions' | 'noprojects'
+  let opts = null; // choices read from Cursor for the project: { branch: { current, options }, model: { current, options } }
+  let optsFor = null; // project these options belong to
   let optsLoading = false;
-  const pick = { branch: null, model: null }; // null = come e' in Cursor
+  const pick = { branch: null, model: null }; // null = as in Cursor
   const host = h('div.region');
   const formHost = h('div.region');
   replace(root, h('div', { class: 'screen' }, host, formHost));
@@ -32,7 +32,7 @@ export function mountNewChat(root) {
   files.button.classList.add('wide');
   files.button.append('Allega immagini');
   const startBtn = h('button', { class: 'btn primary block', type: 'submit' }, icon('send', { size: 18 }), 'Avvia chat');
-  // Elenco a scelta singola (non un <select>: WebKit ne inietta lo stile e la CSP rigorosa dell'app lo segnala).
+  // Single-choice list (not a <select>: WebKit injects styling and the app's strict CSP flags it).
   const picker = h('div', { class: 'project-list', role: 'radiogroup', 'aria-label': 'Progetto', id: 'newchat-project' });
   const noteEl = h('p', { class: 'hint', role: 'status', hidden: true });
   const optsHost = h('div', { class: 'newchat-opts' });
@@ -73,7 +73,7 @@ export function mountNewChat(root) {
   }
 
 
-  // Ramo e modello: si leggono da Cursor solo a richiesta (apre e richiude i menu sul Mac). Se non si sceglie nulla, vale cio' che c'e' in Cursor.
+  // Branch and model: read from Cursor on demand (opens and closes menus on the Mac). If unset, Cursor's current values apply.
   function choiceGroup(label, key, current, options, iconName) {
     const rows = [{ value: null, text: `Come in Cursor (${current ?? '?'})` }, ...options.filter((o) => o !== current).map((o) => ({ value: o, text: o })), ...(options.includes(current) ? [{ value: current, text: `${current} (attuale)` }] : [])];
     return h(

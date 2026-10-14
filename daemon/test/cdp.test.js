@@ -16,12 +16,12 @@ afterEach(async () => {
 
 describe('safeWsUrl', () => {
   const ok = 'ws://127.0.0.1:9222/devtools/page/ABCDEF0123456789';
-  it('accetta solo loopback, porta attesa e percorso /devtools/page/<id>', () => {
+  it('accepts only loopback, expected port and /devtools/page/<id> path', () => {
     assert.equal(safeWsUrl(ok, 9222), ok);
     assert.ok(safeWsUrl('ws://localhost:9222/devtools/page/ABCDEF0123456789', 9222));
     assert.ok(safeWsUrl('ws://[::1]:9222/devtools/page/ABCDEF0123456789', 9222));
   });
-  it('rifiuta host esterni, altre porte, schemi e percorsi diversi', () => {
+  it('rejects external hosts, other ports, schemes and paths', () => {
     for (const bad of [
       'ws://192.168.1.5:9222/devtools/page/ABCDEF0123456789',
       'ws://evil.example:9222/devtools/page/ABCDEF0123456789',
@@ -41,8 +41,8 @@ describe('safeWsUrl', () => {
   });
 });
 
-describe('probeCdp e listPageTargets', () => {
-  it('riconosce una porta di debug attiva e una spenta', async () => {
+describe('probeCdp and listPageTargets', () => {
+  it('detects an active vs inactive debug port', async () => {
     const f = await fake();
     const up = await probeCdp(f.port);
     assert.equal(up.up, true);
@@ -52,7 +52,7 @@ describe('probeCdp e listPageTargets', () => {
     assert.deepEqual(await probeCdp(f.port, { timeoutMs: 500 }), { up: false, browser: null });
   });
 
-  it('elenca solo le pagine con URL WebSocket valido e locale', async () => {
+  it('lists only pages with valid local WebSocket URL', async () => {
     const f = await fake({
       targets: [
         { id: 'PAGE0001', type: 'page', title: 'Cursor Agents', url: 'vscode-file://x' },
@@ -66,7 +66,7 @@ describe('probeCdp e listPageTargets', () => {
     assert.match(ts[0].wsUrl, /^ws:\/\/127\.0\.0\.1:\d+\/devtools\/page\/PAGE0001$/);
   });
 
-  it('con la porta spenta lancia unavailable', async () => {
+  it('with port down throws unavailable', async () => {
     const f = await fake();
     const { port } = f;
     await f.stop();
@@ -82,7 +82,7 @@ describe('CdpSession', () => {
     return { f, s: await CdpSession.open(t.wsUrl) };
   }
 
-  it('invia comandi e restituisce il risultato; il WebSocket di Node non manda Origin', async () => {
+  it('sends commands and returns result; Node WebSocket sends no Origin', async () => {
     const { f, s } = await session((method) => (method === 'Runtime.evaluate' ? { result: { type: 'number', value: 42 } } : {}));
     assert.equal(await s.evaluate('1+41'), 42);
     assert.equal(f.commands[0].method, 'Runtime.evaluate');
@@ -90,11 +90,11 @@ describe('CdpSession', () => {
       { expression: f.commands[0].params.expression, awaitPromise: f.commands[0].params.awaitPromise, returnByValue: f.commands[0].params.returnByValue },
       { expression: '1+41', awaitPromise: true, returnByValue: true },
     );
-    assert.equal(f.upgradeHeaders[0].origin, undefined, 'DevTools rifiuta le origini non ammesse: Node non deve mandarne');
+    assert.equal(f.upgradeHeaders[0].origin, undefined, 'DevTools rejects disallowed origins: Node must not send one');
     s.close();
   });
 
-  it('errore del protocollo -> cdp_error con messaggio troncato', async () => {
+  it('protocol error -> cdp_error with truncated message', async () => {
     const { s } = await session(() => {
       throw new Error('x'.repeat(500));
     });
@@ -102,19 +102,19 @@ describe('CdpSession', () => {
     s.close();
   });
 
-  it('eccezione nella pagina -> page_exception, solo la prima riga', async () => {
+  it('page exception -> page_exception, first line only', async () => {
     const { s } = await session(() => ({ exceptionDetails: { text: 'Uncaught', exception: { description: 'ReferenceError: foo is not defined\n    at <anonymous>:1:1' } } }));
     await assert.rejects(s.evaluate('foo'), (e) => e.code === 'page_exception' && e.message === 'ReferenceError: foo is not defined');
     s.close();
   });
 
-  it('nessuna risposta -> timeout', async () => {
+  it('no response -> timeout', async () => {
     const { s } = await session(() => 'NO_REPLY');
     await assert.rejects(s.send('Runtime.evaluate', {}, { timeoutMs: 80 }), (e) => e.code === 'timeout');
     s.close();
   });
 
-  it('chiusura del server -> le richieste in volo falliscono con closed e la sessione risulta chiusa', async () => {
+  it('server close -> in-flight requests fail with closed and session is closed', async () => {
     const { f, s } = await session(() => 'NO_REPLY');
     const p = s.send('Runtime.evaluate', {}, { timeoutMs: 5000 });
     await new Promise((r) => setTimeout(r, 30));
@@ -124,7 +124,7 @@ describe('CdpSession', () => {
     await assert.rejects(s.send('X'), (e) => e.code === 'closed');
   });
 
-  it('connessione rifiutata -> unavailable; connessione che non risponde -> timeout', async () => {
+  it('connection refused -> unavailable; non-responding connection -> timeout', async () => {
     const f = await fake();
     const { port } = f;
     await f.stop();
@@ -132,7 +132,7 @@ describe('CdpSession', () => {
     await assert.rejects(CdpSession.open(`ws://127.0.0.1:${port}/devtools/page/PAGE0001`, { connectTimeoutMs: 500 }), (e) => e.code === 'unavailable' || e.code === 'timeout');
   });
 
-  it('click: mouseMoved, mousePressed, mouseReleased alle coordinate', async () => {
+  it('click: mouseMoved, mousePressed, mouseReleased at coordinates', async () => {
     const { f, s } = await session();
     await s.click(120.5, 80);
     const seq = f.commands.map((c) => [c.method, c.params.type, c.params.x, c.params.y]);
@@ -146,7 +146,7 @@ describe('CdpSession', () => {
     s.close();
   });
 
-  it('insertText e pressKey (Invio, Maiusc+Invio)', async () => {
+  it('insertText and pressKey (Enter, Shift+Enter)', async () => {
     const { f, s } = await session();
     await s.insertText('ciao');
     await s.pressKey(KEYS.enter, { modifiers: MODIFIER.shift });
@@ -162,7 +162,7 @@ describe('CdpSession', () => {
     s.close();
   });
 
-  it('piu\' richieste in parallelo ricevono ciascuna la propria risposta', async () => {
+  it('parallel requests each get their own response', async () => {
     const { s } = await session(async (method, params) => {
       await new Promise((r) => setTimeout(r, params.delay));
       return { result: { value: params.tag } };

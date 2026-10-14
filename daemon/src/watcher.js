@@ -1,21 +1,21 @@
-// Watcher: legge periodicamente il database di Cursor (sola lettura), costruisce lo snapshot delle chat visibili
-// e rileva le TRANSIZIONI che meritano una notifica.
+// Watcher: periodically reads Cursor's database (read-only), builds a snapshot of visible chats,
+// and detects TRANSITIONS worth notifying.
 //
-// Eventi emessi:
-//   'snapshot' ({chats, settings, at})  a ogni scansione riuscita
-//   'status'   ({ok, lastScanAt, lastError, chats}) quando cambia lo stato di salute
-//   'event'    ({type: 'attention'|'done', dedupeKey, chat, attention?, at}) da notificare
+// Emitted events:
+//   'snapshot' ({chats, settings, at})  on every successful scan
+//   'status'   ({ok, lastScanAt, lastError, chats}) when health state changes
+//   'event'    ({type: 'attention'|'done', dedupeKey, chat, attention?, at}) to notify
 //
-// Regole (vedi docs/FINDINGS.md sezione 8 e docs/ARCHITECTURE.md):
-//  - nessuna notifica dallo stato iniziale: all'avvio le domande piu' vecchie di `startupGraceMs` si segnano
-//    come gia' notificate in silenzio, cosi' non partono mai in ritardo;
-//  - "chat finita" = la chat era in corso (marcatore `unfinishedRunAt` nell'header, che puo' restare indietro di
-//    decine di secondi; lo stato `completed` del composer lo anticipa), poi non lo e' piu' per `doneSettleMs`,
-//    senza richieste in attesa (e senza una domanda aperta: una run che finisce con una domanda non e' finita) e
-//    senza messaggi in coda, e la run e' durata almeno `minRunMs`;
-//  - un'approvazione di tool (FINDINGS 11) si notifica solo se e' ancora in attesa dopo `approvalDelayMs`, riletta
-//    ogni secondo: chi approva in pochi secondi dal Mac non riceve una notifica inutile;
-//  - dedupe per (composerId, toolCallId) per domande e approvazioni e (composerId, lastUpdatedAt) per le chat finite.
+// Rules (see docs/FINDINGS.md section 8 and docs/ARCHITECTURE.md):
+//  - no notifications from initial state: on startup, questions older than `startupGraceMs` are marked
+//    as already notified silently, so they never fire late;
+//  - "chat done" = chat was running (`unfinishedRunAt` in header, which can lag tens of seconds; composer
+//    `completed` state anticipates it), then not running for `doneSettleMs`,
+//    with no pending requests (and no open question: a run ending with a question is not done) and
+//    no queued messages, and the run lasted at least `minRunMs`;
+//  - tool approval (FINDINGS 11) notifies only if still pending after `approvalDelayMs`, rechecked
+//    every second: approving within seconds on the Mac avoids a useless notification;
+//  - dedupe by (composerId, toolCallId) for questions and approvals and (composerId, lastUpdatedAt) for done chats.
 import { EventEmitter } from 'node:events';
 import { buildChat, classifyAttention, headerSignature, isPendingQuestion, isPendingReview, isRunning, isVisibleLocalChat } from './cursor/model.js';
 import { normalizeQuestionParams } from './cursor/questions.js';
@@ -24,7 +24,7 @@ import { activityOf, toolActivity, toolStateOf } from './state/present.js';
 import { SHELL_TOOLS } from './cursor/model.js';
 
 const SETTINGS_TTL_MS = 10_000;
-const BOOST_POLL_MS = 250; // giro del watcher e rilettura della chat dopo un'azione dal telefono
+const BOOST_POLL_MS = 250; // watcher tick and chat re-read after an action from the phone
 const ERROR_LOG_EVERY_MS = 60_000;
 
 export class Watcher extends EventEmitter {
@@ -34,7 +34,7 @@ export class Watcher extends EventEmitter {
   #cfg;
   #log;
   #now;
-  #boost = new Map(); // composerId -> fino a quando (ms) rileggere la chat ogni secondo
+  #boost = new Map(); // composerId -> until (ms) to re-read chat every second
   #timer = null;
   #running = false;
   #initial = true;
@@ -43,7 +43,7 @@ export class Watcher extends EventEmitter {
   #announced = new Set();
   #settings = null;
   #settingsAt = 0;
-  #removed = new Set(); // workspace dei progetti rimossi dalla sidebar di Cursor
+  #removed = new Set(); // workspaces of projects removed from Cursor sidebar
   #last = null;
   #status = { ok: false, lastScanAt: null, lastError: null, chats: 0 };
   #lastErrorLogAt = 0;
@@ -76,8 +76,8 @@ export class Watcher extends EventEmitter {
       } catch (err) {
         this.#log.error('tick_failed', errorFields(err));
       }
-      // Per i 2 minuti dopo un'azione dal telefono si guarda 4 volte al secondo (un giro senza riletture profonde costa
-      // ~1 ms, misurato su 11 chat): la reazione dell'agente arriva al telefono senza aspettare il prossimo secondo.
+      // For 2 minutes after an action from the phone, poll 4 times per second (a tick without deep re-reads costs
+      // ~1 ms, measured on 11 chats): agent reaction reaches the phone without waiting for the next second.
       this.#timer = setTimeout(loop, this.#boosted() ? Math.min(BOOST_POLL_MS, this.#cfg.pollMs) : this.#cfg.pollMs);
     };
     loop();
@@ -96,13 +96,13 @@ export class Watcher extends EventEmitter {
     return false;
   }
 
-  /** Rilegge questa chat ogni 250 ms per un po': si chiama dopo una risposta o un messaggio inviati dal telefono. */
+  /** Re-read this chat every 250 ms for a while: called after an answer or message sent from the phone. */
   boost(id, ms = 120_000) {
     this.#boost.set(id, Math.max(this.#boost.get(id) ?? 0, this.#now() + ms));
     for (const [k, until] of this.#boost) if (until <= this.#now()) this.#boost.delete(k);
   }
 
-  /** Riemette lo snapshot corrente (es. dopo aver cambiato le chat ignorate). */
+  /** Re-emits the current snapshot (e.g. after changing ignored chats). */
   recompute() {
     if (this.#last) this.emit('snapshot', this.#last);
   }
@@ -114,17 +114,17 @@ export class Watcher extends EventEmitter {
   }
 
   #onError(err, now) {
-    // Mai il messaggio dell'errore (puo' contenere percorsi o frammenti di contenuto): solo nome e codice.
+    // Never the error message (may contain paths or content fragments): name and code only.
     const detail = String(err?.errstr || err?.code || err?.name || 'errore');
     if (now - this.#lastErrorLogAt >= ERROR_LOG_EVERY_MS) {
       this.#lastErrorLogAt = now;
       this.#log.warn('db_unreadable', errorFields(err));
     }
-    this.#db.close(); // verra' riaperto al prossimo giro
+    this.#db.close(); // reopened on next tick
     this.#setStatus({ ok: false, lastScanAt: this.#status.lastScanAt, lastError: detail.slice(0, 80), chats: this.#status.chats });
   }
 
-  /** Impostazioni della sidebar e progetti rimossi: due chiavi piccole, rilette ogni `SETTINGS_TTL_MS`. */
+  /** Sidebar settings and removed projects: two small keys, re-read every `SETTINGS_TTL_MS`. */
   #readSettings(now) {
     if (this.#settings !== null && now - this.#settingsAt < SETTINGS_TTL_MS) return this.#settings;
     try {
@@ -135,13 +135,13 @@ export class Watcher extends EventEmitter {
     try {
       this.#removed = this.#db.removedWorkspaceIds();
     } catch {
-      // lettura fallita: si tiene l'ultimo elenco noto
+      // read failed: keep last known list
     }
     this.#settingsAt = now;
     return this.#settings;
   }
 
-  /** Legge "coda" e ultimo bubble di una chat e ne classifica l'attenzione richiesta. */
+  /** Reads a chat's "tail" and last bubble and classifies required attention. */
   #scan(entry, sig, now) {
     let tail = null;
     let bubble = null;
@@ -150,7 +150,7 @@ export class Watcher extends EventEmitter {
     try {
       tail = this.#db.composerTail(entry.id);
       bubble = tail?.lastBubble ? this.#db.bubbleSummary(entry.id, tail.lastBubble.id) : null;
-      // Cursor cerca l'approvazione in sospeso tra gli ULTIMI DUE bubble: il penultimo si legge solo se l'ultimo non basta.
+      // Cursor looks for pending approval among the LAST TWO bubbles: read previous only if last is not enough.
       if (tail?.prevBubble && !isPendingReview(bubble?.tool) && !isPendingQuestion(bubble?.tool)) {
         prevBubble = this.#db.bubbleSummary(entry.id, tail.prevBubble.id);
       }
@@ -167,7 +167,7 @@ export class Watcher extends EventEmitter {
         failed = true;
       }
     }
-    // Se la lettura e' fallita, riprova al prossimo giro (firma nulla).
+    // If read failed, retry next tick (null signature).
     return { sig: failed ? null : sig, at: now, tail, bubble, question, att };
   }
 
@@ -179,16 +179,16 @@ export class Watcher extends EventEmitter {
 
     let m = this.#mem.get(entry.id);
 
-    // Rilettura "profonda" di OGNI chat visibile: costa 0,5-3 ms a chat (11 ms in tutto per 9 chat, FINDINGS 9.7) e
-    // l'header da solo non basta, perche' Cursor lo scrive in ritardo (da +5 s a +60 s dalla domanda). A header
-    // invariato si rilegge comunque ogni `fullScanMs`: una domanda nuova compare nel bubble senza che l'header cambi
-    // per decine di secondi (FINDINGS 9.1).
+    // Deep re-read of EVERY visible chat: costs 0.5-3 ms per chat (11 ms total for 9 chats, FINDINGS 9.7) and
+    // header alone is not enough, because Cursor writes it late (from +5 s to +60 s after a question). With unchanged
+    // header we still re-read every `fullScanMs`: a new question appears in the bubble without header changing
+    // for tens of seconds (FINDINGS 9.1).
     let scan = this.#cache.get(entry.id) ?? null;
     const sig = headerSignature(entry);
-    // Un'approvazione appena comparsa e non ancora notificata si rilegge ogni secondo: prima di disturbarti si controlla
-    // che sia ancora in attesa (e non gia' approvata dal Mac).
-    // Lo stesso vale per una chat a cui si e' appena risposto o scritto dal telefono (`boost`): la prossima domanda o
-    // la fine della run si vedono dopo ~0,25 s invece che dopo `fullScanMs`.
+    // A newly appeared approval not yet notified is re-read every second: before notifying, verify
+    // it is still pending (not already approved on the Mac).
+    // Same for a chat just answered or written from the phone (`boost`): next question or
+    // run end shows up after ~0.25 s instead of after `fullScanMs`.
     const boosted = (this.#boost.get(entry.id) ?? 0) > now;
     const hot = scan?.att?.kind === 'approvazione' && !this.#announced.has(`a:${entry.id}:${scan.att.key}`);
     const refresh = scan !== null && now - scan.at >= (boosted ? Math.min(cfg.fullScanMs, BOOST_POLL_MS) : hot ? Math.min(cfg.fullScanMs, 1000) : cfg.fullScanMs);
@@ -197,15 +197,15 @@ export class Watcher extends EventEmitter {
       this.#cache.set(entry.id, scan);
     }
 
-    // L'header e' solo un indizio: puo' restare indietro di decine di secondi o non mostrare affatto una run breve.
-    // Lo stato del composer passa a `completed` nell'istante in cui la run finisce (FINDINGS 9.1): e' la conferma.
+    // Header is only a hint: can lag tens of seconds or miss a short run entirely.
+    // Composer status becomes `completed` the instant the run ends (FINDINGS 9.1): that is the confirmation.
     const running = headerRunning && scan?.tail?.status !== 'completed';
 
     if (!m) {
       m = { running: false, runStartedAt: null, settleSince: null, approvalKey: null, approvalSeenAt: null, approvalFirstAt: null };
       if (running) {
         m.running = true;
-        // Run gia' in corso all'avvio del daemon: non ne conosciamo l'inizio, la consideriamo "lunga abbastanza".
+        // Run already in progress at daemon startup: unknown start, treat as "long enough".
         m.runStartedAt = this.#initial ? now - cfg.minRunMs : now;
       }
       this.#mem.set(entry.id, m);
@@ -225,17 +225,17 @@ export class Watcher extends EventEmitter {
     const events = [];
     const summary = { id: chat.id, name: chat.name, workspaceName: chat.workspaceName, sectionId: chat.sectionId };
 
-    // 1) Nuova richiesta viva: una domanda (`ask_question`) o un'approvazione (`reviewData` Requested), mai un tool in
-    // esecuzione (FINDINGS 9.1, 11). L'approvazione deve restare in attesa per `approvalDelayMs` prima di notificare.
+    // 1) New live request: a question (`ask_question`) or approval (`reviewData` Requested), never a running tool
+    // (FINDINGS 9.1, 11). Approval must stay pending for `approvalDelayMs` before notify.
     let ready = true;
     if (attention?.kind === 'approvazione') {
       if (m.approvalKey !== attention.key) {
         m.approvalKey = attention.key;
         m.approvalFirstAt = now;
-        // Una richiesta gia' presente all'avvio del daemon non "matura" da capo: vale la regola dello stato iniziale.
+        // Request already present at daemon startup does not "mature" from zero: initial-state rule applies.
         m.approvalSeenAt = this.#initial ? now - cfg.approvalDelayMs : now;
-        // Osservazione (solo numeri e booleani, mai contenuti): serve a provare dal vivo che il database contiene davvero
-        // `reviewData: Requested` DURANTE l'attesa (FINDINGS 11.4) e a misurare quanto durano le attese.
+        // Observation (numbers and booleans only, never content): proves live that the database contains
+        // `reviewData: Requested` DURING wait (FINDINGS 11.4) and measures wait duration.
         this.#log.info('approval_seen', {
           ageSec: Math.round((now - attention.since) / 1000),
           running,
@@ -256,7 +256,7 @@ export class Watcher extends EventEmitter {
         this.#announced.add(dedupeKey);
         const recent = now - attention.since <= cfg.startupGraceMs;
         if (this.#initial && !recent) {
-          this.#store.markNotified(dedupeKey, now); // vecchia: la vedi nell'app, ma niente push in ritardo
+          this.#store.markNotified(dedupeKey, now); // old: visible in app, no late push
         } else {
           events.push({
             type: 'attention',
@@ -275,12 +275,12 @@ export class Watcher extends EventEmitter {
       }
     }
 
-    // 2) Chat finita.
+    // 2) Chat done.
     if (m.settleSince !== null && now - m.settleSince >= cfg.doneSettleMs) {
       const runMs = m.settleSince - (m.runStartedAt ?? m.settleSince);
       m.settleSince = null;
-      // Una run che finisce perche' l'agente ha posto una domanda NON e' finita: aspetta l'utente. Il flag nell'header
-      // puo' arrivare dopo, quindi si guarda anche direttamente l'ultimo bubble.
+      // A run that ends because the agent asked a question is NOT done: waiting for user. Header flag
+      // may arrive late, so also check the last bubble directly.
       const waiting = attention?.live === true || isPendingQuestion(scan?.bubble?.tool);
       const queued = (scan?.tail?.queueLength ?? 0) > 0;
       if (!waiting && !queued && runMs >= cfg.minRunMs) {
@@ -302,7 +302,7 @@ export class Watcher extends EventEmitter {
       return;
     }
 
-    // Prima del filtro: l'elenco dei progetti rimossi deve essere aggiornato (rilettura ogni SETTINGS_TTL_MS).
+    // Before filter: removed-project list must be fresh (re-read every SETTINGS_TTL_MS).
     const settings = this.#readSettings(now);
     const visibility = { includeClassic: this.#cfg.includeClassicChats, removedWorkspaceIds: this.#removed };
 
@@ -335,7 +335,7 @@ export class Watcher extends EventEmitter {
     for (const ev of events) this.emit('event', ev);
   }
 
-  /** Chat archiviate (locali, non sottoagenti, di progetti non rimossi): per "Ripristina". Solo dati di sidebar, niente contenuti. */
+  /** Archived chats (local, not subagents, non-removed projects): for "Restore". Sidebar data only, no content. */
   archived({ limit = 40 } = {}) {
     if (!this.#db.isOpen) return [];
     const visibility = { includeClassic: this.#cfg.includeClassicChats, removedWorkspaceIds: this.#removed };
@@ -356,8 +356,8 @@ export class Watcher extends EventEmitter {
   }
 
   /**
-   * Una pagina della conversazione per la PWA (sola lettura). Messaggi di utente e assistente con il testo; i tool come
-   * semplici righe (tipo di azione e stato, mai comandi ne' percorsi); i bubble senza testo ne' tool si saltano.
+   * One page of conversation for the PWA (read-only). User and assistant messages with text; tools as
+   * simple rows (action type and state, never commands or paths); bubbles with neither text nor tool are skipped.
    * @returns {{ items: object[], from: number, total: number, hasMore: boolean } | null}
    */
   history(id, { before = null, limit = 30 } = {}) {
@@ -377,7 +377,7 @@ export class Watcher extends EventEmitter {
     return { items, from: page.from, total: page.total, hasMore: page.from > 0 };
   }
 
-  /** Dettagli on-demand di una chat: ultimo messaggio dell'assistente e domanda (se c'e'). */
+  /** On-demand chat details: last assistant message and question (if any). */
   detail(id) {
     const chat = this.#last?.chats.find((c) => c.id === id);
     if (!chat) return null;
@@ -400,7 +400,7 @@ export class Watcher extends EventEmitter {
         }
       }
     } catch {
-      // dettaglio non disponibile: la PWA mostra solo i dati dello snapshot
+      // detail unavailable: PWA shows snapshot data only
     }
     return { lastMessage, question, activity, approval };
   }

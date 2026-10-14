@@ -1,11 +1,11 @@
-// CLI di servizio: `npm run pair | status | probe | cdp` (da daemon/).
+// Service CLI: `npm run pair | status | probe | cdp` (from daemon/).
 //
-//   pair    genera un codice di abbinamento monouso da inserire nella PWA sull'iPhone
-//   status  controlla se il daemon risponde e riassume sessioni/sottoscrizioni (nessun contenuto di chat)
-//   probe   legge il database di Cursor (sola lettura) e riassume cosa vedrebbe il daemon.
-//           Per default NON stampa titoli ne' nomi di cartelle; con --names mostra i nomi dei workspace.
-//   cdp     diagnostica delle azioni (Fase 2): `npm run cdp -- status | inspect | tray [--names|--texts]`.
-//           Solo lettura della pagina: non clicca e non scrive nulla in Cursor.
+//   pair    generate a one-time pairing code to enter in the PWA on iPhone
+//   status  check if the daemon responds and summarize sessions/subscriptions (no chat content)
+//   probe   read Cursor database (read-only) and summarize what the daemon would see.
+//           By default does NOT print titles or folder names; --names shows workspace names.
+//   cdp     action diagnostics (Phase 2): `npm run cdp -- status | inspect | tray [--names|--texts]`.
+//           Read-only page inspection: no clicks and no writes to Cursor.
 import path from 'node:path';
 import { Auth } from './auth.js';
 import { loadConfig } from './config.js';
@@ -30,10 +30,10 @@ async function pair() {
   store.close();
   const minutes = Math.round(config.pairingTtlMs / 60_000);
   console.log('');
-  console.log(`  Codice di abbinamento:  ${code}`);
+  console.log(`  Pairing code:  ${code}`);
   console.log('');
-  console.log(`  Valido per ${minutes} minuti (fino alle ${fmtTime(expiresAt)}) e utilizzabile una sola volta.`);
-  console.log("  Inseriscilo nella schermata di accesso dell'app installata sull'iPhone.");
+  console.log(`  Valid for ${minutes} minutes (until ${fmtTime(expiresAt)}) and usable once.`);
+  console.log("  Enter it on the sign-in screen of the app installed on your iPhone.");
   console.log('');
 }
 
@@ -46,15 +46,15 @@ async function status() {
   } catch {
     up = false;
   }
-  console.log(`Daemon su ${config.host}:${config.port}: ${up ? 'attivo' : 'NON raggiungibile'}`);
+  console.log(`Daemon at ${config.host}:${config.port}: ${up ? 'up' : 'NOT reachable'}`);
   try {
     const store = new Store(path.join(config.dataDir, 'store.db'));
-    console.log(`Dispositivi abbinati (sessioni): ${store.listSessions().length}`);
-    console.log(`Sottoscrizioni push: ${store.countSubscriptions()}`);
-    console.log(`Richieste ignorate: ${store.ignoredSet().size}`);
+    console.log(`Paired devices (sessions): ${store.listSessions().length}`);
+    console.log(`Push subscriptions: ${store.countSubscriptions()}`);
+    console.log(`Ignored requests: ${store.ignoredSet().size}`);
     store.close();
   } catch (err) {
-    console.log(`Archivio locale non leggibile: ${err.message}`);
+    console.log(`Local store not readable: ${err.message}`);
   }
   process.exitCode = up ? 0 : 1;
 }
@@ -65,7 +65,7 @@ async function probe() {
   try {
     db.open();
   } catch (err) {
-    console.error(`Database di Cursor non leggibile: ${err.message}`);
+    console.error(`Cursor database not readable: ${err.message}`);
     process.exit(1);
   }
   const now = Date.now();
@@ -92,20 +92,20 @@ async function probe() {
   db.close();
   const state = presentState({ chats, settings, ignored: new Set(), now, pendingAfterMs: config.pendingAfterMs });
 
-  console.log(`Chat visibili: ${state.counts.total} | richiedono attenzione: ${state.counts.attention} | in sospeso: ${state.counts.pending} | in corso: ${state.counts.running}`);
-  console.log(`Nascoste perche' il progetto e' rimosso dalla sidebar di Cursor: ${hiddenByRemoval}`);
-  console.log(`Raggruppamento Cursor: ${settings?.groupBy ?? '?'} | ordine gruppi: ${settings?.sortGroupsBy ?? '?'}`);
-  console.log('Gruppi nell\'ordine della sidebar:');
+  console.log(`Visible chats: ${state.counts.total} | need attention: ${state.counts.attention} | pending: ${state.counts.pending} | running: ${state.counts.running}`);
+  console.log(`Hidden because project removed from Cursor sidebar: ${hiddenByRemoval}`);
+  console.log(`Cursor grouping: ${settings?.groupBy ?? '?'} | group order: ${settings?.sortGroupsBy ?? '?'}`);
+  console.log('Groups in sidebar order:');
   state.workspaces.forEach((w, i) => {
-    const label = showNames ? w.name : `gruppo ${i + 1}`;
+    const label = showNames ? w.name : `group ${i + 1}`;
     const kinds = {};
     for (const c of w.chats) if (c.attention) kinds[c.attention.kind] = (kinds[c.attention.kind] || 0) + 1;
     const extra = Object.entries(kinds).map(([k, n]) => `${k}:${n}`).join(' ');
-    console.log(`  ${String(i + 1).padStart(2)}. ${label}  chat=${w.chats.length}${w.collapsed ? ' [compresso]' : ''}${extra ? `  ${extra}` : ''}`);
+    console.log(`  ${String(i + 1).padStart(2)}. ${label}  chats=${w.chats.length}${w.collapsed ? ' [collapsed]' : ''}${extra ? `  ${extra}` : ''}`);
   });
 }
 
-/** Diagnostica della porta di debug e della pagina Agents. Mai clic, mai scritture; testi solo con --texts/--names. */
+/** Debug port and Agents page diagnostics. Never clicks or writes; texts only with --texts/--names. */
 async function cdp() {
   const sub = args.find((a) => !a.startsWith('--')) ?? 'status';
   const showNames = args.includes('--names');
@@ -113,21 +113,21 @@ async function cdp() {
   const ui = new AgentsUi({ port: config.cdpPort });
   const p = await ui.probe();
   if (!p.up) {
-    console.log(`Porta di debug ${config.cdpPort}: CHIUSA (Cursor non e' stato avviato con --remote-debugging-port=${config.cdpPort}).`);
-    console.log('Per attivare le azioni: chiudi Cursor e riaprilo con tools/cursor-cdp.sh (vedi docs/SETUP.md).');
+    console.log(`Debug port ${config.cdpPort}: CLOSED (Cursor was not started with --remote-debugging-port=${config.cdpPort}).`);
+    console.log('To enable actions: quit Cursor and reopen with tools/cursor-cdp.sh (see docs/SETUP.md).');
     process.exitCode = 1;
     return;
   }
   if (sub === 'status') {
     const found = await ui.hasWindow();
-    console.log(`Porta di debug ${config.cdpPort}: attiva (${p.browser ?? 'versione sconosciuta'})`);
-    console.log(`Finestra Agents: ${found ? 'trovata' : 'NON trovata'}`);
+    console.log(`Debug port ${config.cdpPort}: open (${p.browser ?? 'unknown version'})`);
+    console.log(`Agents window: ${found ? 'found' : 'NOT found'}`);
     if (!found) process.exitCode = 1;
     return;
   }
   if (sub === 'inspect') {
     const info = await ui.inspect();
-    const out = { ...info, targets: (info.targets ?? []).map((t, i) => ({ finestra: i + 1, titolo: showNames ? t.title : `(${t.title.length} caratteri)`, url: t.url.split('?')[0].slice(0, 60) })) };
+    const out = { ...info, targets: (info.targets ?? []).map((t, i) => ({ finestra: i + 1, titolo: showNames ? t.title : `(${t.title.length} chars)`, url: t.url.split('?')[0].slice(0, 60) })) };
     if (out.page && !showNames) delete out.page.title;
     console.log(JSON.stringify(out, null, 2));
     return;
@@ -135,7 +135,7 @@ async function cdp() {
   if (sub === 'tray') {
     const view = await ui.readTray();
     if (!view) {
-      console.log('Nessun questionario visibile nella finestra Agents.');
+      console.log('No questionnaire visible in the Agents window.');
       return;
     }
     const out = {
@@ -145,17 +145,17 @@ async function cdp() {
       secondario: view.secondary,
       ...(showTexts ? { testo: view.text.slice(0, 600) } : {}),
     };
-    if (!showTexts) out.campoLibero = { ...view.freeform, text: view.freeform.text ? '(presente)' : '' };
+    if (!showTexts) out.campoLibero = { ...view.freeform, text: view.freeform.text ? '(present)' : '' };
     console.log(JSON.stringify(out, null, 2));
     return;
   }
-  console.error('Uso: npm run cdp -- <status|inspect|tray> [--names] [--texts]');
+  console.error('Usage: npm run cdp -- <status|inspect|tray> [--names] [--texts]');
   process.exitCode = 2;
 }
 
 const commands = { pair, status, probe, cdp };
 if (!commands[cmd]) {
-  console.error('Uso: node src/cli.js <pair|status|probe|cdp> [--names]');
+  console.error('Usage: node src/cli.js <pair|status|probe|cdp> [--names]');
   process.exit(2);
 }
 await commands[cmd]();
