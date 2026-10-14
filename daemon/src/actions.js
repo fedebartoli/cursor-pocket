@@ -22,7 +22,7 @@ export class ActionError extends Error {
   }
 }
 
-export const LIMITS = Object.freeze({ messageChars: 8000, freeformChars: 4000 });
+export const LIMITS = Object.freeze({ messageChars: 8000, freeformChars: 4000, nameChars: 100 });
 
 const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
 
@@ -86,6 +86,9 @@ const UI_ERRORS = {
   draft_not_empty: [409, 'draft_not_empty', 'Sul Mac questa chat ha gia\' una bozza nel campo di scrittura: inviala o svuotala prima.'],
   no_approval: [409, 'no_approval', 'La richiesta non risulta piu\' in attesa in Cursor (forse l\'hai gia\' decisa sul Mac).'],
   question_pending: [409, 'question_pending', 'La chat ha una domanda in attesa: rispondi prima a quella.'],
+  no_menu_item: [409, 'ui_changed', 'Cursor non mostra la voce di menu attesa: controlla sul Mac.'],
+  no_rename_field: [409, 'ui_changed', 'Cursor non ha aperto il campo del nome: controlla sul Mac.'],
+  bad_name: [400, 'bad_name', 'Nome non valido.'],
   not_running: [409, 'not_running', 'L\'agente non sta lavorando in Cursor (forse ha gia\' finito).'],
 };
 
@@ -375,6 +378,72 @@ export class Actions extends EventEmitter {
       ok = true;
       this.logger.info('stop_agent', { verified: res.verified === true });
       this.watcher.boost?.(chatId);
+      return res;
+    } finally {
+      slot.done(ok);
+    }
+  }
+
+  /** Rinomina la chat nella sidebar di Cursor (come "Rename" dal menu della riga). Il nome si legge poi dal database per conferma. */
+  async rename(chatId, { name } = {}) {
+    if (typeof name !== 'string') throw new ActionError(400, 'bad_name', 'Scrivi un nome');
+    const clean = cleanText(name).replace(/\s+/g, ' ').trim();
+    if (!clean) throw new ActionError(400, 'bad_name', 'Scrivi un nome');
+    if (clean.length > LIMITS.nameChars) throw new ActionError(400, 'bad_name', `Nome troppo lungo (massimo ${LIMITS.nameChars} caratteri)`);
+    this.#requireReady();
+    this.#chat(chatId);
+    const slot = this.#dedupe('rename', chatId, crypto.createHash('sha1').update(clean).digest('hex').slice(0, 16), 4_000);
+    let ok = false;
+    try {
+      const res = await this.#run('rename', async () => {
+        await this.ui.rename({ composerId: chatId, name: clean });
+        const r = await this.#waitFor(() => (this.db.chatFlags(chatId)?.name === clean ? true : null), 8_000);
+        return { ok: true, verified: Boolean(r) };
+      });
+      ok = true;
+      this.logger.info('rename_chat', { verified: res.verified === true });
+      this.watcher.boost?.(chatId);
+      return res;
+    } finally {
+      slot.done(ok);
+    }
+  }
+
+  /** Archivia una chat (non una che sta lavorando). */
+  async archive(chatId) {
+    this.#requireReady();
+    const chat = this.#chat(chatId);
+    if (chat.running) throw new ActionError(409, 'running', 'L\'agente sta ancora lavorando: fermalo prima di archiviare la chat.');
+    const slot = this.#dedupe('archive', chatId, 'archive', 6_000);
+    let ok = false;
+    try {
+      const res = await this.#run('archive', async () => {
+        await this.ui.archive({ composerId: chatId });
+        const r = await this.#waitFor(() => (this.db.chatFlags(chatId)?.archived === true ? true : null), 8_000);
+        return { ok: true, verified: Boolean(r) };
+      });
+      ok = true;
+      this.logger.info('archive_chat', { verified: res.verified === true });
+      return res;
+    } finally {
+      slot.done(ok);
+    }
+  }
+
+  /** Ripristina una chat archiviata (solo se risulta tra quelle archiviate e visibili). */
+  async restore(chatId) {
+    this.#requireReady();
+    if (!this.watcher.archived({ limit: 200 }).some((c) => c.id === chatId)) throw new ActionError(404, 'not_found', 'Chat archiviata non trovata');
+    const slot = this.#dedupe('restore', chatId, 'restore', 6_000);
+    let ok = false;
+    try {
+      const res = await this.#run('restore', async () => {
+        await this.ui.unarchive({ composerId: chatId });
+        const r = await this.#waitFor(() => (this.db.chatFlags(chatId)?.archived === false ? true : null), 8_000);
+        return { ok: true, verified: Boolean(r) };
+      });
+      ok = true;
+      this.logger.info('restore_chat', { verified: res.verified === true });
       return res;
     } finally {
       slot.done(ok);

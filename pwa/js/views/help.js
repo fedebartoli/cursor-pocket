@@ -20,6 +20,13 @@ const SECTIONS = [
     ],
   },
   {
+    title: 'Gestire le chat',
+    items: [
+      'In fondo alla pagina di una chat puoi rinominarla o archiviarla. Un\u2019agente al lavoro non si archivia: fermalo prima.',
+      'Le chat archiviate si ripristinano da Impostazioni, Chat archiviate. Sul Mac Cursor esegue le stesse azioni del menu della riga.',
+    ],
+  },
+  {
     title: 'Mac sveglio',
     items: [
       'Con l\u2019interruttore acceso, il Mac non va in stop mentre un agente lavora e torna normale subito dopo. Con lo schermo chiuso funziona solo con il caricatore collegato.',

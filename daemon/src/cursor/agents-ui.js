@@ -49,6 +49,11 @@ export const SEL = Object.freeze({
   // transcript, che porta `data-message-id` = id del bubble nel database. In fondo ha "Skip" e "Run" (piu' il menu
   // delle opzioni e il pulsante della modalita' di esecuzione automatica, che NON si toccano).
   shellCard: '.ui-shell-tool-call',
+  // Menu contestuale di una riga (tasto destro) e rinomina in linea: voci `role=menuitem`; il campo del nome e' un input
+  // `ui-text-editable` dentro la riga, con il testo gia' selezionato.
+  menuItem: '[role="menuitem"],[role="menuitemcheckbox"]',
+  renameInput: 'input.ui-text-editable',
+  customize: 'button[aria-label="Customize Sidebar"]',
   messageIdAttr: 'data-message-id',
 });
 
@@ -56,6 +61,13 @@ export const SEL = Object.freeze({
 // il selettore della modalita' automatica: l'espressione e' ancorata di proposito perche' NON lo catturi.
 const APPROVE_LABEL = '^(run|esegui)\\s*(\\u23ce|\\u21b5|enter)?$';
 const REJECT_LABEL = '^(skip|salta)$';
+// Voci del menu di una riga (inglese; italiano per le interfacce localizzate).
+const MENU = Object.freeze({
+  rename: '^(rename|rinomina)$',
+  archive: '^(archive|archivia)$',
+  unarchive: '^(unarchive|restore|ripristina|dearchivia)$',
+  archivedFilter: '^(archived|archiviat[eio])$',
+});
 
 // ---------------------------------------------------------------------------------------------------------------
 // Codice eseguito NELLA PAGINA di Cursor. Le due funzioni sono autosufficienti (niente variabili del modulo):
@@ -158,6 +170,10 @@ function pageKit(SEL, APPROVE_LABEL, REJECT_LABEL) {
     const root = (c && (c.closest('form') || c.parentElement?.parentElement?.parentElement?.parentElement)) || document;
     return [...root.querySelectorAll(SEL.send)].find(K.visible) || [...document.querySelectorAll(SEL.send)].find(K.visible) || null;
   };
+  K.menuItems = () => [...document.querySelectorAll(SEL.menuItem)].filter(K.visible);
+  K.menuItem = (re) => K.menuItems().find((m) => new RegExp(re, 'i').test(K.text(m))) || null;
+  K.renameInput = () => [...document.querySelectorAll(SEL.renameInput)].find(K.visible) || null;
+  K.customize = () => [...document.querySelectorAll(SEL.customize)].find(K.visible) || null;
   K.stop = () => [...K.scope().querySelectorAll(SEL.stop)].find(K.visible) || null;
   return K;
 }
@@ -202,6 +218,12 @@ function pageDo(a, K) {
         return K.send();
       case 'stop':
         return K.stop();
+      case 'menuitem':
+        return K.menuItem(a.label);
+      case 'renameInput':
+        return K.renameInput();
+      case 'customize':
+        return K.customize();
       default:
         return null;
     }
@@ -271,6 +293,14 @@ function pageDo(a, K) {
       if (!card) return { found: false };
       const b = K.approvalButtons(card);
       return { found: true, approve: !!b.approve && !K.isDisabled(b.approve), reject: !!b.reject && !K.isDisabled(b.reject) };
+    }
+    case 'menuState': {
+      const f = K.menuItem(a.label);
+      return { open: document.querySelectorAll('[role="menu"]').length > 0, checked: f ? f.getAttribute('aria-checked') : null };
+    }
+    case 'renameState': {
+      const i = K.renameInput();
+      return { editing: !!i, focused: !!i && document.activeElement === i, value: i ? String(i.value || '') : '' };
     }
     case 'outline': {
       // Solo struttura: nomi di attributi e classi, mai testi.
@@ -391,6 +421,16 @@ class Ctx {
       throw new UiError('click_failed', `clic non riuscito: ${args.target}`);
     }
     await this.s.click(loc.x, loc.y);
+  }
+
+  /** Tasto destro al centro dell'elemento (menu contestuale). */
+  async rightClick(args) {
+    const loc = await this.locate(args);
+    if (!loc.found) throw new UiError('not_found', `elemento non trovato: ${args.target}`);
+    const base = { x: loc.x, y: loc.y, button: 'right', clickCount: 1 };
+    await this.s.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: loc.x, y: loc.y });
+    await this.s.send('Input.dispatchMouseEvent', { ...base, type: 'mousePressed', buttons: 2 });
+    await this.s.send('Input.dispatchMouseEvent', { ...base, type: 'mouseReleased', buttons: 0 });
   }
 
   /** Scrive testo con il focus gia' sull'elemento; `\n` diventa Maiusc+Invio (a capo senza inviare). */
@@ -703,6 +743,110 @@ export class AgentsUi {
         return { clicked: true, settled: Boolean(gone) };
       } finally {
         await this.#restore(ctx, previous, composerId);
+      }
+    });
+  }
+
+
+  /** Tasto destro sulla riga e clic sulla voce `label` del menu (regex). */
+  async #rowMenu(ctx, composerId, label) {
+    const loc = await ctx.locate({ target: 'row', id: composerId });
+    if (!loc.found) throw new UiError('row_not_found', 'chat non trovata nella sidebar di Cursor');
+    await ctx.rightClick({ target: 'row', id: composerId });
+    const item = await waitFor(async () => {
+      const l = await ctx.locate({ target: 'menuitem', label });
+      return l.found ? l : null;
+    }, { timeoutMs: 2500, sleep: this.sleep });
+    if (!item) {
+      await ctx.s.pressKey(KEYS.escape).catch(() => {});
+      throw new UiError('no_menu_item', 'voce di menu non trovata in Cursor');
+    }
+    await ctx.clickTarget({ target: 'menuitem', label });
+  }
+
+  /** Rinomina una chat dalla sidebar (menu "Rename", scrittura in linea, Invio). */
+  async rename({ composerId, name }) {
+    if (typeof name !== 'string' || !name.trim()) throw new UiError('bad_name', 'nome non valido');
+    return this.withSession(async (ctx) => {
+      await this.#rowMenu(ctx, composerId, MENU.rename);
+      const editing = await waitFor(async () => {
+        const st = await ctx.page({ op: 'renameState' });
+        return st.editing && st.focused ? st : null; // il campo deve avere il focus, altrimenti il testo va perso
+      }, { timeoutMs: 2500, sleep: this.sleep });
+      if (!editing) throw new UiError('no_rename_field', 'campo del nome non apparso');
+      // Il testo e' gia' selezionato all'apertura: scrivere lo sostituisce. Si controlla prima di confermare.
+      await ctx.typeText(name);
+      const typed = await waitFor(async () => {
+        const st = await ctx.page({ op: 'renameState' });
+        return st.editing && norm(st.value) === norm(name) ? st : null;
+      }, { timeoutMs: 2500, sleep: this.sleep });
+      if (!typed) {
+        await ctx.s.pressKey(KEYS.escape).catch(() => {});
+        throw new UiError('type_failed', 'nome non inserito');
+      }
+      await ctx.s.pressKey(KEYS.enter);
+      const done = await waitFor(async () => (!(await ctx.page({ op: 'renameState' })).editing ? true : null), { timeoutMs: 3000, sleep: this.sleep });
+      if (!done) {
+        await ctx.s.pressKey(KEYS.escape).catch(() => {});
+        throw new UiError('rename_failed', 'rinomina non confermata');
+      }
+      return { clicked: true };
+    });
+  }
+
+  /** Archivia una chat (menu della riga, voce "Archive"). */
+  async archive({ composerId }) {
+    return this.withSession(async (ctx) => {
+      await this.#rowMenu(ctx, composerId, MENU.archive);
+      return { clicked: true };
+    });
+  }
+
+  /**
+   * Ripristina una chat archiviata: accende per un attimo il filtro "Archived" della sidebar (le righe archiviate non ci sono
+   * altrimenti), usa "Unarchive" dal menu della riga e rimette SEMPRE il filtro com'era.
+   */
+  async unarchive({ composerId }) {
+    return this.withSession(async (ctx) => {
+      const filterIs = async () => {
+        await ctx.clickTarget({ target: 'customize' });
+        const st = await waitFor(async () => {
+          const x = await ctx.page({ op: 'menuState', label: MENU.archivedFilter });
+          return x.checked !== null ? x : null;
+        }, { timeoutMs: 2500, sleep: this.sleep });
+        if (!st) {
+          await ctx.s.pressKey(KEYS.escape).catch(() => {});
+          throw new UiError('no_menu_item', 'filtro delle archiviate non trovato in Cursor');
+        }
+        return st.checked === 'true';
+      };
+      const toggle = async () => {
+        await ctx.clickTarget({ target: 'menuitem', label: MENU.archivedFilter });
+        await this.sleep(300);
+        await ctx.s.pressKey(KEYS.escape).catch(() => {});
+        await this.sleep(300);
+      };
+      const wasOn = await filterIs();
+      if (!wasOn) await toggle();
+      else {
+        await ctx.s.pressKey(KEYS.escape).catch(() => {});
+        await this.sleep(200);
+      }
+      try {
+        const shown = await waitFor(async () => ((await ctx.locate({ target: 'row', id: composerId })).found ? true : null), { timeoutMs: 3500, sleep: this.sleep });
+        if (!shown) throw new UiError('row_not_found', 'chat archiviata non trovata nella sidebar di Cursor');
+        await this.#rowMenu(ctx, composerId, MENU.unarchive);
+        await this.sleep(400);
+        return { clicked: true };
+      } finally {
+        if (!wasOn) {
+          try {
+            if (await filterIs()) await toggle();
+            else await ctx.s.pressKey(KEYS.escape).catch(() => {});
+          } catch {
+            // ripristino del filtro best-effort: un errore qui non deve nascondere l'esito
+          }
+        }
       }
     });
   }

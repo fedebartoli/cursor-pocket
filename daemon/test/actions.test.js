@@ -211,6 +211,9 @@ class FakeUi {
     this.onMessage = null;
     this.onApproval = null;
     this.onStop = null;
+    this.onRename = null;
+    this.onArchive = null;
+    this.onUnarchive = null;
   }
   async probe() {
     return { up: this.up };
@@ -238,6 +241,15 @@ class FakeUi {
   }
   async stop(args) {
     return this.#run('stop', args, this.onStop);
+  }
+  async rename(args) {
+    return this.#run('rename', args, this.onRename);
+  }
+  async archive(args) {
+    return this.#run('archive', args, this.onArchive);
+  }
+  async unarchive(args) {
+    return this.#run('unarchive', args, this.onUnarchive);
   }
 }
 
@@ -693,6 +705,73 @@ test('ferma l\'agente via HTTP: errore di Cursor tradotto, nessuna azione con la
     await h.app.actions.refresh();
     const off = await post('stop', {});
     assert.equal(off.status, 503);
+  } finally {
+    await h.stop();
+  }
+});
+
+test('rinomina via HTTP: nome ripulito e validato, clic sulla chat giusta, esito letto dal database, niente doppio invio', async () => {
+  const { h, ui, post } = await setup({ withQuestion: false });
+  try {
+    ui.onRename = ({ name }) => h.fx.chat(ID, { name });
+    assert.equal((await post('rename', {})).status, 400);
+    assert.equal((await post('rename', { name: '   ' })).status, 400);
+    assert.equal((await post('rename', { name: 'x'.repeat(101) })).status, 400);
+    assert.equal(ui.calls.length, 0, 'nessun accesso a Cursor con un nome non valido');
+
+    const r = await post('rename', { name: '  Nuovo\n  nome\u0007 ' });
+    assert.equal(r.status, 200, r.text);
+    assert.equal(r.json().verified, true);
+    assert.deepEqual(ui.calls.map((c) => [c[0], c[1].composerId, c[1].name]), [['rename', ID, 'Nuovo nome']]);
+    assert.equal((await post('rename', { name: 'Nuovo nome' })).json().error, 'already_sent');
+    assert.equal((await h.req({ method: 'POST', path: '/api/chats/22222222-2222-4222-8222-222222222222/rename', cookie: h.cookie ?? (await h.pair()), body: { name: 'x' } })).status, 404);
+
+    ui.onRename = null; // Cursor non cambia il nome: non confermato
+    const nc = await post('rename', { name: 'Altro' });
+    assert.equal(nc.json().verified, false);
+    assert.ok(!h.logLines.join('').includes('Nuovo nome'), 'il nome non finisce nei log');
+  } finally {
+    await h.stop();
+  }
+});
+
+test('archivia e ripristina via HTTP: non una chat che lavora; elenco archiviate; verifica dal database', async () => {
+  const { h, ui, cookie, post } = await setup({ withQuestion: false });
+  try {
+    // chat che lavora: no
+    h.fx.chat(ID, { name: 'Titolo', lastUpdatedAt: T0 - 500, header: { unfinishedRunAt: T0 - 1000 } });
+    h.fx.conversation(ID, [{ id: 'b1', type: 1, createdAt: T0 - 3000, text: 'Fai' }, { id: 'b2', type: 2, createdAt: T0 - 2000, text: '...' }], { status: 'generating' });
+    h.tick();
+    const busy = await post('archive', {});
+    assert.equal(busy.status, 409);
+    assert.equal(busy.json().error, 'running');
+    assert.equal(ui.calls.length, 0);
+
+    // ferma: si archivia
+    h.fx.chat(ID, { header: { unfinishedRunAt: undefined } });
+    h.fx.db.prepare('UPDATE cursorDiskKV SET value = json_set(value, \'$.status\', \'completed\') WHERE key = ?').run(`composerData:${ID}`);
+    h.tick();
+    ui.onArchive = () => h.fx.chat(ID, { archived: true });
+    const r = await post('archive', {});
+    assert.equal(r.status, 200, r.text);
+    assert.equal(r.json().verified, true);
+    h.tick();
+
+    // ora e' archiviata: compare nell'elenco, non nello stato
+    const list = (await h.req({ path: '/api/archived', cookie })).json().chats;
+    assert.deepEqual(list.map((c) => c.id), [ID]);
+    assert.deepEqual(Object.keys(list[0]).sort(), ['id', 'lastUpdatedAt', 'name', 'sectionId', 'workspaceName']);
+    assert.equal((await h.req({ path: '/api/archived' })).status, 401);
+
+    // ripristino: solo di una archiviata
+    assert.equal((await h.req({ method: 'POST', path: '/api/archived/22222222-2222-4222-8222-222222222222/restore', cookie, body: {} })).status, 404);
+    ui.onUnarchive = () => h.fx.chat(ID, { archived: false });
+    const back = await h.req({ method: 'POST', path: `/api/archived/${ID}/restore`, cookie, body: {} });
+    assert.equal(back.status, 200, back.text);
+    assert.equal(back.json().verified, true);
+    assert.deepEqual(ui.calls.map((c) => c[0]), ['archive', 'unarchive']);
+    h.tick();
+    assert.equal((await h.req({ path: '/api/archived', cookie })).json().chats.length, 0);
   } finally {
     await h.stop();
   }

@@ -616,6 +616,19 @@ viewport, che su iOS 10+ impedisce lo zoom automatico al focus ma lascia lo zoom
   successo: 1.0). Con lo schermo chiuso (`ioreg AppleClamshellState = Yes`) e un agente al lavoro si porta a 0 salvando il valore
   (anche in `meta` e nella guardia); si ripristina all'apertura o a fine lavoro. Non prova possibile senza chiudere davvero lo schermo.
 
+### 10.4j Rinomina, archivia, ripristina (15/10) [PROVATO DAL VIVO su una chat di prova in Cursor; PWA NON PROVATA su iPhone]
+- Dalla pagina di una chat: "Rinomina" (campo con il nome attuale) e "Archivia" (due tocchi, disattivato se l'agente lavora). Da
+  Impostazioni > Chat archiviate: elenco con "Ripristina". API: `POST /api/chats/:id/rename {name}`, `POST /api/chats/:id/archive`,
+  `GET /api/archived`, `POST /api/archived/:id/restore`.
+- Tutto passa dal menu contestuale della riga nella sidebar di Cursor (tasto destro via CDP, `Input.dispatchMouseEvent` con
+  `button: 'right'`, `buttons: 2`): voci `Rename`, `Archive`, `Unarchive`. Rinomina = campo `input.ui-text-editable` gia' selezionato,
+  si scrive e si preme Invio (verificato il focus prima di scrivere); esito letto dal database (`composerHeaders.value.name`).
+  Archivia = `composerHeaders.isArchived` diventa 1 (letto dal database).
+- Le righe archiviate non sono nella sidebar: il ripristino accende il filtro "Archived" (menu "Customize Sidebar", voce
+  `menuitemcheckbox`), usa "Unarchive" e RIMETTE il filtro com'era (impostazione persistente di Cursor). Verificato dal vivo: tornato spento.
+- Prova dal vivo (Test Chat): rinomina e ritorno al nome originale; archivia -> `isArchived` true -> ripristina -> false, filtro spento.
+- NON provato: archiviare una chat con una domanda in attesa; non si archivia una chat in corso (409 `running`).
+
 ### 10.5 Da verificare dal vivo, con Cursor riavviato con la porta di debug [NON PROVATO]
 Ogni punto ha una diagnostica pronta: `cd daemon && npm run cdp -- status | inspect | tray` (stampa la struttura della
 pagina e mai i testi).

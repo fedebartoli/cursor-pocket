@@ -244,4 +244,53 @@ describe('AgentsUi su Chromium con la pagina finta', { skip }, () => {
       assert.deepEqual((await state()).stopped, []);
     });
   });
+
+  describe('menu della riga: rinomina, archivia, ripristina', () => {
+    const cfg = () => ({ current: 'chat-b', chats: { 'chat-a': { name: 'Chat A' }, 'chat-b': { name: 'Chat B' }, 'chat-z': { name: 'Chat Z', archived: true } } });
+
+    it('rinomina: tasto destro, "Rename", testo scritto al posto di quello selezionato, Invio; non cambia la chat aperta', async () => {
+      await reset(cfg());
+      const r = await ui.rename({ composerId: 'chat-a', name: 'Nome nuovo' });
+      assert.equal(r.clicked, true);
+      const st = await state();
+      assert.deepEqual(st.renamed, [{ id: 'chat-a', name: 'Nome nuovo' }]);
+      assert.equal(st.renaming, null);
+      assert.equal(st.current, 'chat-b');
+    });
+
+    it('rinomina: chat non in sidebar -> row_not_found; nome vuoto -> bad_name', async () => {
+      await reset(cfg());
+      await assert.rejects(() => ui.rename({ composerId: 'chat-x', name: 'x' }), (e) => e.code === 'row_not_found');
+      await assert.rejects(() => ui.rename({ composerId: 'chat-a', name: '  ' }), (e) => e.code === 'bad_name');
+      assert.deepEqual((await state()).renamed, []);
+    });
+
+    it('archivia: voce "Archive" del menu della riga', async () => {
+      await reset(cfg());
+      await ui.archive({ composerId: 'chat-a' });
+      assert.deepEqual((await state()).archived, ['chat-a']);
+    });
+
+    it('ripristina: accende il filtro "Archived", usa "Unarchive" e RIMETTE il filtro com\'era', async () => {
+      await reset(cfg());
+      const r = await ui.unarchive({ composerId: 'chat-z' });
+      assert.equal(r.clicked, true);
+      const st = await state();
+      assert.deepEqual(st.unarchived, ['chat-z']);
+      assert.equal(st.showArchived, false, 'il filtro delle archiviate torna spento');
+    });
+
+    it('ripristina con il filtro gia\' acceso: lo lascia acceso', async () => {
+      await reset(cfg());
+      await browser.evalPage(`document.querySelector('#customize').click(); document.querySelector('[role="menuitemcheckbox"]').click(); document.dispatchEvent(new KeyboardEvent('keydown', { key: 'Escape' })); 0`);
+      await ui.unarchive({ composerId: 'chat-z' });
+      assert.equal((await state()).showArchived, true);
+    });
+
+    it('ripristina una chat che non c\'e\': row_not_found e filtro rimesso a posto', async () => {
+      await reset(cfg());
+      await assert.rejects(() => ui.unarchive({ composerId: 'chat-nope' }), (e) => e.code === 'row_not_found');
+      assert.equal((await state()).showArchived, false);
+    });
+  });
 });

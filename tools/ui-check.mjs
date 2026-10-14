@@ -204,7 +204,7 @@ try {
 
   // "Come funziona" sta sotto Impostazioni e contiene le spiegazioni tolte dalle schermate
   await page.goto(`${BASE}/#/impostazioni`);
-  await page.locator('.help-link').click();
+  await page.locator('.help-link[href="#/come-funziona"]').click();
   await page.waitForSelector('.help-list');
   check('Come funziona: raggiungibile da Impostazioni, con Impostazioni attiva nella barra', (await page.locator('.tab[aria-current=page]').innerText()).includes('Impostazioni') && (await page.locator('.help-list li').count()) >= 6);
   await page.goto(CHAT(1));
@@ -527,6 +527,35 @@ try {
   await shot('16-history');
   await page.locator('.appbar-back').click();
   await page.waitForSelector('.chat-head');
+
+  // --- gestione chat: rinomina, archivia, ripristina ---
+  await page.goto(CHAT(13));
+  await page.waitForSelector('.manage');
+  check('gestione: in una chat ferma ci sono "Rinomina" e "Archivia" (con icone SVG)', (await page.locator('.manage .btn svg').count()) === 2 && (await page.locator('.manage .btn', { hasText: 'Archivia' }).isEnabled()));
+  await page.locator('.manage .btn', { hasText: 'Rinomina' }).click();
+  await page.waitForSelector('#rename-input');
+  check('gestione: il campo del nome parte con il nome attuale e il focus', (await page.locator('#rename-input').inputValue()) === 'Testi della pagina iniziale' && (await page.evaluate(() => document.activeElement?.id)) === 'rename-input');
+  await shot('18-rename');
+  await page.locator('#rename-input').fill('Testi rivisti');
+  await page.locator('.rename-form .btn.primary').click();
+  await page.waitForFunction(() => document.querySelector('.chat-name')?.textContent === 'Testi rivisti', null, { timeout: 10000 });
+  check('gestione: dopo "Salva" il titolo della chat cambia e il campo si chiude', (await page.locator('#rename-input').count()) === 0 && (await page.locator('.manage', { hasText: 'Nome cambiato' }).count()) === 1);
+  await page.locator('.manage .btn', { hasText: 'Archivia' }).click();
+  check('gestione: "Archivia" chiede un secondo tocco', (await page.locator('.manage .btn.armed').innerText()).includes('Conferma'));
+  await page.locator('.manage .btn.armed').click();
+  await page.waitForFunction(() => location.hash === '#/chat', null, { timeout: 10000 });
+  check('gestione: archiviata, si torna all\'elenco e la chat non c\'e\' piu\'', (await page.locator('.row', { hasText: 'Testi rivisti' }).count()) === 0);
+  await page.goto(`${BASE}/#/impostazioni`);
+  await page.locator('a[href="#/archivio"]').click();
+  await page.waitForSelector('.list .row');
+  check('archivio: compaiono le due chat archiviate (con icona e "Ripristina")', (await page.locator('.list .row').count()) === 2 && (await page.locator('.list .row', { hasText: 'Testi rivisti' }).count()) === 1 && (await page.locator('.list .row .btn svg').count()) === 2);
+  await shot('19-archive');
+  await page.locator('.list .row', { hasText: 'Prova di un tema scuro' }).locator('.btn').click();
+  await page.waitForFunction(() => document.querySelectorAll('.list .row').length === 1, null, { timeout: 10000 });
+  check('archivio: dopo "Ripristina" la chat esce dall\'elenco e compare l\'esito', (await page.locator('.banner', { hasText: 'ripristinata' }).count()) === 1);
+  await page.locator('.list .row', { hasText: 'Testi rivisti' }).locator('.btn').click();
+  await page.waitForSelector('.empty');
+  check('archivio: senza chat archiviate c\'e\' lo stato vuoto', (await page.locator('.empty h2', { hasText: 'Nessuna chat archiviata' }).count()) === 1);
 
   // --- Mac sveglio: interruttore in Impostazioni (con una chat in corso diventa attivo) ---
   await page.goto(`${BASE}/#/impostazioni`);

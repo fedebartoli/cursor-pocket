@@ -45,6 +45,17 @@ export class CursorDb {
            FROM composerHeaders
           WHERE COALESCE(isArchived, 0) = 0 AND COALESCE(isSubagent, 0) = 0 AND COALESCE(lastUpdatedAt, 0) > 0`,
       ),
+      archived: db.prepare(
+        `SELECT composerId, workspaceId, createdAt, lastUpdatedAt, recency, value
+           FROM composerHeaders
+          WHERE COALESCE(isArchived, 0) = 1 AND COALESCE(isSubagent, 0) = 0 AND COALESCE(lastUpdatedAt, 0) > 0
+          ORDER BY lastUpdatedAt DESC LIMIT ?`,
+      ),
+      // Stato di UNA chat (archiviata? nome?), per verificare archivia / ripristina / rinomina.
+      oneHeader: db.prepare(
+        `SELECT COALESCE(isArchived, 0) AS isArchived, json_extract(value, '$.name') AS name
+           FROM composerHeaders WHERE composerId = ?`,
+      ),
       // Solo la "coda" del composerData: evita di fare il parsing di megabyte in JavaScript.
       tail: db.prepare(
         `SELECT json_extract(value, '$.status') AS status,
@@ -146,6 +157,23 @@ export class CursorDb {
       });
     }
     return out;
+  }
+
+  /** Chat archiviate (le piu' recenti per prime), come `listHeaders` ma al contrario. */
+  archivedHeaders(limit = 40) {
+    const out = [];
+    for (const r of this.#need().archived.all(limit)) {
+      const header = safeJsonParse(r.value, null);
+      if (!header || typeof header !== 'object') continue;
+      out.push({ id: r.composerId, workspaceId: r.workspaceId, createdAt: r.createdAt ?? null, lastUpdatedAt: r.lastUpdatedAt ?? 0, recency: r.recency ?? 0, header });
+    }
+    return out;
+  }
+
+  /** `{ archived, name }` di una chat (null se non esiste). */
+  chatFlags(composerId) {
+    const r = this.#need().oneHeader.get(composerId);
+    return r ? { archived: r.isArchived === 1, name: typeof r.name === 'string' ? r.name : null } : null;
   }
 
   /** Stato sintetico del composerData di una chat (null se non esiste). */

@@ -106,6 +106,11 @@ export function mountChat(root, id) {
   let form = null;
   let armed = null; // 'approve' | 'reject': primo tocco dato, serve il secondo per confermare
   let armTimer = null;
+  let renaming = false; // campo per rinominare aperto
+  let manageBusy = false;
+  let manageNote = null; // { text, error }
+  let archiveArmed = false;
+  let archiveTimer = null;
   let sentKey = null; // domanda (o approvazione) a cui si e' appena risposto
   let sentAt = 0;
   let actedAt = 0; // ultima risposta o messaggio inviati da questa schermata (orologio del telefono)
@@ -118,9 +123,10 @@ export function mountChat(root, id) {
   const activityHost = h('div.region');
   const messageHost = h('div.region');
   const linkHost = h('div.region');
+  const manageHost = h('div.region');
   const composer = createComposer({ chatId: id, onSend: sendMessage, onStop: stopAgent });
   // Il distanziatore spinge il compositore in fondo quando il contenuto e' corto (e garantisce un minimo di respiro).
-  replace(root, h('div', { class: 'screen chat-screen' }, topHost, panelHost, activityHost, messageHost, linkHost, h('div', { class: 'chat-spacer', 'aria-hidden': 'true' }), composer.el));
+  replace(root, h('div', { class: 'screen chat-screen' }, topHost, panelHost, activityHost, messageHost, linkHost, manageHost, h('div', { class: 'chat-spacer', 'aria-hidden': 'true' }), composer.el));
 
   let loading = false;
   async function load() {
@@ -280,6 +286,101 @@ export function mountChat(root, id) {
       if (shouldRefreshAfter(err)) refresh().catch(() => {});
       throw new Error(describeActionError(err));
     }
+  }
+
+  async function renameChat(name) {
+    manageBusy = true;
+    manageNote = null;
+    renderManage();
+    try {
+      const res = await api.post(`/api/chats/${enc}/rename`, { name });
+      renaming = false;
+      manageNote = { text: res?.verified === false ? 'Richiesta inviata. Non riesco ancora a confermare che Cursor abbia cambiato il nome.' : 'Nome cambiato.', error: false };
+      await refresh().catch(() => {});
+    } catch (err) {
+      manageNote = { text: describeActionError(err), error: true };
+    }
+    manageBusy = false;
+    renderManage(true);
+    render();
+  }
+
+  async function archiveChat() {
+    manageBusy = true;
+    archiveArmed = false;
+    clearTimeout(archiveTimer);
+    manageNote = null;
+    renderManage();
+    try {
+      await api.post(`/api/chats/${enc}/archive`, {});
+      await refresh().catch(() => {});
+      location.hash = '#/chat';
+      return;
+    } catch (err) {
+      manageNote = { text: describeActionError(err), error: true };
+      if (shouldRefreshAfter(err)) refresh().catch(() => {});
+    }
+    manageBusy = false;
+    renderManage();
+  }
+
+  function archiveTap() {
+    if (!archiveArmed) {
+      archiveArmed = true;
+      clearTimeout(archiveTimer);
+      archiveTimer = setTimeout(() => {
+        archiveArmed = false;
+        renderManage();
+      }, APPROVAL_ARM_MS);
+      renderManage();
+      return;
+    }
+    archiveChat();
+  }
+
+  function renderManage(force = false) {
+    const card = findCard(getLive().payload, id);
+    const lv = getLive();
+    if (!card || lv.offline || lv.payload?.status?.actions !== 'ok') {
+      commit(manageHost, null);
+      return;
+    }
+    const running = card.state === STATE.RUNNING;
+    const nodes = [];
+    if (manageNote) nodes.push(h('p', { class: `hint${manageNote.error ? ' error-text' : ''}`, role: 'status' }, manageNote.text));
+    if (renaming) {
+      const input = h('input', { type: 'text', id: 'rename-input', maxlength: '100', value: card.name || '', 'aria-label': 'Nuovo nome della chat', autocomplete: 'off', autocapitalize: 'sentences', enterkeyhint: 'done' });
+      const save = () => {
+        const v = input.value.trim();
+        if (!v) return;
+        renameChat(v);
+      };
+      input.addEventListener('keydown', (e) => {
+        if (e.key === 'Enter') save();
+      });
+      nodes.push(
+        h(
+          'div',
+          { class: 'rename-form' },
+          input,
+          h('button', { class: 'btn small primary', type: 'button', disabled: manageBusy, onClick: save }, icon('check', { size: 18 }), 'Salva'),
+          h('button', { class: 'btn small', type: 'button', disabled: manageBusy, onClick: () => { renaming = false; renderManage(true); } }, 'Annulla'),
+        ),
+      );
+    } else {
+      nodes.push(
+        h(
+          'div',
+          { class: 'panel-actions' },
+          h('button', { class: 'btn', type: 'button', disabled: manageBusy, onClick: () => { renaming = true; manageNote = null; renderManage(true); setTimeout(() => { const i = document.getElementById('rename-input'); i?.focus(); i?.select(); }, 0); } }, icon('pencil', { size: 18 }), 'Rinomina'),
+          h('button', { class: `btn${archiveArmed ? ' armed' : ''}`, type: 'button', disabled: manageBusy || running, onClick: archiveTap }, icon('archive', { size: 18 }), archiveArmed ? 'Conferma' : 'Archivia'),
+        ),
+      );
+      if (running) nodes.push(h('p.hint', null, 'Per archiviare, ferma prima l\u2019agente.'));
+      else if (archiveArmed) nodes.push(h('p.hint', null, 'Tocca ancora per archiviare. Si ripristina da Impostazioni.'));
+    }
+    const changed = commit(manageHost, h('section', { class: 'panel manage' }, nodes));
+    if (force && changed && renaming) document.getElementById('rename-input')?.focus();
   }
 
   async function sendMessage(text) {
@@ -547,6 +648,7 @@ export function mountChat(root, id) {
     const mode = activityMode(card);
     const changed = [renderTop(lv, card), renderPanel(lv, card, actionsOk, mode), renderActivity(card, mode), renderMessage(card)].some(Boolean);
     commit(linkHost, card ? h('a', { class: 'row help-link', href: `#/chat/${enc}/storia` }, icon('messages', { size: 20 }), h('div.row-main', null, h('div.row-title', null, 'Conversazione intera')), icon('chevronRight', { size: 18 })) : null);
+    renderManage();
     renderComposer(lv, card);
     if (changed) window.scrollTo(0, y);
   }
@@ -569,6 +671,7 @@ export function mountChat(root, id) {
       loadSeq += 1; // scarta le risposte in volo
       clearTimeout(pollTimer);
       clearTimeout(armTimer);
+      clearTimeout(archiveTimer);
       document.removeEventListener('visibilitychange', onVisible);
       for (const t of timers) clearTimeout(t);
       timers.clear();

@@ -335,6 +335,26 @@ export class Watcher extends EventEmitter {
     for (const ev of events) this.emit('event', ev);
   }
 
+  /** Chat archiviate (locali, non sottoagenti, di progetti non rimossi): per "Ripristina". Solo dati di sidebar, niente contenuti. */
+  archived({ limit = 40 } = {}) {
+    if (!this.#db.isOpen) return [];
+    const visibility = { includeClassic: this.#cfg.includeClassicChats, removedWorkspaceIds: this.#removed };
+    const out = [];
+    for (const entry of this.#db.archivedHeaders(limit)) {
+      const asLive = { ...entry, header: { ...entry.header, isArchived: false } };
+      if (!isVisibleLocalChat(asLive, visibility)) continue;
+      const ws = this.#resolver.resolve(entry);
+      out.push({
+        id: entry.id,
+        name: (typeof entry.header.name === 'string' && entry.header.name.trim()) || 'Senza titolo',
+        workspaceName: ws.name,
+        sectionId: ws.sectionId,
+        lastUpdatedAt: entry.lastUpdatedAt,
+      });
+    }
+    return out;
+  }
+
   /**
    * Una pagina della conversazione per la PWA (sola lettura). Messaggi di utente e assistente con il testo; i tool come
    * semplici righe (tipo di azione e stato, mai comandi ne' percorsi); i bubble senza testo ne' tool si saltano.

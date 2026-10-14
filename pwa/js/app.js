@@ -7,6 +7,7 @@ import { resyncPush } from './push.js';
 import { initViewport } from './viewport.js';
 import { mountChat } from './views/chat.js';
 import { mountHelp } from './views/help.js';
+import { mountArchive } from './views/archive.js';
 import { mountHistory } from './views/history.js';
 import { mountHome } from './views/home.js';
 import { mountLogin, mountUnreachable } from './views/login.js';
@@ -41,7 +42,7 @@ function updateTabbar(routeName) {
   const visible = mode === 'app' && routeName !== 'chat' && routeName !== 'history';
   tabbar.hidden = !visible;
   document.body.classList.toggle('has-tabbar', visible);
-  const active = routeName === 'help' ? 'settings' : routeName; // "Come funziona" sta sotto Impostazioni
+  const active = routeName === 'help' || routeName === 'archive' ? 'settings' : routeName; // "Come funziona" sta sotto Impostazioni
   for (const [route, el] of tabEls) {
     if (visible && route === active) el.setAttribute('aria-current', 'page');
     else el.removeAttribute('aria-current');
@@ -75,6 +76,7 @@ function parseRoute() {
     }
   }
   if (hash === '#/impostazioni') return { name: 'settings', key: 'settings' };
+  if (hash === '#/archivio') return { name: 'archive', key: 'archive' };
   if (hash === '#/come-funziona') return { name: 'help', key: 'help' };
   if (hash === '#/chat') return { name: 'chats', key: 'chats' };
   if (hash === '#/preferite') return { name: 'favorites', key: 'favorites' };
@@ -93,6 +95,7 @@ function mountRoute() {
   else if (route.name === 'history') view = mountHistory(root, route.id);
   else if (route.name === 'settings') view = mountSettings(root, { onLoggedOut: showLogin });
   else if (route.name === 'help') view = mountHelp(root);
+  else if (route.name === 'archive') view = mountArchive(root);
   else view = mountHome(root, route.name === 'home' ? 'attention' : route.name);
   // Si ripristina la posizione degli elenchi; le altre schermate partono dall'alto.
   const isList = ['home', 'chats', 'favorites'].includes(route.name);

@@ -197,6 +197,9 @@ chat(12, 'Vecchio esperimento sul menu', 'sito', 60 * 24 * 3, { hasBlockingPendi
 talk(12, 60 * 24 * 3, 'Ho provato due varianti del menu laterale.', { name: 'edit_file', status: 'completed', toolCallId: 'tc-demo-12' });
 chat(13, 'Testi della pagina iniziale', 'sito', 60 * 24 * 5);
 talk(13, 60 * 24 * 5, 'Ho riscritto i titoli con un tono pi\u00f9 diretto.');
+chat(20, 'Prova di un tema scuro', 'sito', 60 * 24 * 9);
+talk(20, 60 * 24 * 9, 'Il tema scuro \u00e8 pronto.');
+fx.chat(id(20), { archived: true });
 
 fx.setSidebar({
   groupBy: 'workspace',
@@ -274,6 +277,27 @@ const demoUi = {
     chat(n, spec.name, spec.where, 0, { unfinishedRunAt: undefined });
     console.log('[demo] agente fermato, chat', n);
     return { clicked: true, settled: true };
+  },
+  async rename({ composerId, name }) {
+    const n = numOf(composerId);
+    const spec = chatSpecs.get(n);
+    if (!spec) throw Object.assign(new Error('demo'), { code: 'row_not_found' });
+    await new Promise((r) => setTimeout(r, 400));
+    spec.name = name;
+    fx.chat(composerId, { name });
+    return { clicked: true };
+  },
+  async archive({ composerId }) {
+    if (!chatSpecs.get(numOf(composerId))) throw Object.assign(new Error('demo'), { code: 'row_not_found' });
+    await new Promise((r) => setTimeout(r, 400));
+    fx.chat(composerId, { archived: true });
+    return { clicked: true };
+  },
+  async unarchive({ composerId }) {
+    if (!chatSpecs.get(numOf(composerId))) throw Object.assign(new Error('demo'), { code: 'row_not_found' });
+    await new Promise((r) => setTimeout(r, 400));
+    fx.chat(composerId, { archived: false });
+    return { clicked: true };
   },
   async sendMessage({ composerId }) {
     const n = numOf(composerId);
