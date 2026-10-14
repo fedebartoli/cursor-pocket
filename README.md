@@ -90,4 +90,4 @@ Tests: `cd daemon && npm test` (254 tests). Optional browser checks: `tools/ui-c
 ## License
 
 MIT (see `LICENSE`). Icons come from Lucide (ISC, `pwa/icons/LICENSE-lucide.txt`). The Cursor logo in the app is a trademark of
-Anysphere, kept in a replaceable file (see "Cursor logo" in [docs/SETUP.md](docs/SETUP.md)).
+Anysphere, kept in a replaceable file (see "Cursor branding" in [docs/SETUP.md](docs/SETUP.md)).
