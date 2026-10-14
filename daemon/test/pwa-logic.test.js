@@ -125,10 +125,10 @@ test('describeActionError: testi propri, testo del daemon, ripiego', () => {
 });
 
 test('shouldRefreshAfter: solo quando lo stato sul Mac e\u2019 cambiato', () => {
-  for (const code of ['stale', 'no_question', 'mismatch', 'already_sent', 'not_found']) {
+  for (const code of ['stale', 'no_question', 'mismatch', 'already_sent', 'not_found', 'timeout']) {
     assert.equal(shouldRefreshAfter({ code }), true, code);
   }
-  for (const code of ['network', 'unavailable', 'timeout', 'ui_failed', undefined]) {
+  for (const code of ['network', 'unavailable', 'ui_failed', undefined]) {
     assert.equal(shouldRefreshAfter({ code }), false, String(code));
   }
   assert.equal(shouldRefreshAfter(undefined), false);

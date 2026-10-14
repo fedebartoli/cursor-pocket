@@ -154,6 +154,29 @@ test('azioni: alla scadenza il chiamante riceve subito 504, ma la coda resta occ
   assert.deepEqual(started, ['bloccato', 'successivo']);
 });
 
+test('azioni: dopo il 504 lo stesso invio rifatto subito viene respinto (altrimenti andrebbe in coda e uscirebbe doppio)', async () => {
+  let release;
+  const gate = new Promise((r) => {
+    release = r;
+  });
+  const sent = [];
+  const { a } = service({
+    config: { actionTimeoutMs: 30 },
+    ui: upUi({
+      async sendMessage({ text }) {
+        sent.push(text);
+        if (sent.length === 1) await gate;
+      },
+    }),
+  });
+  await a.refresh();
+  await assert.rejects(a.sendMessage('c1', { text: 'ciao' }), (e) => e.code === 'timeout');
+  await assert.rejects(a.sendMessage('c1', { text: 'ciao' }), (e) => e.status === 409 && e.code === 'already_sent');
+  release();
+  await new Promise((r) => setTimeout(r, 40));
+  assert.deepEqual(sent, ['ciao'], 'il messaggio parte una volta sola');
+});
+
 test('azioni: stato e disattivazione', async () => {
   const ui = { up: false, window: true, probe: async () => ({ up: ui.up }), hasWindow: async () => ui.window };
   const { a } = service({ ui });

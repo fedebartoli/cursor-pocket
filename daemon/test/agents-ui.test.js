@@ -370,7 +370,9 @@ describe('AgentsUi su Chromium con la pagina finta', { skip }, () => {
       await assert.rejects(ui.newChat({ project: 'Progetto A', text: 'x' }), (e) => e.code === 'project_ambiguous');
       await reset(cfg({ env: 'New Worktree' }));
       await assert.rejects(ui.newChat({ project: 'Progetto A', text: 'x' }), (e) => e.code === 'not_local');
-      assert.deepEqual((await state()).newChats, []);
+      const after = await state();
+      assert.deepEqual(after.newChats, []);
+      assert.equal(after.current, 'chat-b', 'dopo un errore la chat che era aperta torna aperta (non resta la schermata nuova chat)');
     });
 
     it('dryRun: arriva ai controlli e non invia', async () => {

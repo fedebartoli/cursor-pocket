@@ -19,6 +19,7 @@ export function onUnauthorized(fn) {
 // Le azioni (invio, nuova chat) possono richiedere piu' tempo: il daemon aspetta Cursor, non si abbandona a meta'.
 const REQUEST_TIMEOUT_MS = 15_000;
 const ACTION_TIMEOUT_MS = 120_000;
+const UPLOAD_TIMEOUT_MS = 60_000; // fino a 8 MB: su una rete lenta serve tempo, ma non all'infinito
 const timeoutSignal = (ms) => {
   const ctl = new AbortController();
   setTimeout(() => ctl.abort(), ms);
@@ -56,7 +57,7 @@ async function request(method, path, body) {
 async function upload(blob) {
   let res;
   try {
-    res = await fetch('/api/uploads', { method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': blob.type || 'image/jpeg' }, body: blob });
+    res = await fetch('/api/uploads', { signal: timeoutSignal(UPLOAD_TIMEOUT_MS), method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': blob.type || 'image/jpeg' }, body: blob });
   } catch {
     throw new ApiError(0, 'network', 'Daemon non raggiungibile');
   }

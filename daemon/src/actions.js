@@ -79,7 +79,7 @@ const UI_ERRORS = {
   unavailable: [503, 'actions_unavailable', 'Cursor non e\' raggiungibile con la porta di debug: avvialo come spiegato nelle Impostazioni.'],
   closed: [503, 'actions_unavailable', 'La connessione con Cursor si e\' interrotta. Riprova.'],
   no_window: [503, 'actions_unavailable', 'La finestra Agents di Cursor non e\' aperta.'],
-  timeout: [504, 'timeout', 'Cursor non ha risposto in tempo. Controlla sul Mac.'],
+  timeout: [504, 'timeout', 'Cursor non ha risposto in tempo. L\'operazione potrebbe essere andata a buon fine: controlla sul Mac prima di riprovare.'],
   row_not_found: [409, 'chat_not_in_sidebar', 'La chat non e\' visibile nella sidebar di Cursor: aprila sul Mac.'],
   no_tray: [409, 'no_question', 'La domanda non risulta piu\' aperta in Cursor.'],
   tray_closed: [409, 'no_question', 'La domanda e\' stata chiusa in Cursor prima di completarla.'],
@@ -108,9 +108,13 @@ function mapUiError(err) {
   return new ActionError(502, 'ui_failed', `Cursor non ha eseguito l'azione (${code || 'errore'}). Controlla sul Mac.`);
 }
 
+// Dopo una scadenza con l'azione ancora in corso, lo stesso invio resta bloccato per questo tempo oltre il momento in cui l'errore e' stato dato.
+const ORPHAN_HOLD_MS = 30_000;
+
 export class Actions extends EventEmitter {
   #chain = Promise.resolve();
   #inFlight = new Set();
+  #orphans = 0; // azioni scadute per il chiamante ma ancora in corso su Cursor
   #recent = new Map(); // `kind:chat:key` -> istante, per non inviare due volte la stessa risposta
   #state = { available: false, reason: 'off' };
   #timer = null;
@@ -192,7 +196,13 @@ export class Actions extends EventEmitter {
       work.then(release, release);
       let timer;
       const limit = new Promise((_, reject) => {
-        timer = setTimeout(() => reject(new ActionError(504, 'timeout', 'Cursor non ha risposto in tempo. Controlla sul Mac.')), this.config.actionTimeoutMs);
+        timer = setTimeout(() => {
+          // Il chiamante riceve l'errore, ma l'azione continua: finche' non finisce, un reinvio identico andrebbe in coda e
+          // verrebbe eseguito DOPO (messaggio doppio). `#orphans` lo segnala a `#dedupe`.
+          this.#orphans++;
+          work.then(() => this.#orphans--, () => this.#orphans--);
+          reject(new ActionError(504, 'timeout', 'Cursor non ha risposto in tempo. L\'operazione potrebbe essere andata a buon fine: controlla sul Mac prima di riprovare.'));
+        }, this.config.actionTimeoutMs);
       });
       try {
         return await Promise.race([work, limit]);
@@ -235,7 +245,9 @@ export class Actions extends EventEmitter {
     return {
       done: (ok) => {
         this.#inFlight.delete(id);
+        // Con un'azione scaduta ma ancora in corso l'esito e' ignoto: si blocca il reinvio ancora per un po'.
         if (ok) this.#recent.set(id, this.now());
+        else if (this.#orphans > 0) this.#recent.set(id, this.now() + ORPHAN_HOLD_MS);
         for (const [k, v] of this.#recent) if (this.now() - v > 120_000) this.#recent.delete(k);
       },
     };

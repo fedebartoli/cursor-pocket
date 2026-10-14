@@ -1051,78 +1051,84 @@ export class AgentsUi {
       if (count > 1) throw new UiError('project_ambiguous', 'piu\' progetti con lo stesso nome nella sidebar');
       await ctx.hover({ target: 'newAgent', name: project });
       await ctx.clickTarget({ target: 'newAgent', name: project });
-      // Si attende che la schermata mostri DAVVERO il progetto richiesto (se prima c'era gia' una schermata "nuova chat",
-      // il compositore c'e' gia' e il progetto cambia solo dopo il clic).
-      let last = null;
-      const screen = await waitFor(async () => {
-        const st = await ctx.page({ op: 'newChatState' });
-        last = st;
-        return st.composer && st.triggers.length >= 3 && norm(st.triggers[0]) === norm(project) ? st : null;
-      }, { timeoutMs: 4000, sleep: this.sleep });
-      if (!screen) {
-        if (last?.composer && last.triggers.length >= 3) throw new UiError('wrong_project', 'Cursor ha scelto un altro progetto');
-        throw new UiError('no_new_chat', 'la schermata della nuova chat non e\' comparsa');
-      }
-      if (norm(screen.triggers[screen.triggers.length - 1]) !== 'thismac') throw new UiError('not_local', 'la nuova chat non e\' locale (This Mac)');
-      const info = await ctx.page({ op: 'composerInfo' });
-      if (!info.composer?.empty || info.images > 0) throw new UiError('draft_not_empty', 'nel campo di scrittura c\'e\' gia\' una bozza');
-      if (dryRun) {
-        // Solo per prove: arriva fin qui (schermata, progetto, ambiente, bozza vuota), allega e toglie le immagini, non invia.
-        let n = null;
-        if (files.length) {
-          await this.#attach(ctx, files);
-          n = (await ctx.page({ op: 'attachState' })).previews;
-          await ctx.clearImages();
-        }
-        await this.#restore(ctx, previous, '');
-        return { dryRun: true, project: screen.triggers[0], env: screen.triggers[screen.triggers.length - 1], attached: n };
-      }
-
-      let attached = false;
+      // Qualsiasi errore da qui in poi lascia Cursor sulla schermata della nuova chat: si riapre la chat che era selezionata.
       try {
-        if (files.length) {
-          await this.#attach(ctx, files);
-          attached = true;
+        // Si attende che la schermata mostri DAVVERO il progetto richiesto (se prima c'era gia' una schermata "nuova chat",
+        // il compositore c'e' gia' e il progetto cambia solo dopo il clic).
+        let last = null;
+        const screen = await waitFor(async () => {
+          const st = await ctx.page({ op: 'newChatState' });
+          last = st;
+          return st.composer && st.triggers.length >= 3 && norm(st.triggers[0]) === norm(project) ? st : null;
+        }, { timeoutMs: 4000, sleep: this.sleep });
+        if (!screen) {
+          if (last?.composer && last.triggers.length >= 3) throw new UiError('wrong_project', 'Cursor ha scelto un altro progetto');
+          throw new UiError('no_new_chat', 'la schermata della nuova chat non e\' comparsa');
         }
-        if (text) {
-          await ctx.clickTarget({ target: 'composer' });
-          const focus = await ctx.focusState('composer');
-          if (!focus.found || !focus.focused) throw new UiError('focus_failed', 'campo di scrittura senza focus');
-          await ctx.typeText(text);
-          const typed = await waitFor(async () => {
-            const f = await ctx.focusState('composer');
-            return f.found && norm(f.text).startsWith(norm(text).slice(0, 40)) ? f : null;
+        if (norm(screen.triggers[screen.triggers.length - 1]) !== 'thismac') throw new UiError('not_local', 'la nuova chat non e\' locale (This Mac)');
+        const info = await ctx.page({ op: 'composerInfo' });
+        if (!info.composer?.empty || info.images > 0) throw new UiError('draft_not_empty', 'nel campo di scrittura c\'e\' gia\' una bozza');
+        if (dryRun) {
+          // Solo per prove: arriva fin qui (schermata, progetto, ambiente, bozza vuota), allega e toglie le immagini, non invia.
+          let n = null;
+          if (files.length) {
+            await this.#attach(ctx, files);
+            n = (await ctx.page({ op: 'attachState' })).previews;
+            await ctx.clearImages();
+          }
+          await this.#restore(ctx, previous, '');
+          return { dryRun: true, project: screen.triggers[0], env: screen.triggers[screen.triggers.length - 1], attached: n };
+        }
+
+        let attached = false;
+        try {
+          if (files.length) {
+            await this.#attach(ctx, files);
+            attached = true;
+          }
+          if (text) {
+            await ctx.clickTarget({ target: 'composer' });
+            const focus = await ctx.focusState('composer');
+            if (!focus.found || !focus.focused) throw new UiError('focus_failed', 'campo di scrittura senza focus');
+            await ctx.typeText(text);
+            const typed = await waitFor(async () => {
+              const f = await ctx.focusState('composer');
+              return f.found && norm(f.text).startsWith(norm(text).slice(0, 40)) ? f : null;
+            }, { timeoutMs: 3000, sleep: this.sleep });
+            if (!typed) throw new UiError('type_failed', 'testo non inserito nel campo di scrittura');
+          }
+          const enabled = await waitFor(async () => {
+            const i = await ctx.page({ op: 'composerInfo' });
+            return i.send && !i.send.disabled ? i : null;
           }, { timeoutMs: 3000, sleep: this.sleep });
-          if (!typed) throw new UiError('type_failed', 'testo non inserito nel campo di scrittura');
+          if (!enabled) throw new UiError('send_disabled', 'pulsante di invio non disponibile');
+        } catch (e) {
+          if (attached) await ctx.clearImages().catch(() => {});
+          throw e;
         }
-        const enabled = await waitFor(async () => {
-          const i = await ctx.page({ op: 'composerInfo' });
-          return i.send && !i.send.disabled ? i : null;
-        }, { timeoutMs: 3000, sleep: this.sleep });
-        if (!enabled) throw new UiError('send_disabled', 'pulsante di invio non disponibile');
+        await ctx.clickTarget({ target: 'send' });
+        // Cursor crea PRIMA una riga "bozza" e, inviato il messaggio, la sostituisce con la chat vera (altro id): si prende la riga
+        // nuova solo quando l'elenco delle righe nuove e' stabile e ne resta una.
+        let lastSig = null;
+        let since = 0;
+        const created = await waitFor(async () => {
+          const keys = await ctx.page({ op: 'rowKeys' });
+          const fresh = keys.filter((k) => !before.has(k));
+          const sig = fresh.join('|');
+          if (sig !== lastSig) {
+            lastSig = sig;
+            since = Date.now();
+            return null;
+          }
+          return fresh.length === 1 && Date.now() - since >= 1200 ? fresh[0] : null;
+        }, { timeoutMs: 15_000, intervalMs: 250, sleep: this.sleep });
+        if (!created) throw new UiError('send_failed', 'non vedo la chat nuova in Cursor');
+        await this.#restore(ctx, previous, created.replace(/^row:/, ''));
+        return { composerId: created.replace(/^row:/, '') };
       } catch (e) {
-        if (attached) await ctx.clearImages().catch(() => {});
+        await this.#restore(ctx, previous, '').catch(() => {});
         throw e;
       }
-      await ctx.clickTarget({ target: 'send' });
-      // Cursor crea PRIMA una riga "bozza" e, inviato il messaggio, la sostituisce con la chat vera (altro id): si prende la riga
-      // nuova solo quando l'elenco delle righe nuove e' stabile e ne resta una.
-      let lastSig = null;
-      let since = 0;
-      const created = await waitFor(async () => {
-        const keys = await ctx.page({ op: 'rowKeys' });
-        const fresh = keys.filter((k) => !before.has(k));
-        const sig = fresh.join('|');
-        if (sig !== lastSig) {
-          lastSig = sig;
-          since = Date.now();
-          return null;
-        }
-        return fresh.length === 1 && Date.now() - since >= 1200 ? fresh[0] : null;
-      }, { timeoutMs: 15_000, intervalMs: 250, sleep: this.sleep });
-      if (!created) throw new UiError('send_failed', 'non vedo la chat nuova in Cursor');
-      await this.#restore(ctx, previous, created.replace(/^row:/, ''));
-      return { composerId: created.replace(/^row:/, '') };
     });
   }
 }
