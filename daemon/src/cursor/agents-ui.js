@@ -298,6 +298,13 @@ function pageDo(a, K) {
       const f = K.menuItem(a.label);
       return { open: document.querySelectorAll('[role="menu"]').length > 0, checked: f ? f.getAttribute('aria-checked') : null };
     }
+    case 'focusRename': {
+      const i = K.renameInput();
+      if (!i) return { editing: false, focused: false };
+      i.focus();
+      i.select();
+      return { editing: true, focused: document.activeElement === i };
+    }
     case 'renameState': {
       const i = K.renameInput();
       return { editing: !!i, focused: !!i && document.activeElement === i, value: i ? String(i.value || '') : '' };
@@ -771,9 +778,23 @@ export class AgentsUi {
       await this.#rowMenu(ctx, composerId, MENU.rename);
       const editing = await waitFor(async () => {
         const st = await ctx.page({ op: 'renameState' });
-        return st.editing && st.focused ? st : null; // il campo deve avere il focus, altrimenti il testo va perso
+        return st.editing ? st : null;
       }, { timeoutMs: 2500, sleep: this.sleep });
-      if (!editing) throw new UiError('no_rename_field', 'campo del nome non apparso');
+      if (!editing) {
+        await ctx.s.pressKey(KEYS.escape).catch(() => {});
+        throw new UiError('no_rename_field', 'campo del nome non apparso');
+      }
+      // Il campo deve avere il focus (e il testo selezionato), altrimenti quello che si scrive va perso: se serve lo si forza.
+      const focused = await waitFor(async () => {
+        const st = await ctx.page({ op: 'renameState' });
+        if (st.focused) return st;
+        const f = await ctx.page({ op: 'focusRename' });
+        return f.focused ? f : null;
+      }, { timeoutMs: 2000, sleep: this.sleep });
+      if (!focused) {
+        await ctx.s.pressKey(KEYS.escape).catch(() => {});
+        throw new UiError('no_rename_field', 'campo del nome senza focus');
+      }
       // Il testo e' gia' selezionato all'apertura: scrivere lo sostituisce. Si controlla prima di confermare.
       await ctx.typeText(name);
       const typed = await waitFor(async () => {
