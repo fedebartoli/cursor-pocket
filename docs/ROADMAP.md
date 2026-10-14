@@ -107,3 +107,7 @@ clic con Cursor in secondo piano, interfaccia dalla PWA su iPhone.
   (15/10, solo lettura del bundle): in Cursor l'archiviazione passa da `composerDataService` (campo `isArchived` + `lastUpdatedAt`
   e salvataggio) e per le chat locali non c'e' una chiamata di rete da imitare. Poiche' il database di Cursor non si scrive
   mai, la strada e' pilotare i pulsanti dell'Agents Window via CDP, come per le risposte (da provare con una chat di prova).
+- Sondaggio di sola lettura della finestra Agents (15/10, nessun clic): tra le etichette dei pulsanti compaiono "New Agent",
+  "New Project", "Pin", "Archive", "Stop generation" (con "Stop ^C"), "Attached image", "Add agents, context, tools" e campi di
+  ricerca. Quindi per fissare, archiviare, fermare e creare chat esistono controlli da pilotare via CDP; "Rename" non e' emerso
+  (probabile menu contestuale o doppio clic: da verificare). Nessuna di queste azioni e' ancora provata.
