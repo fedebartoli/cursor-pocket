@@ -216,6 +216,7 @@ class FakeUi {
     this.onRename = null;
     this.onArchive = null;
     this.onUnarchive = null;
+    this.onNewChat = null;
   }
   async probe() {
     return { up: this.up };
@@ -252,6 +253,11 @@ class FakeUi {
   }
   async unarchive(args) {
     return this.#run('unarchive', args, this.onUnarchive);
+  }
+  async newChat(args) {
+    this.calls.push(['newChat', args]);
+    if (this.fail) throw this.fail;
+    return this.onNewChat(args);
   }
 }
 
@@ -832,6 +838,50 @@ test('immagini: caricamento controllato dal contenuto, messaggio con allegati, f
     const del = await h.req({ method: 'DELETE', path: `/api/uploads/${b}`, cookie });
     assert.equal(del.status, 200);
     assert.deepEqual(fs.readdirSync(dir), []);
+  } finally {
+    await h.stop();
+  }
+});
+
+const NEW_ID = '33333333-3333-4333-8333-333333333333';
+
+test('nuova chat via HTTP: progetto risolto dal daemon, controlli, file allegati, chat nuova confermata dal database', async () => {
+  const { h, ui, cookie, post } = await setup({ withQuestion: false });
+  try {
+    const sectionId = h.app.watcher.last.chats[0].sectionId;
+    const project = h.app.watcher.last.chats[0].workspaceName;
+    const create = (body) => h.req({ method: 'POST', path: '/api/chats', cookie, body });
+    assert.equal((await h.req({ method: 'POST', path: '/api/chats', body: { sectionId, text: 'x' } })).status, 401);
+    assert.equal((await create({ text: 'ciao' })).json().error, 'bad_project');
+    assert.equal((await create({ sectionId, text: '  ' })).json().error, 'bad_text');
+    assert.equal((await create({ sectionId, text: 'x', images: 'no' })).json().error, 'bad_images');
+    assert.equal((await create({ sectionId: 'sconosciuto', text: 'ciao' })).status, 404);
+    assert.equal((await create({ sectionId, text: 'x'.repeat(LIMITS.messageChars + 1) })).json().error, 'too_long');
+    assert.equal(ui.calls.length, 0);
+
+    ui.onNewChat = ({ project: p, text }) => {
+      assert.equal(p, project);
+      h.fx.chat(NEW_ID, { name: text.slice(0, 20), lastUpdatedAt: T0 - 100 });
+      return { composerId: NEW_ID };
+    };
+    const r = await create({ sectionId, text: '  Crea  un\nREADME\u0000 ' });
+    assert.equal(r.status, 200, r.text);
+    assert.deepEqual(r.json(), { ok: true, chatId: NEW_ID, verified: true });
+    assert.deepEqual(ui.calls[0][1], { project, text: 'Crea  un\nREADME' });
+    assert.equal((await create({ sectionId, text: 'Crea  un\nREADME' })).json().error, 'already_sent', 'doppio tocco');
+    assert.ok(!h.logLines.join('').includes('README'), 'il testo non finisce nei log');
+
+    // errori della UI tradotti
+    ui.onNewChat = () => {
+      throw Object.assign(new Error('x'), { code: 'not_local' });
+    };
+    const nl = await create({ sectionId, text: 'altro' });
+    assert.equal(nl.status, 409);
+    assert.equal(nl.json().error, 'not_local');
+    ui.onNewChat = () => {
+      throw Object.assign(new Error('x'), { code: 'project_not_found' });
+    };
+    assert.equal((await create({ sectionId, text: 'ancora' })).json().error, 'project_not_found');
   } finally {
     await h.stop();
   }

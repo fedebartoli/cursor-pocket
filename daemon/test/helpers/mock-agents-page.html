@@ -32,7 +32,9 @@
 </head>
 <body>
 <div>
+  <div id="newchat-bar" hidden><button class="ui-select-trigger" type="button"></button><button class="ui-select-trigger" type="button">main</button><button class="ui-select-trigger" type="button"></button></div>
   <button type="button" aria-label="Customize Sidebar" id="customize">Filtri</button>
+  <div id="heads"></div>
   <nav id="sidebar"></nav>
 </div>
 <div id="menu-root"></div>
@@ -89,6 +91,25 @@
   function sidebar() {
     const nav = $('#sidebar');
     nav.replaceChildren();
+    const heads = $('#heads');
+    heads.replaceChildren();
+    for (const name of S.projects) {
+      const head = document.createElement('div');
+      head.setAttribute('data-section-head', '');
+      head.append(document.createTextNode(name));
+      const b = document.createElement('button');
+      b.type = 'button'; b.setAttribute('aria-label', 'New Agent'); b.style.cssText = 'width:16px;height:16px;margin-left:6px';
+      b.addEventListener('click', () => { S.newChat = { project: name }; S.current = null; S.log.push(`newagent:${name}`); render(); });
+      head.append(b);
+      heads.append(head);
+    }
+    const bar = $('#newchat-bar');
+    bar.hidden = !S.newChat;
+    if (S.newChat) {
+      const t = bar.querySelectorAll('.ui-select-trigger');
+      t[0].textContent = S.newChat.project.toLowerCase();
+      t[2].textContent = S.env ?? 'This Mac';
+    }
     for (const id of Object.keys(S.chats)) {
       if (S.chats[id].archived && !S.showArchived) continue;
       const b = document.createElement('button');
@@ -272,6 +293,18 @@
     const text = comp.innerText.replace(/\n+$/, '');
     const images = previews.children.length;
     if (!text.trim() && !images) return;
+    if (S.newChat) {
+      const id = `new-${S.newChats.length + 1}`;
+      S.chats[id] = { name: text.slice(0, 20) || 'Chat nuova' };
+      S.newChats.push({ id, project: S.newChat.project, text, images });
+      S.newChat = null;
+      S.current = id;
+      comp.replaceChildren();
+      previews.replaceChildren();
+      refreshSend();
+      render();
+      return;
+    }
     S.sent.push(images ? { chat: S.current, text, images } : { chat: S.current, text });
     comp.replaceChildren();
     previews.replaceChildren();
@@ -318,7 +351,7 @@
   window.__mock = {
     reset(cfg) {
       document.querySelector('#previews').replaceChildren();
-      S = { current: cfg.current ?? null, chats: cfg.chats, qstate: {}, done: {}, submitted: [], skipped: [], sent: [], clicks: 0, log: [], decided: {}, stopped: [], renamed: [], archived: [], unarchived: [], showArchived: false, renaming: null, noPreview: cfg.noPreview === true };
+      S = { current: cfg.current ?? null, chats: cfg.chats, qstate: {}, done: {}, submitted: [], skipped: [], sent: [], clicks: 0, log: [], decided: {}, stopped: [], renamed: [], archived: [], unarchived: [], showArchived: false, renaming: null, noPreview: cfg.noPreview === true, projects: cfg.projects ?? [], env: cfg.env ?? null, newChat: null, newChats: [] };
       for (const [id, c] of Object.entries(S.chats)) {
         S.qstate[id] = { step: 0, selections: JSON.parse(JSON.stringify(cfg.initialSelections?.[id] ?? {})), freeform: { ...(cfg.initialFreeform?.[id] ?? {}) } };
         if (c.questions) {
@@ -331,7 +364,7 @@
       refreshSend();
       render();
     },
-    state() { return JSON.stringify({ current: S.current, submitted: S.submitted, skipped: S.skipped, sent: S.sent, clicks: S.clicks, log: S.log, decided: S.decided, stopped: S.stopped, renamed: S.renamed, archived: S.archived, unarchived: S.unarchived, showArchived: S.showArchived, renaming: S.renaming }); },
+    state() { return JSON.stringify({ current: S.current, submitted: S.submitted, skipped: S.skipped, sent: S.sent, clicks: S.clicks, log: S.log, decided: S.decided, stopped: S.stopped, renamed: S.renamed, archived: S.archived, unarchived: S.unarchived, showArchived: S.showArchived, renaming: S.renaming, newChats: S.newChats, newChat: S.newChat }); },
   };
 })();
 </script>

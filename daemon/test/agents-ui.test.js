@@ -337,4 +337,47 @@ describe('AgentsUi su Chromium con la pagina finta', { skip }, () => {
       assert.equal((await state()).showArchived, false);
     });
   });
+
+  describe('nuova chat su un progetto', () => {
+    const cfg = (extra = {}) => ({ current: 'chat-b', projects: ['Progetto A', 'Progetto B'], chats: { 'chat-a': { name: 'Chat A' }, 'chat-b': { name: 'Chat B' } }, ...extra });
+
+    it('apre "New Agent" del progetto giusto, controlla progetto e ambiente, scrive, invia e ridà l\'id della chat nuova', async () => {
+      await reset(cfg());
+      const r = await ui.newChat({ project: 'Progetto B', text: 'Crea un README\ncon le istruzioni' });
+      assert.deepEqual(r, { composerId: 'new-1' });
+      const s = await state();
+      assert.deepEqual(s.newChats, [{ id: 'new-1', project: 'Progetto B', text: 'Crea un README\ncon le istruzioni', images: 0 }]);
+      assert.deepEqual(s.sent, []);
+      assert.equal(s.current, 'chat-b', 'la chat che era aperta torna aperta');
+    });
+
+    it('con sole immagini (niente testo) crea la chat lo stesso', async () => {
+      const f = path.join(os.tmpdir(), `cp-test4-${process.pid}.png`);
+      fs.writeFileSync(f, Buffer.from('iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==', 'base64'));
+      try {
+        await reset(cfg());
+        await ui.newChat({ project: 'Progetto A', text: '', files: [f, f] });
+        assert.deepEqual((await state()).newChats.map((c) => [c.project, c.text, c.images]), [['Progetto A', '', 2]]);
+      } finally {
+        fs.rmSync(f, { force: true });
+      }
+    });
+
+    it('rifiuta senza inviare: progetto assente, nome doppio, ambiente non locale', async () => {
+      await reset(cfg());
+      await assert.rejects(ui.newChat({ project: 'Inesistente', text: 'x' }), (e) => e.code === 'project_not_found');
+      await reset(cfg({ projects: ['Progetto A', 'Progetto A'] }));
+      await assert.rejects(ui.newChat({ project: 'Progetto A', text: 'x' }), (e) => e.code === 'project_ambiguous');
+      await reset(cfg({ env: 'New Worktree' }));
+      await assert.rejects(ui.newChat({ project: 'Progetto A', text: 'x' }), (e) => e.code === 'not_local');
+      assert.deepEqual((await state()).newChats, []);
+    });
+
+    it('dryRun: arriva ai controlli e non invia', async () => {
+      await reset(cfg());
+      const r = await ui.newChat({ project: 'Progetto A', text: 'x', dryRun: true });
+      assert.equal(r.dryRun, true);
+      assert.deepEqual((await state()).newChats, []);
+    });
+  });
 });

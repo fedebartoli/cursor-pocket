@@ -9,6 +9,7 @@ import { mountChat } from './views/chat.js';
 import { mountHelp } from './views/help.js';
 import { mountArchive } from './views/archive.js';
 import { mountHistory } from './views/history.js';
+import { mountNewChat } from './views/newchat.js';
 import { mountHome } from './views/home.js';
 import { mountLogin, mountUnreachable } from './views/login.js';
 import { mountSettings } from './views/settings.js';
@@ -39,10 +40,10 @@ const tabbar = h('nav', { class: 'tabbar', 'aria-label': 'Navigazione principale
 document.body.append(tabbar);
 
 function updateTabbar(routeName) {
-  const visible = mode === 'app' && routeName !== 'chat' && routeName !== 'history';
+  const visible = mode === 'app' && routeName !== 'chat' && routeName !== 'history' && routeName !== 'newchat';
   tabbar.hidden = !visible;
   document.body.classList.toggle('has-tabbar', visible);
-  const active = routeName === 'help' || routeName === 'archive' ? 'settings' : routeName; // "Come funziona" sta sotto Impostazioni
+  const active = routeName === 'help' || routeName === 'archive' ? 'settings' : routeName === 'newchat' ? 'chats' : routeName; // "Come funziona" sta sotto Impostazioni
   for (const [route, el] of tabEls) {
     if (visible && route === active) el.setAttribute('aria-current', 'page');
     else el.removeAttribute('aria-current');
@@ -76,6 +77,7 @@ function parseRoute() {
     }
   }
   if (hash === '#/impostazioni') return { name: 'settings', key: 'settings' };
+  if (hash === '#/nuova') return { name: 'newchat', key: 'newchat' };
   if (hash === '#/archivio') return { name: 'archive', key: 'archive' };
   if (hash === '#/come-funziona') return { name: 'help', key: 'help' };
   if (hash === '#/chat') return { name: 'chats', key: 'chats' };
@@ -96,6 +98,7 @@ function mountRoute() {
   else if (route.name === 'settings') view = mountSettings(root, { onLoggedOut: showLogin });
   else if (route.name === 'help') view = mountHelp(root);
   else if (route.name === 'archive') view = mountArchive(root);
+  else if (route.name === 'newchat') view = mountNewChat(root);
   else view = mountHome(root, route.name === 'home' ? 'attention' : route.name);
   // Si ripristina la posizione degli elenchi; le altre schermate partono dall'alto.
   const isList = ['home', 'chats', 'favorites'].includes(route.name);

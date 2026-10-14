@@ -60,6 +60,10 @@ export const SEL = Object.freeze({
   imagePreview: '.ui-prompt-input-image-preview',
   imageRemove: '.ui-prompt-input-image-preview button[aria-label="Remove image"]',
   fileMark: 'data-cp-file-target',
+  // Testata di un gruppo (progetto) della sidebar: contiene il pulsante "New Agent" che apre una chat nuova gia' su quel progetto.
+  sectionHead: '[data-section-head]',
+  newAgent: 'button[aria-label="New Agent"]',
+  selectTrigger: '.ui-select-trigger',
   messageIdAttr: 'data-message-id',
 });
 
@@ -181,6 +185,11 @@ function pageKit(SEL, APPROVE_LABEL, REJECT_LABEL) {
   K.renameInput = () => [...document.querySelectorAll(SEL.renameInput)].find(K.visible) || null;
   K.customize = () => [...document.querySelectorAll(SEL.customize)].find(K.visible) || null;
   K.stop = () => [...K.scope().querySelectorAll(SEL.stop)].find(K.visible) || null;
+  K.sectionHeads = (name) => [...document.querySelectorAll(SEL.sectionHead)].filter((e) => K.text(e).trim() === name);
+  K.newAgent = (name) => {
+    const heads = K.sectionHeads(name);
+    return heads.length === 1 ? heads[0].querySelector(SEL.newAgent) : null;
+  };
   K.fileInput = () => K.scope().querySelector(SEL.fileInput);
   K.previews = () => [...K.scope().querySelectorAll(SEL.imagePreview + ' img')];
   K.imageRemove = () => [...K.scope().querySelectorAll(SEL.imageRemove)].find(K.visible) || null;
@@ -235,6 +244,8 @@ function pageDo(a, K) {
         return K.customize();
       case 'removeImage':
         return K.imageRemove();
+      case 'newAgent':
+        return K.newAgent(a.name);
       default:
         return null;
     }
@@ -299,6 +310,15 @@ function pageDo(a, K) {
         tray: !!K.tray(),
         images: K.previews().length,
       };
+    }
+    case 'sectionCount':
+      return K.sectionHeads(a.name).length;
+    case 'rowKeys':
+      return K.rows().map((r) => K.rowKey(r));
+    case 'newChatState': {
+      // Schermata "nuova chat": nessun pannello di conversazione, tre selettori (progetto, ramo, ambiente) e il compositore.
+      const triggers = [...document.querySelectorAll(SEL.selectTrigger)].filter(K.visible).map((e) => K.text(e).trim());
+      return { composer: !!K.composer(), triggers };
     }
     case 'attachState':
       return { input: !!K.fileInput(), previews: K.previews().length };
@@ -451,6 +471,14 @@ class Ctx {
       throw new UiError('click_failed', `clic non riuscito: ${args.target}`);
     }
     await this.s.click(loc.x, loc.y);
+  }
+
+  /** Sposta il mouse sull'elemento (i pulsanti di una riga compaiono solo al passaggio). */
+  async hover(args) {
+    const loc = await this.locate(args);
+    if (!loc.found) throw new UiError('not_found', `elemento non trovato: ${args.target}`);
+    await this.s.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: loc.x, y: loc.y });
+    await realSleep(200);
   }
 
   /** Tasto destro al centro dell'elemento (menu contestuale). */
@@ -1005,6 +1033,86 @@ export class AgentsUi {
       } finally {
         await this.#restore(ctx, previous, composerId);
       }
+    });
+  }
+
+  /**
+   * Apre una chat NUOVA sul progetto `project` (pulsante "New Agent" del gruppo nella sidebar), scrive il primo messaggio e lo invia.
+   * Si controlla che il progetto sia quello giusto e che l'ambiente sia "This Mac" (locale): mai chat nel cloud o in un worktree.
+   * Ritorna l'id della chat creata (la riga nuova comparsa nella sidebar).
+   */
+  async newChat({ project, text, files = [], dryRun = false }) {
+    if (typeof project !== 'string' || !project.trim()) throw new UiError('bad_project', 'progetto non valido');
+    return this.withSession(async (ctx) => {
+      const previous = await ctx.page({ op: 'selectedKey' }).catch(() => null);
+      const before = new Set(await ctx.page({ op: 'rowKeys' }));
+      const count = await ctx.page({ op: 'sectionCount', name: project });
+      if (count === 0) throw new UiError('project_not_found', 'progetto non trovato nella sidebar di Cursor');
+      if (count > 1) throw new UiError('project_ambiguous', 'piu\' progetti con lo stesso nome nella sidebar');
+      await ctx.hover({ target: 'newAgent', name: project });
+      await ctx.clickTarget({ target: 'newAgent', name: project });
+      // Si attende che la schermata mostri DAVVERO il progetto richiesto (se prima c'era gia' una schermata "nuova chat",
+      // il compositore c'e' gia' e il progetto cambia solo dopo il clic).
+      let last = null;
+      const screen = await waitFor(async () => {
+        const st = await ctx.page({ op: 'newChatState' });
+        last = st;
+        return st.composer && st.triggers.length >= 3 && norm(st.triggers[0]) === norm(project) ? st : null;
+      }, { timeoutMs: 4000, sleep: this.sleep });
+      if (!screen) {
+        if (last?.composer && last.triggers.length >= 3) throw new UiError('wrong_project', 'Cursor ha scelto un altro progetto');
+        throw new UiError('no_new_chat', 'la schermata della nuova chat non e\' comparsa');
+      }
+      if (norm(screen.triggers[screen.triggers.length - 1]) !== 'thismac') throw new UiError('not_local', 'la nuova chat non e\' locale (This Mac)');
+      const info = await ctx.page({ op: 'composerInfo' });
+      if (!info.composer?.empty || info.images > 0) throw new UiError('draft_not_empty', 'nel campo di scrittura c\'e\' gia\' una bozza');
+      if (dryRun) {
+        // Solo per prove: arriva fin qui (schermata, progetto, ambiente, bozza vuota), allega e toglie le immagini, non invia.
+        let n = null;
+        if (files.length) {
+          await this.#attach(ctx, files);
+          n = (await ctx.page({ op: 'attachState' })).previews;
+          await ctx.clearImages();
+        }
+        await this.#restore(ctx, previous, '');
+        return { dryRun: true, project: screen.triggers[0], env: screen.triggers[screen.triggers.length - 1], attached: n };
+      }
+
+      let attached = false;
+      try {
+        if (files.length) {
+          await this.#attach(ctx, files);
+          attached = true;
+        }
+        if (text) {
+          await ctx.clickTarget({ target: 'composer' });
+          const focus = await ctx.focusState('composer');
+          if (!focus.found || !focus.focused) throw new UiError('focus_failed', 'campo di scrittura senza focus');
+          await ctx.typeText(text);
+          const typed = await waitFor(async () => {
+            const f = await ctx.focusState('composer');
+            return f.found && norm(f.text).startsWith(norm(text).slice(0, 40)) ? f : null;
+          }, { timeoutMs: 3000, sleep: this.sleep });
+          if (!typed) throw new UiError('type_failed', 'testo non inserito nel campo di scrittura');
+        }
+        const enabled = await waitFor(async () => {
+          const i = await ctx.page({ op: 'composerInfo' });
+          return i.send && !i.send.disabled ? i : null;
+        }, { timeoutMs: 3000, sleep: this.sleep });
+        if (!enabled) throw new UiError('send_disabled', 'pulsante di invio non disponibile');
+      } catch (e) {
+        if (attached) await ctx.clearImages().catch(() => {});
+        throw e;
+      }
+      await ctx.clickTarget({ target: 'send' });
+      const created = await waitFor(async () => {
+        const keys = await ctx.page({ op: 'rowKeys' });
+        const fresh = keys.filter((k) => !before.has(k));
+        return fresh.length === 1 ? fresh[0] : null;
+      }, { timeoutMs: 12_000, sleep: this.sleep });
+      if (!created) throw new UiError('send_failed', 'non vedo la chat nuova in Cursor');
+      await this.#restore(ctx, previous, created.replace(/^row:/, ''));
+      return { composerId: created.replace(/^row:/, '') };
     });
   }
 }

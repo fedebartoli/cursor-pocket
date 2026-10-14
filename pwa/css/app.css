@@ -601,3 +601,21 @@ button.section-head { cursor: pointer; }
 .attach-item.loading img { opacity: 0.45; }
 .attach-wait { position: absolute; inset: 0; display: grid; place-items: center; color: var(--text); }
 .attach-remove { position: absolute; top: -6px; right: -6px; width: 22px; height: 22px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 50%; background: var(--surface); color: var(--text); cursor: pointer; }
+
+/* Nuova chat */
+.newchat { display: flex; flex-direction: column; gap: 10px; }
+.newchat-label { font-size: 14px; font-weight: 600; }
+.newchat-input { width: 100%; min-height: 120px; resize: vertical; max-height: none; }
+.newchat-tools { display: flex; align-items: center; gap: 8px; }
+.project-list { display: flex; flex-direction: column; max-height: 220px; overflow-y: auto; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--surface-2); }
+.project-item { display: flex; align-items: center; gap: 10px; min-height: 44px; padding: 0 12px; border: 0; background: transparent; color: var(--text); text-align: left; cursor: pointer; }
+.project-item + .project-item { border-top: 1px solid var(--line); }
+.project-item:active { background: var(--surface); }
+.project-item:disabled { opacity: 0.6; }
+.project-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.project-item svg:last-child { visibility: hidden; color: var(--accent); }
+.project-item[aria-checked="true"] svg:last-child { visibility: visible; }
+.project-item[aria-checked="true"] { font-weight: 600; }
+.newchat-tools .grow { flex: 1; min-width: 0; }
+
+.attach.wide { width: auto; padding: 0 14px; gap: 8px; display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: var(--r-control); color: var(--text); font-weight: 600; font-size: 15px; }

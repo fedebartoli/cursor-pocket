@@ -370,7 +370,7 @@ export function mountHome(root, mode = 'attention') {
       appbar({
         title: TITLES[mode],
         logo: true,
-        actions: [iconButton({ label: 'Aggiorna', name: 'refresh', spin: refreshing, onClick: doRefresh })],
+        actions: [...(mode === 'chats' ? [iconButton({ label: 'Nuova chat', name: 'plus', href: '#/nuova' })] : []), iconButton({ label: 'Aggiorna', name: 'refresh', spin: refreshing, onClick: doRefresh })],
       }),
     ];
     if (lv.offline) {

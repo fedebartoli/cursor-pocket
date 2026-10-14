@@ -170,6 +170,12 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
       return sendJson(res, 200, { ok: true }, headers);
     }
 
+    // --- nuova chat (locale) su un progetto ---
+    if (path === '/api/chats' && method === 'POST') {
+      const body = await readJson(req, MAX_ACTION_BODY_BYTES);
+      return sendJson(res, 200, await actions.newChat({ sectionId: body.sectionId, text: body.text, images: body.images }), headers);
+    }
+
     // --- chat archiviate ---
     if (path === '/api/archived' && method === 'GET') {
       return sendJson(res, 200, { chats: watcher.archived({ limit: 60 }) }, headers);

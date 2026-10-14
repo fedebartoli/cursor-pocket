@@ -91,6 +91,11 @@ const UI_ERRORS = {
   no_rename_field: [409, 'ui_changed', 'Cursor non ha aperto il campo del nome: controlla sul Mac.'],
   no_file_input: [409, 'ui_changed', 'Cursor non mostra il campo per gli allegati: controlla sul Mac.'],
   attach_failed: [409, 'attach_failed', 'Cursor non ha accettato le immagini: riprova o allegale dal Mac.'],
+  project_not_found: [409, 'project_not_found', 'Cursor non mostra questo progetto nella sidebar (rimosso o rinominato?): controlla sul Mac.'],
+  project_ambiguous: [409, 'project_ambiguous', 'In Cursor ci sono piu\' progetti con questo nome: avvia la chat dal Mac.'],
+  wrong_project: [409, 'ui_changed', 'Cursor ha aperto la chat su un altro progetto: nessun messaggio inviato.'],
+  not_local: [409, 'not_local', 'La nuova chat in Cursor non e\' impostata su "This Mac": nessun messaggio inviato. Cambia l\'ambiente dal Mac.'],
+  no_new_chat: [409, 'ui_changed', 'Cursor non ha aperto la schermata della nuova chat: controlla sul Mac.'],
   bad_name: [400, 'bad_name', 'Nome non valido.'],
   not_running: [409, 'not_running', 'L\'agente non sta lavorando in Cursor (forse ha gia\' finito).'],
 };
@@ -448,6 +453,41 @@ export class Actions extends EventEmitter {
       });
       ok = true;
       this.logger.info('restore_chat', { verified: res.verified === true });
+      return res;
+    } finally {
+      slot.done(ok);
+    }
+  }
+
+  /** Avvia una chat NUOVA (locale, "This Mac") su un progetto con il primo messaggio. */
+  async newChat({ sectionId, text, images } = {}) {
+    const ids = images === undefined ? [] : images;
+    if (!Array.isArray(ids) || ids.length > UPLOAD_LIMITS.perMessage || !ids.every((x) => typeof x === 'string')) {
+      throw new ActionError(400, 'bad_images', `Si possono allegare al massimo ${UPLOAD_LIMITS.perMessage} immagini`);
+    }
+    if (text !== undefined && typeof text !== 'string') throw new ActionError(400, 'bad_text', 'Scrivi un messaggio');
+    const clean = cleanText(text ?? '').trim();
+    if (!clean && !ids.length) throw new ActionError(400, 'bad_text', 'Scrivi un messaggio');
+    if (clean.length > LIMITS.messageChars) throw new ActionError(400, 'too_long', `Messaggio troppo lungo (massimo ${LIMITS.messageChars} caratteri)`);
+    if (typeof sectionId !== 'string' || !sectionId) throw new ActionError(400, 'bad_project', 'Scegli un progetto');
+    this.#requireReady();
+    const known = this.watcher.last?.chats.find((c) => c.sectionId === sectionId);
+    if (!known?.workspaceName) throw new ActionError(404, 'not_found', 'Progetto non trovato');
+    const files = ids.length ? this.uploads?.paths(ids) : [];
+    if (!files) throw new ActionError(409, 'image_expired', 'Un\'immagine non \u00e8 pi\u00f9 disponibile: allegala di nuovo.');
+    const slot = this.#dedupe('newchat', sectionId, crypto.createHash('sha1').update(clean + '\u0000' + ids.join(',')).digest('hex').slice(0, 16), 10_000);
+    let ok = false;
+    try {
+      const res = await this.#run('newchat', async () => {
+        const r = await this.ui.newChat({ project: known.workspaceName, text: clean, ...(files.length ? { files } : {}) });
+        const seen = await this.#waitFor(() => (this.db.chatFlags(r.composerId) ? true : null), 12_000);
+        return { ok: true, chatId: r.composerId, verified: Boolean(seen) };
+      });
+      ok = true;
+      if (ids.length) this.uploads?.remove(ids);
+      this.logger.info('new_chat', { images: ids.length, verified: res.verified === true });
+      this.watcher.boost?.(res.chatId);
+      this.watcher.tick?.();
       return res;
     } finally {
       slot.done(ok);

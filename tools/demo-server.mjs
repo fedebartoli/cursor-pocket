@@ -219,6 +219,7 @@ const config = loadConfig({
 });
 
 let pushes = 0;
+let newChats = 0;
 
 // "Cursor" finto per le azioni dal telefono: scrive nel database sintetico quello che scriverebbe Cursor vero.
 const numOf = (composerId) => Number(composerId.slice(-12));
@@ -277,6 +278,16 @@ const demoUi = {
     chat(n, spec.name, spec.where, 0, { unfinishedRunAt: undefined });
     console.log('[demo] agente fermato, chat', n);
     return { clicked: true, settled: true };
+  },
+  async newChat({ project, text }) {
+    const where = Object.keys(WS).find((k) => WS[k].path.endsWith(`/${project}`));
+    if (!where) throw Object.assign(new Error('demo'), { code: 'project_not_found' });
+    await new Promise((r) => setTimeout(r, 600));
+    newChats += 1;
+    const n = 100 + newChats;
+    chat(n, (text || 'Chat con immagini').slice(0, 40), where, 0, { unfinishedRunAt: Date.now() });
+    talk(n, 0, null);
+    return { composerId: id(n) };
   },
   async rename({ composerId, name }) {
     const n = numOf(composerId);

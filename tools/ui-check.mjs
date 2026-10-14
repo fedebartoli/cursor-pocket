@@ -67,7 +67,7 @@ const page = await ctx.newPage();
 const problems = [];
 page.on('console', (m) => {
   const t = m.text();
-  if (/Content Security Policy|CSP|violat/i.test(t) || m.type() === 'error') problems.push(`${m.type()}: ${t.slice(0, 160)}`);
+  if (/Content Security Policy|CSP|violat/i.test(t) || m.type() === 'error') problems.push(`${m.type()}: ${t.slice(0, 160)} @ ${page.url().split('#')[1] ?? ''}`);
 });
 page.on('pageerror', (e) => problems.push(`pageerror: ${String(e.message).slice(0, 160)}`));
 const shot = async (name) => {
@@ -573,6 +573,25 @@ try {
   await page.locator('.list .row', { hasText: 'Testi rivisti' }).locator('.btn').click();
   await page.waitForSelector('.empty');
   check('archivio: senza chat archiviate c\'e\' lo stato vuoto', (await page.locator('.empty h2', { hasText: 'Nessuna chat archiviata' }).count()) === 1);
+
+  // --- nuova chat: dalla scheda Chat, con progetto, testo e immagine ---
+  await page.goto(`${BASE}/#/chat`);
+  await page.waitForSelector('a[aria-label="Nuova chat"]');
+  check('nuova chat: il pulsante "Nuova chat" e\' in alto nella scheda Chat (icona SVG)', (await page.locator('a[aria-label="Nuova chat"] svg').count()) === 1);
+  await page.locator('a[aria-label="Nuova chat"]').click();
+  await page.waitForSelector('#newchat-project');
+  check('nuova chat: elenco dei progetti, campo per il messaggio, "Avvia" disattivato a campo vuoto', (await page.locator('#newchat-project [role=radio]').count()) === 3 && (await page.locator('.newchat button[type=submit]').isDisabled()));
+  await page.locator('#newchat-project [role=radio]', { hasText: 'sito-vetrina' }).click();
+  check('nuova chat: il progetto toccato risulta scelto (uno solo)', (await page.locator('#newchat-project [aria-checked=true]').count()) === 1 && (await page.locator('#newchat-project [aria-checked=true]').innerText()).includes('sito-vetrina'));
+  await page.locator('#newchat-text').fill('Aggiungi una pagina contatti');
+  await page.locator('input[type=file]').setInputFiles([{ name: 'a.png', mimeType: 'image/png', buffer: Buffer.from(PNG_B64, 'base64') }]);
+  await page.waitForFunction(() => document.querySelectorAll('.attach-item').length === 1 && !document.querySelector('.attach-item.loading'), null, { timeout: 8000 });
+  await shot('21-newchat');
+  check('nuova chat: con testo e immagine "Avvia" e\' attivo', await page.locator('.newchat button[type=submit]').isEnabled());
+  await page.locator('.newchat button[type=submit]').click();
+  await page.waitForFunction(() => /^#\/chat\/00000000-0000-4000-8000-0000000001\d\d$/.test(location.hash), null, { timeout: 15000 });
+  await page.waitForSelector('.chat-name');
+  check('nuova chat: dopo l\'avvio si apre la pagina della chat creata (nel progetto scelto)', (await page.locator('.chat-name').innerText()).startsWith('Aggiungi una pagina') && (await page.locator('.appbar-title').innerText()) === 'sito-vetrina');
 
   // --- Mac sveglio: interruttore in Impostazioni (con una chat in corso diventa attivo) ---
   await page.goto(`${BASE}/#/impostazioni`);
