@@ -173,8 +173,7 @@ Good to know:
   generate notifications.
 - Approval requested: the agent is waiting for your “Run”/“Allow” (a command, a change, an MCP tool,
   a web request; even when a project hook asks). Sent only if after `CP_APPROVAL_DELAY_SECONDS` (8 s)
-  you are still waiting, so it does not bother you if you approve immediately on the Mac. The text says only the action type (“Comando da
-  eseguire”), never the command. From the phone (inside the app) you can approve or reject a terminal command, with two taps; other requests you decide in Cursor on the Mac. If it never arrives, see
+  you are still waiting, so it does not bother you if you approve immediately on the Mac. The text says only the action type (e.g. “Command to run” in English), never the command; the language follows the app language you chose in the PWA. From the phone (inside the app) you can approve or reject a terminal command, with two taps; other requests you decide in Cursor on the Mac. If it never arrives, see
   FINDINGS 11.4 (and daemon log: `approval_seen`).
 - Chat finished (after work of at least `CP_MIN_RUN_SECONDS`).
 - Tapping the notification opens the chat. Notification content is end-to-end encrypted (RFC 8291) between the daemon and

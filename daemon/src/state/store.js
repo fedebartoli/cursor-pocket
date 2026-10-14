@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS ignored (
 );
 CREATE TABLE IF NOT EXISTS push_subscriptions (
   endpoint TEXT PRIMARY KEY, p256dh TEXT NOT NULL, auth TEXT NOT NULL, session_hash TEXT,
-  created_at INTEGER NOT NULL, last_ok_at INTEGER, fail_count INTEGER NOT NULL DEFAULT 0
+  created_at INTEGER NOT NULL, last_ok_at INTEGER, fail_count INTEGER NOT NULL DEFAULT 0, lang TEXT
 );
 CREATE TABLE IF NOT EXISTS notified (dedupe_key TEXT PRIMARY KEY, created_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS pairing_codes (code_hash TEXT PRIMARY KEY, expires_at INTEGER NOT NULL, used_at INTEGER);
@@ -44,6 +44,7 @@ export class Store {
     this.#db.exec('PRAGMA journal_mode = WAL');
     this.#db.exec('PRAGMA synchronous = NORMAL');
     this.#db.exec(SCHEMA);
+    this.#migrate();
     if (file !== ':memory:') {
       for (const f of [file, `${file}-wal`, `${file}-shm`]) {
         try {
@@ -68,14 +69,15 @@ export class Store {
       listPrefs: db.prepare('SELECT composer_id, favorite, muted FROM chat_prefs WHERE favorite = 1 OR muted = 1'),
       prunePrefs: db.prepare('DELETE FROM chat_prefs WHERE favorite = 0 AND muted = 0'),
       pruneIgnore: db.prepare('DELETE FROM ignored WHERE created_at < ?'),
+      getSub: db.prepare('SELECT lang FROM push_subscriptions WHERE endpoint = ?'),
       upsertSub: db.prepare(
-        `INSERT INTO push_subscriptions (endpoint, p256dh, auth, session_hash, created_at) VALUES (?, ?, ?, ?, ?)
+        `INSERT INTO push_subscriptions (endpoint, p256dh, auth, session_hash, created_at, lang) VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT(endpoint) DO UPDATE SET p256dh = excluded.p256dh, auth = excluded.auth,
-           session_hash = excluded.session_hash, fail_count = 0`,
+           session_hash = excluded.session_hash, fail_count = 0, lang = excluded.lang`,
       ),
       delSub: db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?'),
       delSubsBySession: db.prepare('DELETE FROM push_subscriptions WHERE session_hash = ?'),
-      listSubs: db.prepare('SELECT endpoint, p256dh, auth, session_hash FROM push_subscriptions'),
+      listSubs: db.prepare('SELECT endpoint, p256dh, auth, session_hash, lang FROM push_subscriptions'),
       subOk: db.prepare('UPDATE push_subscriptions SET last_ok_at = ?, fail_count = 0 WHERE endpoint = ?'),
       subFail: db.prepare('UPDATE push_subscriptions SET fail_count = fail_count + 1 WHERE endpoint = ?'),
       subCount: db.prepare('SELECT COUNT(*) AS n FROM push_subscriptions'),
@@ -98,6 +100,13 @@ export class Store {
 
   close() {
     this.#db.close();
+  }
+
+  #migrate() {
+    const cols = this.#db.prepare('PRAGMA table_info(push_subscriptions)').all();
+    if (!cols.some((c) => c.name === 'lang')) {
+      this.#db.exec('ALTER TABLE push_subscriptions ADD COLUMN lang TEXT');
+    }
   }
 
   // --- meta (VAPID keys, etc.) ---
@@ -141,8 +150,11 @@ export class Store {
   }
 
   // --- push subscriptions ---
-  upsertSubscription({ endpoint, p256dh, auth }, sessionHash, now) {
-    this.#q.upsertSub.run(endpoint, p256dh, auth, sessionHash ?? null, now);
+  upsertSubscription({ endpoint, p256dh, auth }, sessionHash, now, extra = {}) {
+    const prev = this.#q.getSub.get(endpoint);
+    let lang = prev?.lang ?? null;
+    if (Object.hasOwn(extra, 'lang')) lang = extra.lang;
+    this.#q.upsertSub.run(endpoint, p256dh, auth, sessionHash ?? null, now, lang);
   }
   removeSubscription(endpoint) {
     return this.#q.delSub.run(endpoint).changes > 0;
@@ -151,7 +163,13 @@ export class Store {
     return this.#q.delSubsBySession.run(sessionHash).changes;
   }
   listSubscriptions() {
-    return this.#q.listSubs.all().map((r) => ({ endpoint: r.endpoint, p256dh: r.p256dh, auth: r.auth, sessionHash: r.session_hash }));
+    return this.#q.listSubs.all().map((r) => ({
+      endpoint: r.endpoint,
+      p256dh: r.p256dh,
+      auth: r.auth,
+      sessionHash: r.session_hash,
+      lang: r.lang ?? null,
+    }));
   }
   countSubscriptions() {
     return this.#q.subCount.get().n;

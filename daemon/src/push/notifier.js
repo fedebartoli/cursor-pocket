@@ -2,7 +2,7 @@
 //
 // Logs NEVER contain chat text, endpoints, or keys: counts only (see src/log.js).
 import { sendPush, generateVapidKeys } from './webpush.js';
-import { toolActionLabel } from '../state/present.js';
+import { effectiveLanguage, tm, toolActionKey } from '../i18n.js';
 import { DEFAULT_QUIET, isQuiet, normalizeQuiet } from './quiet.js';
 import { clampStr, safeJsonParse, sleep as realSleep } from '../util.js';
 
@@ -61,25 +61,36 @@ export class Notifier {
     return this.vapid.publicKey;
   }
 
+  #where(chat, lang) {
+    const name = oneLine(chat.name, 70) || tm(lang, 'push.untitled');
+    const ws = oneLine(chat.workspaceName, 40) || tm(lang, 'push.noFolder');
+    return `${name} - ${ws}`;
+  }
+
   /** Build title/body/destination for a watcher event. */
-  compose(event) {
+  compose(event, lang = 'en') {
     const chat = event.chat;
-    const where = `${oneLine(chat.name, 70)} - ${oneLine(chat.workspaceName, 40)}`;
+    const where = this.#where(chat, lang);
     const base = { tag: `chat-${chat.id}`, url: `/#/chat/${encodeURIComponent(chat.id)}`, badge: this.#badge() };
     if (event.type === 'attention') {
       const a = event.attention;
       if (a.kind === 'question') {
         const prompt = oneLine(a.title || a.prompt, 120);
-        return { ...base, kind: 'question', title: 'Domanda in attesa', body: prompt ? `${where}\n${prompt}` : where };
+        return { ...base, kind: 'question', title: tm(lang, 'push.title.question'), body: prompt ? `${where}\n${prompt}` : where };
       }
       if (a.kind === 'approval') {
         // Action TYPE only (command, edit, MCP...): never the raw command on the lock screen.
-        return { ...base, kind: 'approval', title: 'Approvazione richiesta', body: `${where}\n${toolActionLabel(a.toolName)}` };
+        return {
+          ...base,
+          kind: 'approval',
+          title: tm(lang, 'push.title.approval'),
+          body: `${where}\n${tm(lang, toolActionKey(a.toolName))}`,
+        };
       }
       // The watcher notifies questions and approvals only (FINDINGS 9.1, 11); unknown types get a generic message.
-      return { ...base, kind: 'attention', title: 'Richiede attenzione', body: where };
+      return { ...base, kind: 'attention', title: tm(lang, 'push.title.attention'), body: where };
     }
-    if (event.type === 'done') return { ...base, kind: 'done', title: 'Chat finita', body: where };
+    if (event.type === 'done') return { ...base, kind: 'done', title: tm(lang, 'push.title.done'), body: where };
     return { ...base, kind: 'info', title: 'Cursor Pocket', body: where };
   }
 
@@ -105,31 +116,40 @@ export class Notifier {
     }
   }
 
-  async #broadcast(message, label, extra = {}) {
+  async #broadcast(messageForLang, label, extra = {}) {
     const started = this.#now();
     const subs = this.#store.listSubscriptions();
     if (!subs.length) {
       this.#log.info('push_skipped', { reason: 'no subscriptions', kind: label });
       return { sent: 0, failed: 0, removed: 0 };
     }
-    const payload = JSON.stringify(message);
-    const topic = message.tag.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32);
-    const results = await Promise.all(subs.map((s) => this.#deliver(s, payload, topic)));
+    const byLang = new Map();
+    for (const s of subs) {
+      const lang = effectiveLanguage(s.lang);
+      if (!byLang.has(lang)) byLang.set(lang, []);
+      byLang.get(lang).push(s);
+    }
     let sent = 0;
     let failed = 0;
     let removed = 0;
-    results.forEach((r, i) => {
-      if (r.outcome === 'ok') {
-        sent++;
-        this.#store.markSubscriptionOk(subs[i].endpoint, this.#now());
-      } else if (r.outcome === 'gone') {
-        removed++;
-        this.#store.removeSubscription(subs[i].endpoint);
-      } else {
-        failed++;
-        this.#store.markSubscriptionFailed(subs[i].endpoint);
-      }
-    });
+    for (const [lang, group] of byLang) {
+      const message = messageForLang(lang);
+      const payload = JSON.stringify(message);
+      const topic = message.tag.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32);
+      const results = await Promise.all(group.map((s) => this.#deliver(s, payload, topic)));
+      results.forEach((r, i) => {
+        if (r.outcome === 'ok') {
+          sent++;
+          this.#store.markSubscriptionOk(group[i].endpoint, this.#now());
+        } else if (r.outcome === 'gone') {
+          removed++;
+          this.#store.removeSubscription(group[i].endpoint);
+        } else {
+          failed++;
+          this.#store.markSubscriptionFailed(group[i].endpoint);
+        }
+      });
+    }
     this.#log.info('push_sent', { kind: label, sent, failed, removed, ...extra, sendMs: this.#now() - started });
     return { sent, failed, removed };
   }
@@ -164,23 +184,25 @@ export class Notifier {
       this.#log.info('push_skipped', { reason: silenced, kind: event.type });
       return { skipped: silenced };
     }
-    const message = this.compose(event);
+    const sample = this.compose(event, 'en');
     // Log the TYPE (domanda, approvazione, finita), never content: shows what was sent and when.
     // `detectMs`: from bubble start until the daemon notified; `sendMs`: send duration.
     const detectMs = Number.isFinite(event.since) ? Math.max(0, event.at - event.since) : undefined;
-    return this.#broadcast(message, message.kind, { detectMs });
+    return this.#broadcast((lang) => this.compose(event, lang), sample.kind, { detectMs });
   }
 
-  /** Test notification (not deduplicated). */
+  /** Test notification (not deduplicated); each subscription receives text in its stored language. */
   async sendTest() {
-    const message = {
-      kind: 'info',
-      title: 'Notifica di prova',
-      body: 'Le notifiche di Cursor Pocket funzionano.',
-      tag: 'test',
-      url: '/#/',
-      badge: this.#badge(),
-    };
-    return this.#broadcast(message, 'test');
+    return this.#broadcast(
+      (lang) => ({
+        kind: 'info',
+        title: tm(lang, 'push.test.title'),
+        body: tm(lang, 'push.test.body'),
+        tag: 'test',
+        url: '/#/',
+        badge: this.#badge(),
+      }),
+      'test',
+    );
   }
 }

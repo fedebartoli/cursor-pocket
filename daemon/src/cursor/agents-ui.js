@@ -512,11 +512,11 @@ class Ctx {
   /** Real click on the element (falls back to element.click() if covered or zero-sized). */
   async clickTarget(args) {
     const loc = await this.locate(args);
-    if (!loc.found) throw new UiError('not_found', `elemento non trovato: ${args.target}`);
-    if (loc.disabled) throw new UiError('disabled', `elemento disattivato: ${args.target}`);
+    if (!loc.found) throw new UiError('not_found', `element not found: ${args.target}`);
+    if (loc.disabled) throw new UiError('disabled', `element disabled: ${args.target}`);
     if (loc.covered || loc.w < 2 || loc.h < 2) {
       if (await this.page({ op: 'jsclick', ...args })) return;
-      throw new UiError('click_failed', `clic non riuscito: ${args.target}`);
+      throw new UiError('click_failed', `click failed: ${args.target}`);
     }
     await this.s.click(loc.x, loc.y);
   }
@@ -524,7 +524,7 @@ class Ctx {
   /** Move the mouse over the element (row buttons appear only on hover). */
   async hover(args) {
     const loc = await this.locate(args);
-    if (!loc.found) throw new UiError('not_found', `elemento non trovato: ${args.target}`);
+    if (!loc.found) throw new UiError('not_found', `element not found: ${args.target}`);
     await this.s.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: loc.x, y: loc.y });
     await realSleep(200);
   }
@@ -532,7 +532,7 @@ class Ctx {
   /** Right-click at the element center (context menu). */
   async rightClick(args) {
     const loc = await this.locate(args);
-    if (!loc.found) throw new UiError('not_found', `elemento non trovato: ${args.target}`);
+    if (!loc.found) throw new UiError('not_found', `element not found: ${args.target}`);
     const base = { x: loc.x, y: loc.y, button: 'right', clickCount: 1 };
     await this.s.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: loc.x, y: loc.y });
     await this.s.send('Input.dispatchMouseEvent', { ...base, type: 'mousePressed', buttons: 2 });
@@ -541,11 +541,11 @@ class Ctx {
 
   /** Attach local files to the foreground composer file input (as if chosen from the file picker). */
   async setFiles(files) {
-    if (!(await this.page({ op: 'markFileInput' }))) throw new UiError('no_file_input', 'campo allegati non trovato');
+    if (!(await this.page({ op: 'markFileInput' }))) throw new UiError('no_file_input', 'attachment field not found');
     try {
       const { root } = await this.s.send('DOM.getDocument', { depth: 0 });
       const { nodeId } = await this.s.send('DOM.querySelector', { nodeId: root.nodeId, selector: `[${'data-cp-file-target'}]` });
-      if (!nodeId) throw new UiError('no_file_input', 'campo allegati non trovato');
+      if (!nodeId) throw new UiError('no_file_input', 'attachment field not found');
       await this.s.send('DOM.setFileInputFiles', { files, nodeId });
     } finally {
       await this.page({ op: 'unmarkFileInput' }).catch(() => {});
@@ -608,7 +608,7 @@ export class AgentsUi {
       targets.find((x) => /agents/i.test(x.title)) ||
       targets.find((x) => /glass/i.test(x.url)) ||
       null;
-    if (!t) throw new UiError('no_window', 'finestra Agents non trovata');
+    if (!t) throw new UiError('no_window', 'Agents window not found');
     return t;
   }
 
@@ -647,7 +647,7 @@ export class AgentsUi {
   async #openChat(ctx, composerId) {
     const previous = await ctx.page({ op: 'selectedKey' }).catch(() => null);
     const loc = await ctx.locate({ target: 'row', id: composerId });
-    if (!loc.found) throw new UiError('row_not_found', 'chat non trovata nella sidebar di Cursor');
+    if (!loc.found) throw new UiError('row_not_found', 'chat not found in Cursor sidebar');
     if (previous && previous === loc.key) return previous; // already open: nothing to do
     await ctx.clickTarget({ target: 'row', id: composerId });
     // [TO VERIFY] selected-row marker; if missing, wait briefly.
@@ -683,18 +683,18 @@ export class AgentsUi {
       const previous = await this.#openChat(ctx, composerId);
       try {
         let view = await this.#waitTray(ctx);
-        if (!view) throw new UiError('no_tray', 'questionario non visibile');
-        if (!qs.some((q) => promptMatches(view.text, q.prompt))) throw new UiError('mismatch', 'il questionario mostrato non e\' quello atteso');
+        if (!view) throw new UiError('no_tray', 'questionnaire not visible');
+        if (!qs.some((q) => promptMatches(view.text, q.prompt))) throw new UiError('mismatch', 'questionnaire on screen is not the expected one');
 
         const done = new Array(qs.length).fill(false);
         for (let guard = 0; guard < qs.length * 4 + 6; guard++) {
           view = view ?? (await ctx.readTray());
           if (!view) {
             if (done.every(Boolean)) return { submitted: true };
-            throw new UiError('tray_closed', 'il questionario e\' stato chiuso prima di completarlo');
+            throw new UiError('tray_closed', 'questionnaire closed before completion');
           }
           const qi = currentQuestionIndex(view, qs);
-          if (qi < 0) throw new UiError('mismatch', 'domanda mostrata non riconosciuta');
+          if (qi < 0) throw new UiError('mismatch', 'question on screen not recognized');
 
           if (!done[qi]) {
             await this.#applyAnswer(ctx, qs[qi], answers[qi]);
@@ -716,12 +716,12 @@ export class AgentsUi {
             view = null;
             continue;
           }
-          if (!enabled) throw new UiError('primary_disabled', 'pulsante di avanzamento non disponibile');
+          if (!enabled) throw new UiError('primary_disabled', 'continue button not available');
           await ctx.clickTarget({ target: 'primary' });
           await this.sleep(400);
           view = null;
         }
-        throw new UiError('tray_still_open', 'il questionario e\' ancora aperto');
+        throw new UiError('tray_still_open', 'questionnaire is still open');
       } finally {
         await this.#restore(ctx, previous, composerId);
       }
@@ -732,11 +732,11 @@ export class AgentsUi {
     const free = typeof ans.freeform === 'string' ? ans.freeform : '';
     const wantFree = free.trim().length > 0;
     const wanted = new Set(ans.optionIds.filter((id) => id !== FREEFORM_ID).map((id) => q.options.findIndex((o) => o.id === id)));
-    if ([...wanted].some((i) => i < 0)) throw new UiError('bad_answer', 'opzione sconosciuta');
+    if ([...wanted].some((i) => i < 0)) throw new UiError('bad_answer', 'unknown option');
 
     const regular = async () => {
       const v = await ctx.readTray();
-      if (!v) throw new UiError('tray_closed', 'questionario chiuso');
+      if (!v) throw new UiError('tray_closed', 'questionnaire closed');
       return v;
     };
     const clickOption = async (i) => {
@@ -755,7 +755,7 @@ export class AgentsUi {
         const i = [...wanted][0];
         const v = await regular();
         const dom = v.options[i];
-        if (!dom) throw new UiError('mismatch', 'opzione non presente nel questionario');
+        if (!dom) throw new UiError('mismatch', 'option not present in questionnaire');
         if (!dom.selected) await clickOption(i); // if already selected do NOT click: would deselect
         return;
       }
@@ -763,7 +763,7 @@ export class AgentsUi {
       for (let i = 0; i < q.options.length; i++) {
         const v = await regular();
         const dom = v.options[i];
-        if (!dom) throw new UiError('mismatch', 'opzione non presente nel questionario');
+        if (!dom) throw new UiError('mismatch', 'option not present in questionnaire');
         if (dom.selected !== wanted.has(i)) await clickOption(i);
       }
     }
@@ -771,21 +771,21 @@ export class AgentsUi {
     // "Other..." entry with freeform field.
     const v = await regular();
     if (wantFree) {
-      if (!v.freeform.present) throw new UiError('mismatch', 'campo libero non presente');
+      if (!v.freeform.present) throw new UiError('mismatch', 'freeform field not present');
       if (!v.freeform.selected || !v.freeform.editorVisible) {
         await ctx.clickTarget({ target: 'freeform' });
         await waitFor(async () => (await regular()).freeform.editorVisible, { timeoutMs: 1500, sleep: this.sleep });
       }
       await ctx.clickTarget({ target: 'freeformEditor' });
       const focus = await ctx.focusState('freeformEditor');
-      if (!focus.found || !focus.focused) throw new UiError('focus_failed', 'campo libero senza focus');
+      if (!focus.found || !focus.focused) throw new UiError('focus_failed', 'freeform field not focused');
       if (focus.text && norm(focus.text) !== norm(free)) {
         // different draft already in the field: replace it (Cmd+A then retype)
         await ctx.s.pressKey({ key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, nativeVirtualKeyCode: 65 }, { modifiers: MODIFIER.meta });
       }
       if (norm(focus.text) !== norm(free)) await ctx.typeText(free);
       const typed = await waitFor(async () => norm((await ctx.focusState('freeformEditor')).text) === norm(free), { timeoutMs: 2000, sleep: this.sleep });
-      if (!typed) throw new UiError('type_failed', 'testo non inserito nel campo libero');
+      if (!typed) throw new UiError('type_failed', 'text not entered in freeform field');
     } else if (v.freeform.present && v.freeform.selected && q.allowMultiple) {
       await ctx.clickTarget({ target: 'freeform' }); // multiple: turn off "Other..." if not wanted
     }
@@ -797,12 +797,12 @@ export class AgentsUi {
       const previous = await this.#openChat(ctx, composerId);
       try {
         const view = await this.#waitTray(ctx);
-        if (!view) throw new UiError('no_tray', 'questionario non visibile');
-        if (!question.questions.some((q) => promptMatches(view.text, q.prompt))) throw new UiError('mismatch', 'il questionario mostrato non e\' quello atteso');
-        if (!view.secondary) throw new UiError('not_found', 'pulsante Salta non trovato');
+        if (!view) throw new UiError('no_tray', 'questionnaire not visible');
+        if (!question.questions.some((q) => promptMatches(view.text, q.prompt))) throw new UiError('mismatch', 'questionnaire on screen is not the expected one');
+        if (!view.secondary) throw new UiError('not_found', 'Skip button not found');
         await ctx.clickTarget({ target: 'secondary' });
         const gone = await waitFor(async () => (await ctx.readTray()) === null, { timeoutMs: 4000, sleep: this.sleep });
-        if (!gone) throw new UiError('tray_still_open', 'il questionario e\' ancora aperto');
+        if (!gone) throw new UiError('tray_still_open', 'questionnaire is still open');
         return { skipped: true };
       } finally {
         await this.#restore(ctx, previous, composerId);
@@ -816,7 +816,7 @@ export class AgentsUi {
    * @param {{ composerId: string, bubbleId: string, decision: 'approve' | 'reject' }} p
    */
   async approval({ composerId, bubbleId, decision }) {
-    if (decision !== 'approve' && decision !== 'reject') throw new UiError('bad_decision', 'decisione non valida');
+    if (decision !== 'approve' && decision !== 'reject') throw new UiError('bad_decision', 'invalid decision');
     return this.withSession(async (ctx) => {
       const previous = await this.#openChat(ctx, composerId);
       try {
@@ -827,7 +827,7 @@ export class AgentsUi {
           },
           { timeoutMs: 4000, sleep: this.sleep },
         );
-        if (!state) throw new UiError('no_approval', 'richiesta di approvazione non visibile in Cursor');
+        if (!state) throw new UiError('no_approval', 'approval request not visible in Cursor');
         await ctx.clickTarget({ target: decision, messageId: bubbleId });
         // Card loses buttons as soon as the decision is recorded.
         const gone = await waitFor(
@@ -860,7 +860,7 @@ export class AgentsUi {
           },
           { timeoutMs: 3000, sleep: this.sleep },
         );
-        if (!info) throw new UiError('not_running', 'la chat non sta lavorando in Cursor');
+        if (!info) throw new UiError('not_running', 'chat is not running in Cursor');
         await ctx.clickTarget({ target: 'stop' });
         const gone = await waitFor(
           async () => {
@@ -880,7 +880,7 @@ export class AgentsUi {
   /** Right-click the row and click menu entry `label` (regex). */
   async #rowMenu(ctx, composerId, label) {
     const loc = await ctx.locate({ target: 'row', id: composerId });
-    if (!loc.found) throw new UiError('row_not_found', 'chat non trovata nella sidebar di Cursor');
+    if (!loc.found) throw new UiError('row_not_found', 'chat not found in Cursor sidebar');
     await ctx.rightClick({ target: 'row', id: composerId });
     const item = await waitFor(async () => {
       const l = await ctx.locate({ target: 'menuitem', label });
@@ -888,14 +888,14 @@ export class AgentsUi {
     }, { timeoutMs: 2500, sleep: this.sleep });
     if (!item) {
       await ctx.s.pressKey(KEYS.escape).catch(() => {});
-      throw new UiError('no_menu_item', 'voce di menu non trovata in Cursor');
+      throw new UiError('no_menu_item', 'menu item not found in Cursor');
     }
     await ctx.clickTarget({ target: 'menuitem', label });
   }
 
   /** Rename a chat from the sidebar ("Rename" menu, inline edit, Enter). */
   async rename({ composerId, name }) {
-    if (typeof name !== 'string' || !name.trim()) throw new UiError('bad_name', 'nome non valido');
+    if (typeof name !== 'string' || !name.trim()) throw new UiError('bad_name', 'invalid name');
     return this.withSession(async (ctx) => {
       await this.#rowMenu(ctx, composerId, MENU.rename);
       const editing = await waitFor(async () => {
@@ -904,7 +904,7 @@ export class AgentsUi {
       }, { timeoutMs: 2500, sleep: this.sleep });
       if (!editing) {
         await ctx.s.pressKey(KEYS.escape).catch(() => {});
-        throw new UiError('no_rename_field', 'campo del nome non apparso');
+        throw new UiError('no_rename_field', 'name field did not appear');
       }
       // Field must have focus (and selected text) or typing is lost: force focus if needed.
       const focused = await waitFor(async () => {
@@ -915,7 +915,7 @@ export class AgentsUi {
       }, { timeoutMs: 2000, sleep: this.sleep });
       if (!focused) {
         await ctx.s.pressKey(KEYS.escape).catch(() => {});
-        throw new UiError('no_rename_field', 'campo del nome senza focus');
+        throw new UiError('no_rename_field', 'name field not focused');
       }
       // Text is already selected on open: typing replaces it. Verify before confirming.
       await ctx.typeText(name);
@@ -925,13 +925,13 @@ export class AgentsUi {
       }, { timeoutMs: 2500, sleep: this.sleep });
       if (!typed) {
         await ctx.s.pressKey(KEYS.escape).catch(() => {});
-        throw new UiError('type_failed', 'nome non inserito');
+        throw new UiError('type_failed', 'name not entered');
       }
       await ctx.s.pressKey(KEYS.enter);
       const done = await waitFor(async () => (!(await ctx.page({ op: 'renameState' })).editing ? true : null), { timeoutMs: 3000, sleep: this.sleep });
       if (!done) {
         await ctx.s.pressKey(KEYS.escape).catch(() => {});
-        throw new UiError('rename_failed', 'rinomina non confermata');
+        throw new UiError('rename_failed', 'rename not confirmed');
       }
       return { clicked: true };
     });
@@ -941,17 +941,17 @@ export class AgentsUi {
   async pinState({ composerId }) {
     return this.withSession(async (ctx) => {
       const st = await ctx.page({ op: 'pinState', id: composerId });
-      if (!st.found) throw new UiError('row_not_found', 'chat non trovata nella sidebar di Cursor');
+      if (!st.found) throw new UiError('row_not_found', 'chat not found in Cursor sidebar');
       return { pinned: st.pinned };
     });
   }
 
   /** Pin or unpin (row menu, "Pin"/"Unpin"). No-op if the chat is already in the requested state. */
   async setPinned({ composerId, pinned }) {
-    if (typeof pinned !== 'boolean') throw new UiError('bad_pin', 'valore non valido');
+    if (typeof pinned !== 'boolean') throw new UiError('bad_pin', 'invalid value');
     return this.withSession(async (ctx) => {
       const before = await ctx.page({ op: 'pinState', id: composerId });
-      if (!before.found) throw new UiError('row_not_found', 'chat non trovata nella sidebar di Cursor');
+      if (!before.found) throw new UiError('row_not_found', 'chat not found in Cursor sidebar');
       if (before.pinned === pinned) return { pinned, changed: false };
       // Look ONLY for the desired-state entry: if the menu shows the opposite, click nothing (never flip by mistake).
       await this.#rowMenu(ctx, composerId, pinned ? MENU.pin : MENU.unpin);
@@ -959,7 +959,7 @@ export class AgentsUi {
         const st = await ctx.page({ op: 'pinState', id: composerId });
         return st.found && st.pinned === pinned ? st : null;
       }, { timeoutMs: 3000, sleep: this.sleep });
-      if (!now) throw new UiError('pin_failed', 'Cursor non ha cambiato lo stato di fissaggio');
+      if (!now) throw new UiError('pin_failed', 'Cursor did not change pin state');
       return { pinned, changed: true };
     });
   }
@@ -986,7 +986,7 @@ export class AgentsUi {
         }, { timeoutMs: 2500, sleep: this.sleep });
         if (!st) {
           await ctx.s.pressKey(KEYS.escape).catch(() => {});
-          throw new UiError('no_menu_item', 'filtro delle archiviate non trovato in Cursor');
+          throw new UiError('no_menu_item', 'Archived filter not found in Cursor');
         }
         return st.checked === 'true';
       };
@@ -1004,7 +1004,7 @@ export class AgentsUi {
       }
       try {
         const shown = await waitFor(async () => ((await ctx.locate({ target: 'row', id: composerId })).found ? true : null), { timeoutMs: 3500, sleep: this.sleep });
-        if (!shown) throw new UiError('row_not_found', 'chat archiviata non trovata nella sidebar di Cursor');
+        if (!shown) throw new UiError('row_not_found', 'archived chat not found in Cursor sidebar');
         await this.#rowMenu(ctx, composerId, MENU.unarchive);
         await this.sleep(400);
         return { clicked: true };
@@ -1030,10 +1030,10 @@ export class AgentsUi {
           const i = await ctx.page({ op: 'composerInfo' });
           return i.composer ? i : null;
         }, { timeoutMs: 3500, sleep: this.sleep });
-        if (!info) throw new UiError('no_composer', 'campo di scrittura non trovato');
-        if (info.tray) throw new UiError('question_pending', 'la chat ha una domanda in attesa');
+        if (!info) throw new UiError('no_composer', 'composer field not found');
+        if (info.tray) throw new UiError('question_pending', 'chat has a pending question');
         // Never mix the message with a draft the user typed on the Mac.
-        if (!info.composer.empty || info.images > 0) throw new UiError('draft_not_empty', 'nel campo di scrittura c\'e\' gia\' una bozza');
+        if (!info.composer.empty || info.images > 0) throw new UiError('draft_not_empty', 'the composer already has a draft');
 
         let attached = false;
         try {
@@ -1044,13 +1044,13 @@ export class AgentsUi {
           if (text) {
             await ctx.clickTarget({ target: 'composer' });
             const focus = await ctx.focusState('composer');
-            if (!focus.found || !focus.focused) throw new UiError('focus_failed', 'campo di scrittura senza focus');
+            if (!focus.found || !focus.focused) throw new UiError('focus_failed', 'composer field not focused');
             await ctx.typeText(text);
             const typed = await waitFor(async () => {
               const f = await ctx.focusState('composer');
               return f.found && norm(f.text).startsWith(norm(text).slice(0, 40)) ? f : null;
             }, { timeoutMs: 3000, sleep: this.sleep });
-            if (!typed) throw new UiError('type_failed', 'testo non inserito nel campo di scrittura');
+            if (!typed) throw new UiError('type_failed', 'text not entered in composer');
           }
         } catch (e) {
           if (attached) await ctx.clearImages().catch(() => {});
@@ -1063,7 +1063,7 @@ export class AgentsUi {
         }, { timeoutMs: 3000, sleep: this.sleep });
         if (!enabled) {
           if (attached) await ctx.clearImages().catch(() => {});
-          throw new UiError('send_disabled', 'pulsante di invio non disponibile');
+          throw new UiError('send_disabled', 'send button not available');
         }
         await ctx.clickTarget({ target: 'send' });
 
@@ -1073,7 +1073,7 @@ export class AgentsUi {
           const i = await ctx.page({ op: 'composerInfo' });
           return (!f.found || f.empty) && !(i.images > 0) ? true : null;
         }, { timeoutMs: 5000, sleep: this.sleep });
-        if (!cleared) throw new UiError('send_failed', 'il messaggio non risulta inviato');
+        if (!cleared) throw new UiError('send_failed', 'message does not appear sent');
         return { sent: true };
       } finally {
         await this.#restore(ctx, previous, composerId);
@@ -1091,7 +1091,7 @@ export class AgentsUi {
     }, { timeoutMs: 6000, sleep: this.sleep });
     if (!ok) {
       await ctx.clearImages().catch(() => {});
-      throw new UiError('attach_failed', 'Cursor non ha mostrato le immagini allegate');
+      throw new UiError('attach_failed', 'Cursor did not show attached images');
     }
   }
 
@@ -1128,7 +1128,7 @@ export class AgentsUi {
     }, { timeoutMs: 2500, sleep: this.sleep });
     if (!st) {
       await this.#closeMenus(ctx);
-      throw new UiError('no_branch_menu', 'menu dei rami non trovato in Cursor');
+      throw new UiError('no_branch_menu', 'branch menu not found in Cursor');
     }
     return st;
   }
@@ -1137,7 +1137,7 @@ export class AgentsUi {
     const st = await this.#readBranches(ctx);
     if (!st.options.some((o) => o.name === name)) {
       await this.#closeMenus(ctx);
-      throw new UiError('branch_not_found', 'ramo non presente nell\'elenco di Cursor');
+      throw new UiError('branch_not_found', 'branch not in Cursor list');
     }
     await ctx.clickTarget({ target: 'branchOption', name });
     await this.sleep(300);
@@ -1146,7 +1146,7 @@ export class AgentsUi {
       const x = await ctx.page({ op: 'branchState' });
       return norm(x.current ?? '') === norm(name) ? x : null;
     }, { timeoutMs: 2500, sleep: this.sleep });
-    if (!now) throw new UiError('branch_failed', 'Cursor non ha cambiato il ramo');
+    if (!now) throw new UiError('branch_failed', 'Cursor did not change branch');
   }
 
   /** Open model menu (Context / Effort / Model) and "Model" submenu: return current model and entries (menu stays open). */
@@ -1158,7 +1158,7 @@ export class AgentsUi {
     }, { timeoutMs: 2500, sleep: this.sleep });
     if (!first) {
       await this.#closeMenus(ctx);
-      throw new UiError('no_model_menu', 'menu del modello non trovato in Cursor');
+      throw new UiError('no_model_menu', 'model menu not found in Cursor');
     }
     await ctx.hover({ target: 'menuitem', label: MENU.modelSub });
     const st = await waitFor(async () => {
@@ -1168,7 +1168,7 @@ export class AgentsUi {
     }, { timeoutMs: 2500, sleep: this.sleep });
     if (!st) {
       await this.#closeMenus(ctx);
-      throw new UiError('no_model_menu', 'elenco dei modelli non trovato in Cursor');
+      throw new UiError('no_model_menu', 'model list not found in Cursor');
     }
     return st;
   }
@@ -1177,7 +1177,7 @@ export class AgentsUi {
     const st = await this.#readModels(ctx);
     if (!st.items.includes(label)) {
       await this.#closeMenus(ctx);
-      throw new UiError('model_not_found', 'modello non presente nell\'elenco di Cursor');
+      throw new UiError('model_not_found', 'model not in Cursor list');
     }
     await ctx.clickTarget({ target: 'menuitem', label: `^${escapeRe(label)}$` });
     await this.sleep(300);
@@ -1186,7 +1186,7 @@ export class AgentsUi {
       const x = await ctx.page({ op: 'modelState' });
       return norm(x.current ?? '') === norm(label) ? x : null;
     }, { timeoutMs: 2500, sleep: this.sleep });
-    if (!now) throw new UiError('model_failed', 'Cursor non ha cambiato il modello');
+    if (!now) throw new UiError('model_failed', 'Cursor did not change model');
   }
 
   /**
@@ -1206,7 +1206,7 @@ export class AgentsUi {
    * without selecting, then reopens the previously selected chat.
    */
   async newChatOptions({ project }) {
-    if (typeof project !== 'string' || !project.trim()) throw new UiError('bad_project', 'progetto non valido');
+    if (typeof project !== 'string' || !project.trim()) throw new UiError('bad_project', 'invalid project');
     return this.withSession(async (ctx) => {
       const st = {};
       try {
@@ -1233,8 +1233,8 @@ export class AgentsUi {
       st.previous = await ctx.page({ op: 'selectedKey' }).catch(() => null);
       st.before = new Set(await ctx.page({ op: 'rowKeys' }));
       const count = await ctx.page({ op: 'sectionCount', name: project });
-      if (count === 0) throw new UiError('project_not_found', 'progetto non trovato nella sidebar di Cursor');
-      if (count > 1) throw new UiError('project_ambiguous', 'piu\' progetti con lo stesso nome nella sidebar');
+      if (count === 0) throw new UiError('project_not_found', 'project not found in Cursor sidebar');
+      if (count > 1) throw new UiError('project_ambiguous', 'multiple projects with the same name in sidebar');
       await ctx.hover({ target: 'newAgent', name: project });
       await ctx.clickTarget({ target: 'newAgent', name: project });
     // Wait until the screen really shows the requested project (if a "new chat" screen was already open, the composer is
@@ -1246,12 +1246,12 @@ export class AgentsUi {
       return st.composer && st.triggers.length >= 3 && norm(st.triggers[0]) === norm(project) ? st : null;
     }, { timeoutMs: 4000, sleep: this.sleep });
     if (!screen) {
-      if (last?.composer && last.triggers.length >= 3) throw new UiError('wrong_project', 'Cursor ha scelto un altro progetto');
-      throw new UiError('no_new_chat', 'la schermata della nuova chat non e\' comparsa');
+      if (last?.composer && last.triggers.length >= 3) throw new UiError('wrong_project', 'Cursor selected a different project');
+      throw new UiError('no_new_chat', 'new chat screen did not appear');
     }
-    if (norm(screen.triggers[screen.triggers.length - 1]) !== 'thismac') throw new UiError('not_local', 'la nuova chat non e\' locale (This Mac)');
+    if (norm(screen.triggers[screen.triggers.length - 1]) !== 'thismac') throw new UiError('not_local', 'new chat is not local (This Mac)');
     const info = await ctx.page({ op: 'composerInfo' });
-    if (!info.composer?.empty || info.images > 0) throw new UiError('draft_not_empty', 'nel campo di scrittura c\'e\' gia\' una bozza');
+    if (!info.composer?.empty || info.images > 0) throw new UiError('draft_not_empty', 'the composer already has a draft');
     return screen;
   }
 
@@ -1261,7 +1261,7 @@ export class AgentsUi {
    * Returns the created chat id (new sidebar row).
    */
   async newChat({ project, text, files = [], dryRun = false, branch, model }) {
-    if (typeof project !== 'string' || !project.trim()) throw new UiError('bad_project', 'progetto non valido');
+    if (typeof project !== 'string' || !project.trim()) throw new UiError('bad_project', 'invalid project');
     return this.withSession(async (ctx) => {
       const st = {};
       // Any error leaves Cursor on the new-chat screen: reopen the previously selected chat.
@@ -1296,19 +1296,19 @@ export class AgentsUi {
           if (text) {
             await ctx.clickTarget({ target: 'composer' });
             const focus = await ctx.focusState('composer');
-            if (!focus.found || !focus.focused) throw new UiError('focus_failed', 'campo di scrittura senza focus');
+            if (!focus.found || !focus.focused) throw new UiError('focus_failed', 'composer field not focused');
             await ctx.typeText(text);
             const typed = await waitFor(async () => {
               const f = await ctx.focusState('composer');
               return f.found && norm(f.text).startsWith(norm(text).slice(0, 40)) ? f : null;
             }, { timeoutMs: 3000, sleep: this.sleep });
-            if (!typed) throw new UiError('type_failed', 'testo non inserito nel campo di scrittura');
+            if (!typed) throw new UiError('type_failed', 'text not entered in composer');
           }
           const enabled = await waitFor(async () => {
             const i = await ctx.page({ op: 'composerInfo' });
             return i.send && !i.send.disabled ? i : null;
           }, { timeoutMs: 3000, sleep: this.sleep });
-          if (!enabled) throw new UiError('send_disabled', 'pulsante di invio non disponibile');
+          if (!enabled) throw new UiError('send_disabled', 'send button not available');
         } catch (e) {
           if (attached) await ctx.clearImages().catch(() => {});
           throw e;
@@ -1329,7 +1329,7 @@ export class AgentsUi {
           }
           return fresh.length === 1 && Date.now() - since >= 1200 ? fresh[0] : null;
         }, { timeoutMs: 15_000, intervalMs: 250, sleep: this.sleep });
-        if (!created) throw new UiError('send_failed', 'non vedo la chat nuova in Cursor');
+        if (!created) throw new UiError('send_failed', 'new chat not visible in Cursor');
         if (st.revert) {
           // Reopen "new chat" only to restore branch and model defaults as they were.
           try {

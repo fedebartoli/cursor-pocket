@@ -161,6 +161,11 @@ test('push: subscription validation, device limit, unsubscribe, test notificatio
     assert.equal((await post('/api/push/subscribe', { subscription: sub })).status, 200);
     assert.equal((await post('/api/push/subscribe', { subscription: sub })).status, 200, 'idempotent');
     assert.equal(h.app.store.countSubscriptions(), 1);
+    assert.equal(h.app.store.listSubscriptions()[0].lang, null);
+    assert.equal((await post('/api/push/subscribe', { subscription: sub, lang: 'de' })).status, 200);
+    assert.equal(h.app.store.listSubscriptions()[0].lang, 'de');
+    assert.equal((await post('/api/push/subscribe', { subscription: sub, lang: 'not-a-lang' })).status, 200);
+    assert.equal(h.app.store.listSubscriptions()[0].lang, 'de', 'invalid lang ignored');
     assert.deepEqual((await post('/api/push/status', { endpoint: sub.endpoint })).json(), { subscribed: true, total: 1 });
 
     const test1 = await post('/api/push/test', {});
@@ -203,7 +208,7 @@ test('notifications end-to-end: new question -> one push; chat finished -> one p
     await new Promise((r) => setImmediate(r));
     assert.equal(h.sent.length, 1);
     const payload = JSON.parse(h.sent[0].payload);
-    assert.equal(payload.title, 'Domanda in attesa');
+    assert.equal(payload.title, 'Question waiting');
     assert.equal(payload.url, `/#/chat/${ID}`);
     assert.equal(payload.badge, 2, 'badge = chats needing attention (stale included)');
   } finally {
@@ -229,10 +234,10 @@ test('push: pending approval = notification with action TYPE, never the command;
     await new Promise((r) => setImmediate(r));
     assert.equal(h.sent.length, 1);
     const payload = JSON.parse(h.sent[0].payload);
-    assert.equal(payload.title, 'Approvazione richiesta');
+    assert.equal(payload.title, 'Approval required');
     assert.equal(payload.kind, 'approval');
     assert.match(payload.body, /Migrazione/);
-    assert.match(payload.body, /Comando da eseguire/);
+    assert.match(payload.body, /Command to run/);
     assert.equal(payload.url, `/#/chat/${ID}`);
     assert.equal(h.sent[0].payload.includes('echo prova'), false, 'command never leaves the daemon');
     assert.equal(payload.badge, 1);

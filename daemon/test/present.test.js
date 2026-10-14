@@ -1,6 +1,6 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
-import { STATES, activityOf, attentionLabel, ignoreKey, presentState, stateOf, toolActionLabel } from '../src/state/present.js';
+import { STATES, activityOf, ignoreKey, presentState, stateOf } from '../src/state/present.js';
 
 const NOW = 1_700_000_000_000;
 const H = 3_600_000;
@@ -73,22 +73,7 @@ test('pending threshold: requests older than threshold; 0 = never', () => {
   assert.equal(stateOf(chat('a', { attention: att({ since: NOW - DAY + 1000 }) }), ctx()).state, STATES.ATTENTION);
 });
 
-test('attention labels', () => {
-  assert.equal(attentionLabel({ kind: 'question' }), 'Domanda in attesa');
-  assert.equal(attentionLabel({ kind: 'approval' }), 'Approvazione richiesta');
-  assert.equal(attentionLabel({ kind: 'plan' }), 'Piano in attesa');
-  assert.equal(attentionLabel({ kind: 'leftover' }), 'Richiesta non risolta');
-  assert.equal(attentionLabel({ kind: 'sconosciuto' }), 'Richiesta non risolta');
-});
-
 test('approval: only action TYPE is public, never the command; counts as attention even while chat is working', () => {
-  assert.equal(toolActionLabel('run_terminal_command_v2'), 'Comando da eseguire');
-  assert.equal(toolActionLabel('edit_file_v2'), 'Modifica di un file');
-  assert.equal(toolActionLabel('mcp-cursor-ide-browser-browser_click'), 'Azione da approvare', 'compound MCP tool name: generic label');
-  assert.equal(toolActionLabel('call_mcp_tool'), 'Strumento MCP');
-  assert.equal(toolActionLabel('web_fetch'), 'Richiesta web');
-  assert.equal(toolActionLabel(undefined), 'Azione da approvare');
-
   const a = att({ kind: 'approval', key: 'tc-ap', toolName: 'run_terminal_command_v2', question: undefined, since: NOW - 60_000 });
   const out = presentState({ chats: [chat('a1', { running: true, attention: a })], settings: null, ignored: new Set(), now: NOW, pendingAfterMs: DAY });
   assert.equal(out.counts.attention, 1);

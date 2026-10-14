@@ -100,6 +100,9 @@ expected debug port (for "Impostazioni" (Settings)).
 ## Notifications
 - Events: new question (question title and first question in the body), approval requested (action type only,
   after `CP_APPROVAL_DELAY_SECONDS`), chat finished. One notification per event, no repeats. Tap -> opens the chat in the PWA (the service worker brings the window to the foreground and requests navigation).
+- Titles and fixed bodies are composed by the daemon in the language stored on each push subscription (`lang` from
+  `POST /api/push/subscribe`, updated on PWA resync). English is the default when `lang` is missing. Catalog:
+  `daemon/src/i18n-messages.js` (`daemon/src/i18n.js`: lookup and fallbacks).
 - Persistent deduplication: `a:<chat>:<toolCallId>` for questions and approvals, `d:<chat>:<lastUpdatedAt>` for finished chats.
 - No notifications from initial state: at startup questions older than `CP_STARTUP_GRACE_SECONDS` are marked
   as already notified without sending anything.

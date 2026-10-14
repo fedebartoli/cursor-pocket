@@ -14,38 +14,6 @@ export function ignoreKey(chatId, key) {
   return `${chatId}|${key}`;
 }
 
-export function attentionLabel(a) {
-  switch (a.kind) {
-    case 'question':
-      return 'Domanda in attesa';
-    case 'approval':
-      return 'Approvazione richiesta';
-    case 'plan':
-      return 'Piano in attesa';
-    default:
-      return 'Richiesta non risolta';
-  }
-}
-
-/** What a tool asks to approve (TYPE only: never the command or paths). */
-export function toolActionLabel(toolName) {
-  switch (toolName) {
-    case 'run_terminal_command_v2':
-      return 'Comando da eseguire';
-    case 'edit_file':
-    case 'edit_file_v2':
-      return 'Modifica di un file';
-    case 'mcp':
-    case 'call_mcp_tool':
-    case 'read_mcp_resource':
-      return 'Strumento MCP';
-    case 'web_fetch':
-      return 'Richiesta web';
-    default:
-      return 'Azione da approvare';
-  }
-}
-
 // [tool names, action code (PWA translates), category (PWA picks icon from category)]
 const TOOLS = [
   [['read_file', 'read_file_v2'], 'read_file', 'read'],

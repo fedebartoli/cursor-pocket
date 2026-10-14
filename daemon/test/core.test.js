@@ -1,7 +1,9 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
+import os from 'node:os';
 import path from 'node:path';
+import { DatabaseSync } from 'node:sqlite';
 import { Auth, clearedCookie, normalizeCode, parseCookies, sessionCookie } from '../src/auth.js';
 import { createLogger, errorFields, sanitizeFields } from '../src/log.js';
 import { Notifier } from '../src/push/notifier.js';
@@ -81,8 +83,43 @@ test('store: 0700/0600 permissions, ignored, notified, subscriptions', () => {
   s.upsertSubscription({ endpoint: 'https://web.push.apple.com/1', p256dh: 'p2', auth: 'a2' }, 'sess1', 2);
   assert.equal(s.countSubscriptions(), 1);
   assert.equal(s.listSubscriptions()[0].p256dh, 'p2');
-  assert.equal(s.removeSubscriptionsOfSession('sess1'), 1);
+  assert.equal(s.listSubscriptions()[0].lang, null);
+  s.upsertSubscription({ endpoint: 'https://web.push.apple.com/1', p256dh: 'p2', auth: 'a2' }, 'sess1', 3, { lang: 'de' });
+  assert.equal(s.listSubscriptions()[0].lang, 'de');
+  s.upsertSubscription({ endpoint: 'https://web.push.apple.com/1', p256dh: 'p2', auth: 'a2' }, 'sess1', 4);
+  assert.equal(s.listSubscriptions()[0].lang, 'de', 'lang kept when not provided');
+  s.upsertSubscription({ endpoint: 'https://web.push.apple.com/2', p256dh: 'p', auth: 'a' }, 'sess1', 5, { lang: 'it' });
+  assert.equal(s.listSubscriptions().find((x) => x.endpoint.endsWith('/2')).lang, 'it');
+  assert.equal(s.removeSubscriptionsOfSession('sess1'), 2);
   s.close();
+});
+
+test('store: opens database without lang column and migrates', () => {
+  const file = path.join(os.tmpdir(), `cp-store-mig-${process.pid}.db`);
+  try {
+    fs.unlinkSync(file);
+  } catch {
+    // ignore
+  }
+  const legacy = new DatabaseSync(file);
+  legacy.exec(`CREATE TABLE meta (k TEXT PRIMARY KEY, v TEXT NOT NULL);
+CREATE TABLE push_subscriptions (
+  endpoint TEXT PRIMARY KEY, p256dh TEXT NOT NULL, auth TEXT NOT NULL, session_hash TEXT,
+  created_at INTEGER NOT NULL, last_ok_at INTEGER, fail_count INTEGER NOT NULL DEFAULT 0
+);`);
+  legacy.prepare('INSERT INTO push_subscriptions (endpoint, p256dh, auth, session_hash, created_at) VALUES (?, ?, ?, ?, ?)').run(
+    'https://web.push.apple.com/old',
+    'p',
+    'a',
+    null,
+    1,
+  );
+  legacy.close();
+  const s = new Store(file);
+  s.upsertSubscription({ endpoint: 'https://web.push.apple.com/old', p256dh: 'p', auth: 'a' }, null, 2);
+  assert.equal(s.listSubscriptions()[0].lang, null);
+  s.close();
+  fs.unlinkSync(file);
 });
 
 // ---------- auth ----------
@@ -155,7 +192,7 @@ test('auth: helpers for codes and cookies', () => {
 });
 
 // ---------- notifier ----------
-function notifierSetup({ send, subs = 1 } = {}) {
+function notifierSetup({ send, subs = 1, langs = [] } = {}) {
   const store = new Store(':memory:');
   const config = loadConfig({});
   const calls = [];
@@ -165,7 +202,10 @@ function notifierSetup({ send, subs = 1 } = {}) {
     return { ok: true, status: 201 };
   });
   const notifier = new Notifier({ store, config, logger: nullLogger, send: fakeSend, sleep: async (ms) => sleeps.push(ms), badge: () => 3 });
-  for (let i = 0; i < subs; i++) store.upsertSubscription({ endpoint: `https://web.push.apple.com/${i}`, p256dh: 'p', auth: 'a' }, null, 1);
+  for (let i = 0; i < subs; i++) {
+    const extra = langs[i] ? { lang: langs[i] } : {};
+    store.upsertSubscription({ endpoint: `https://web.push.apple.com/${i}`, p256dh: 'p', auth: 'a' }, null, 1, extra);
+  }
   return { store, notifier, calls, sleeps };
 }
 
@@ -180,15 +220,32 @@ const EV = (over = {}) => ({
 test('notifier: messages for question, unknown type (generic), chat done; badge and destination', () => {
   const { notifier } = notifierSetup();
   const q = notifier.compose(EV());
-  assert.deepEqual({ title: q.title, kind: q.kind, tag: q.tag, url: q.url, badge: q.badge }, { title: 'Domanda in attesa', kind: 'question', tag: 'chat-chat-id-0001', url: '/#/chat/chat-id-0001', badge: 3 });
+  assert.deepEqual({ title: q.title, kind: q.kind, tag: q.tag, url: q.url, badge: q.badge }, { title: 'Question waiting', kind: 'question', tag: 'chat-chat-id-0001', url: '/#/chat/chat-id-0001', badge: 3 });
   assert.match(q.body, /Titolo chat - app\nCome procedo\?/);
   const generic = notifier.compose(EV({ attention: { kind: 'sconosciuto', toolName: 'run_terminal_command_v2' } }));
-  assert.deepEqual({ title: generic.title, kind: generic.kind }, { title: 'Richiede attenzione', kind: 'attention' });
+  assert.deepEqual({ title: generic.title, kind: generic.kind }, { title: 'Needs attention', kind: 'attention' });
   assert.equal(generic.body.includes('run_terminal_command_v2'), false, 'tool name must not appear in notification');
   const d = notifier.compose({ type: 'done', dedupeKey: 'd', chat: EV().chat });
-  assert.equal(d.title, 'Chat finita');
+  assert.equal(d.title, 'Chat finished');
   assert.equal(d.kind, 'done');
+  const emptyNames = notifier.compose({ type: 'done', dedupeKey: 'd2', chat: { id: 'x', name: '', workspaceName: '' } });
+  assert.equal(emptyNames.body, 'Untitled - No folder');
   assert.ok(Buffer.byteLength(JSON.stringify(notifier.compose(EV({ chat: { id: 'x', name: 'n'.repeat(5000), workspaceName: 'w'.repeat(5000) }, attention: { kind: 'question', title: 't'.repeat(5000) } })))) < 3000, 'payload stays well under push limit');
+});
+
+test('notifier: per-subscription language on send; Italian matches legacy strings', async () => {
+  const { notifier, calls } = notifierSetup({ subs: 2, langs: ['de', 'it'] });
+  await notifier.notify(EV());
+  assert.equal(calls.length, 2);
+  const titles = calls.map((c) => JSON.parse(c.payload).title).sort();
+  assert.deepEqual(titles, ['Domanda in attesa', 'Frage ausstehend']);
+  const { notifier: n2, calls: c2 } = notifierSetup({ subs: 1 });
+  await n2.notify(EV());
+  assert.equal(JSON.parse(c2[0].payload).title, 'Question waiting');
+  const itQ = notifier.compose(EV(), 'it');
+  assert.equal(itQ.title, 'Domanda in attesa');
+  const appr = notifier.compose(EV({ attention: { kind: 'approval', toolName: 'run_terminal_command_v2' } }), 'it');
+  assert.match(appr.body, /Comando da eseguire/);
 });
 
 test('notifier: sends to all subscriptions, once per dedupeKey', async () => {
@@ -196,7 +253,7 @@ test('notifier: sends to all subscriptions, once per dedupeKey', async () => {
   const r1 = await notifier.notify(EV());
   assert.deepEqual(r1, { sent: 2, failed: 0, removed: 0 });
   assert.equal(calls.length, 2);
-  assert.equal(JSON.parse(calls[0].payload).title, 'Domanda in attesa');
+  assert.equal(JSON.parse(calls[0].payload).title, 'Question waiting');
   assert.equal(calls[0].topic, 'chat-chat-id-0001'.replace(/[^A-Za-z0-9_-]/g, '').slice(0, 32));
   assert.deepEqual(await notifier.notify(EV()), { skipped: 'duplicato' });
   assert.equal(calls.length, 2);

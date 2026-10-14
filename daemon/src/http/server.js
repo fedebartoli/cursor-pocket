@@ -3,6 +3,7 @@ import http from 'node:http';
 import { ActionError } from '../actions.js';
 import { clearedCookie, sessionCookie } from '../auth.js';
 import { errorFields } from '../log.js';
+import { normalizeLanguage } from '../i18n.js';
 import { isAllowedPushEndpoint } from '../push/webpush.js';
 import { UPLOAD_LIMITS } from '../uploads.js';
 import { b64u } from '../util.js';
@@ -336,7 +337,12 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
       if (!known && store.countSubscriptions() >= MAX_SUBSCRIPTIONS) {
         throw new HttpError(409, 'too_many', 'Too many registered devices.', { detail: 'too_many_devices' });
       }
-      store.upsertSubscription(sub, session.tokenHash, now());
+      const extra = {};
+      if ('lang' in body) {
+        const lang = normalizeLanguage(body.lang);
+        if (lang) extra.lang = lang;
+      }
+      store.upsertSubscription(sub, session.tokenHash, now(), extra);
       logger.info('push_subscribed');
       return sendJson(res, 200, { ok: true }, headers);
     }
