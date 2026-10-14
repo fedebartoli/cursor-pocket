@@ -58,7 +58,7 @@ test('classifyAttention: stale header, RECENT unanswered question = live even wi
   // just posted (loading) and after completed/pending: same question, same key
   for (const tool of [{}, { status: 'completed', additionalStatus: 'pending' }]) {
     const a = classifyAttention(ask(NOW - 3000, tool));
-    assert.deepEqual({ kind: a.kind, live: a.live, key: a.key, since: a.since }, { kind: 'domanda', live: true, key: 'tc-9', since: NOW - 3000 });
+    assert.deepEqual({ kind: a.kind, live: a.live, key: a.key, since: a.since }, { kind: 'question', live: true, key: 'tc-9', since: NOW - 3000 });
   }
   // window boundaries
   assert.equal(classifyAttention(ask(NOW - FRESH_QUESTION_MS)).live, true);
@@ -78,7 +78,7 @@ test('classifyAttention: live question = flag + last bubble ask_question in load
     bubble: { createdAt: NOW - 100, tool: { name: 'ask_question', status: 'loading', toolCallId: 'tc-9' } },
     now: NOW,
   });
-  assert.deepEqual({ kind: a.kind, key: a.key, live: a.live, since: a.since, bubbleId: a.bubbleId }, { kind: 'domanda', key: 'tc-9', live: true, since: NOW - 100, bubbleId: 'b9' });
+  assert.deepEqual({ kind: a.kind, key: a.key, live: a.live, since: a.since, bubbleId: a.bubbleId }, { kind: 'question', key: 'tc-9', live: true, since: NOW - 100, bubbleId: 'b9' });
 });
 
 test('isPendingQuestion: loading or completed with additionalData pending; answered, cancelled or other tool no', () => {
@@ -97,7 +97,7 @@ test('classifyAttention: question stays a question after completed/pending (real
   const base = { entry: entry({ hasBlockingPendingActions: true }), tail: { lastBubble: { id: 'b9' } }, now: NOW };
   const loading = classifyAttention({ ...base, bubble: { createdAt: NOW - 100, tool: { name: 'ask_question', status: 'loading', toolCallId: 't2' } } });
   const completed = classifyAttention({ ...base, bubble: { createdAt: NOW - 100, tool: { name: 'ask_question', status: 'completed', toolCallId: 't2', additionalStatus: 'pending' } } });
-  assert.deepEqual({ kind: completed.kind, key: completed.key, live: completed.live }, { kind: 'domanda', key: 't2', live: true });
+  assert.deepEqual({ kind: completed.kind, key: completed.key, live: completed.live }, { kind: 'question', key: 't2', live: true });
   assert.equal(completed.key, loading.key, 'same key in both states: no second notification');
   // Cursor may rewrite bubble (createdAt changes): key unchanged
   const rewritten = classifyAttention({ ...base, bubble: { createdAt: NOW + 5_000_000, tool: { name: 'ask_question', status: 'completed', toolCallId: 't2', additionalStatus: 'pending' } } });
@@ -108,15 +108,15 @@ test('classifyAttention: answered (submitted) or cancelled question with flag st
   const base = { entry: entry({ hasBlockingPendingActions: true }), tail: { lastBubble: { id: 'b9' } }, now: NOW };
   const submitted = classifyAttention({ ...base, bubble: { tool: { name: 'ask_question', status: 'loading', toolCallId: 't', additionalStatus: 'submitted' } } });
   assert.equal(submitted.live, false);
-  assert.equal(submitted.kind, 'residuo');
+  assert.equal(submitted.kind, 'leftover');
   const answered = classifyAttention({ ...base, bubble: { tool: { name: 'ask_question', status: 'completed', toolCallId: 't2', additionalStatus: 'submitted' } } });
-  assert.equal(answered.kind, 'residuo');
+  assert.equal(answered.kind, 'leftover');
   assert.equal(answered.key, 't2', 'key stays toolCallId: a NEW question has a different key');
   const cancelled = classifyAttention({ ...base, bubble: { tool: { name: 'ask_question', status: 'completed', toolCallId: 't3', additionalStatus: 'cancelled' } } });
-  assert.equal(cancelled.kind, 'residuo');
+  assert.equal(cancelled.kind, 'leftover');
   // question superseded by other messages (last text bubble) is no longer latest: stale
   const superseded = classifyAttention({ ...base, bubble: { tool: null } });
-  assert.equal(superseded.kind, 'residuo');
+  assert.equal(superseded.kind, 'leftover');
   // without flag, pending question in bubble does not count: Cursor does not show dot
   const noFlag = classifyAttention({ entry: entry({}), tail: { lastBubble: { id: 'b9' } }, bubble: { tool: { name: 'ask_question', status: 'completed', toolCallId: 't4', additionalStatus: 'pending' } }, now: NOW });
   assert.equal(noFlag, null);
@@ -129,11 +129,11 @@ test('classifyAttention: tool other than ask_question is NEVER a live request (r
   const base = { entry: entry({ hasBlockingPendingActions: true }), tail: { lastBubble: { id: 'b3' } }, now: NOW };
   for (const name of ['run_terminal_command_v2', 'edit_file_v2', 'mcp-cursor-ide-browser-browser_click', 'task_v2']) {
     const a = classifyAttention({ ...base, bubble: { createdAt: NOW, tool: { name, status: 'loading', toolCallId: `tc-${name}` } } });
-    assert.equal(a.kind, 'residuo', name);
+    assert.equal(a.kind, 'leftover', name);
     assert.equal(a.live, false, name);
   }
   const decided = classifyAttention({ ...base, bubble: { tool: { name: 'run_terminal_command_v2', status: 'loading', toolCallId: 'tc-y', userDecision: 'accepted' } } });
-  assert.equal(decided.kind, 'residuo');
+  assert.equal(decided.kind, 'leftover');
 });
 
 test('isPendingReview: only reviewData Requested; questions and plans have their own path', () => {
@@ -165,7 +165,7 @@ test('classifyAttention: approval = reviewData Requested in last two bubbles (FI
   const fresh = classifyAttention({ ...base, bubble: { createdAt: NOW - 3000, tool: review() } });
   assert.deepEqual(
     { kind: fresh.kind, key: fresh.key, live: fresh.live, toolName: fresh.toolName, toolCallId: fresh.toolCallId, bubbleId: fresh.bubbleId, since: fresh.since },
-    { kind: 'approvazione', key: 'tc-ap', live: true, toolName: 'run_terminal_command_v2', toolCallId: 'tc-ap', bubbleId: 'b5', since: NOW - 3000 },
+    { kind: 'approval', key: 'tc-ap', live: true, toolName: 'run_terminal_command_v2', toolCallId: 'tc-ap', bubbleId: 'b5', since: NOW - 3000 },
   );
 
   // Old, no flag and chat idle: stale from Cursor closed mid-flight (no dot in Cursor) = no attention.
@@ -173,41 +173,41 @@ test('classifyAttention: approval = reviewData Requested in last two bubbles (FI
   assert.equal(classifyAttention({ ...base, bubble: old }), null);
   // Old but chat working (agent waiting for you) or flag on: live.
   assert.equal(classifyAttention({ ...base, bubble: old, running: true }).live, true);
-  assert.equal(classifyAttention({ ...base, entry: entry({ hasBlockingPendingActions: true }), bubble: old }).kind, 'approvazione');
+  assert.equal(classifyAttention({ ...base, entry: entry({ hasBlockingPendingActions: true }), bubble: old }).kind, 'approval');
 
   // Decided (Done) or never requested (None): not an approval; with flag on remains stale.
   for (const status of ['Done', 'None']) {
     const r = classifyAttention({ ...base, entry: entry({ hasBlockingPendingActions: true }), bubble: { createdAt: NOW, tool: review({ review: { status } }) } });
-    assert.equal(r.kind, 'residuo', status);
+    assert.equal(r.kind, 'leftover', status);
     assert.equal(r.live, false, status);
   }
 
   // Cursor looks at last TWO bubbles: a message after the request does not hide it.
   const viaPrev = classifyAttention({ ...base, bubble: { createdAt: NOW, tool: null }, prevBubble: { createdAt: NOW - 2000, tool: review({ toolCallId: undefined }) } });
-  assert.deepEqual({ kind: viaPrev.kind, key: viaPrev.key, live: viaPrev.live, bubbleId: viaPrev.bubbleId }, { kind: 'approvazione', key: 'b:b4', live: true, bubbleId: 'b4' });
+  assert.deepEqual({ kind: viaPrev.kind, key: viaPrev.key, live: viaPrev.live, bubbleId: viaPrev.bubbleId }, { kind: 'approval', key: 'b:b4', live: true, bubbleId: 'b4' });
 
   // Plan or question with reviewData Requested follow their path, do not become approvals.
   const plan = classifyAttention({ ...base, entry: entry({ hasPendingPlan: true }), bubble: { createdAt: NOW, tool: review({ name: 'create_plan' }) } });
-  assert.equal(plan.kind, 'piano');
+  assert.equal(plan.kind, 'plan');
   // Open question takes precedence even if previous bubble was an approval.
   const q = classifyAttention({
     ...base,
     bubble: { createdAt: NOW - 1000, tool: { name: 'ask_question', status: 'loading', toolCallId: 'tq' } },
     prevBubble: { createdAt: NOW - 2000, tool: review() },
   });
-  assert.equal(q.kind, 'domanda');
+  assert.equal(q.kind, 'question');
 });
 
 test('classifyAttention: flag without live request = stale; without bubble key is "chat"', () => {
   const a = classifyAttention({ entry: entry({ hasBlockingPendingActions: true }), tail: null, bubble: null, now: NOW });
-  assert.deepEqual({ kind: a.kind, key: a.key, live: a.live, since: a.since }, { kind: 'residuo', key: 'chat', live: false, since: NOW - 500 });
+  assert.deepEqual({ kind: a.kind, key: a.key, live: a.live, since: a.since }, { kind: 'leftover', key: 'chat', live: false, since: NOW - 500 });
   const b = classifyAttention({ entry: entry({ hasBlockingPendingActions: true }), tail: { lastBubble: { id: 'b1' } }, bubble: { tool: null }, now: NOW });
   assert.equal(b.key, 'b:b1');
 });
 
 test('classifyAttention: pending plan', () => {
   const a = classifyAttention({ entry: entry({ hasPendingPlan: true }), tail: { lastBubble: { id: 'b4' } }, bubble: null, now: NOW });
-  assert.deepEqual({ kind: a.kind, key: a.key, live: a.live }, { kind: 'piano', key: 'plan:b4', live: false });
+  assert.deepEqual({ kind: a.kind, key: a.key, live: a.live }, { kind: 'plan', key: 'plan:b4', live: false });
 });
 
 test('headerSignature changes when relevant fields change', () => {
@@ -220,7 +220,7 @@ test('headerSignature changes when relevant fields change', () => {
 test('buildChat: fallback title and no path in public view', () => {
   const ws = { sectionId: 's', name: 'app', parent: 'dev', home: false, path: '/Users/demo/app' };
   const chat = buildChat({ entry: entry({ name: '   ' }), ws, attention: null, now: NOW, staleRunMs: 1 });
-  assert.equal(chat.name, 'Senza titolo');
+  assert.equal(chat.name, '');
   assert.equal(JSON.stringify(chat).includes('/Users/demo'), false);
 });
 

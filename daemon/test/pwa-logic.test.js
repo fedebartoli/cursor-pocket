@@ -8,7 +8,10 @@ import {
   shouldRefreshAfter,
 } from '../../pwa/js/action-errors.js';
 import { AnswerState, FREEFORM_MAX, optionBadge } from '../../pwa/js/answers.js';
+import { initI18n } from '../../pwa/js/i18n/index.js';
 import { bottomShift, classifyTap, keyboardHeight } from '../../pwa/js/viewport.js';
+
+await initI18n({ preference: 'en', browserLanguages: [] });
 
 const opts = (...ids) => ids.map((id) => ({ id, label: id }));
 const single = { questions: [{ id: 'q1', prompt: 'Scelta?', options: opts('a', 'b', 'c'), allowMultiple: false }] };
@@ -117,11 +120,11 @@ test('optionBadge: letters like Cursor, then numbers', () => {
 // ---------------------------------------------------------------- error messages
 
 test('describeActionError: own copy, daemon text, fallback', () => {
-  assert.match(describeActionError({ code: 'network' }), /non raggiungibile/i);
-  assert.match(describeActionError({ code: 'stale', message: 'ignorato' }), /ho aggiornato la vista/);
+  assert.match(describeActionError({ code: 'network' }), /unreachable/i);
+  assert.match(describeActionError({ code: 'stale', message: 'ignorato' }), /refreshed the view/);
   assert.equal(describeActionError({ code: 'unavailable', message: ' Cursor non e\u2019 raggiungibile. ' }), 'Cursor non e\u2019 raggiungibile.');
-  assert.match(describeActionError({}), /riprova/i);
-  assert.match(describeActionError(null), /riprova/i);
+  assert.match(describeActionError({}), /retry/i);
+  assert.match(describeActionError(null), /retry/i);
 });
 
 test('shouldRefreshAfter: only when Mac state changed', () => {
@@ -135,12 +138,12 @@ test('shouldRefreshAfter: only when Mac state changed', () => {
 });
 
 test('describeAnswerResult and describeMessageResult: confirmed, unconfirmed, queued', () => {
-  assert.equal(describeAnswerResult({ ok: true, verified: true }), 'Risposta inviata.');
-  assert.match(describeAnswerResult({ ok: true, verified: false }), /non riesco ancora a confermare/i);
-  assert.match(describeAnswerResult({ ok: true, verified: true, warning: 'differs' }), /scelta diversa/);
-  assert.equal(describeMessageResult({ ok: true, verified: true }), 'Messaggio inviato.');
-  assert.match(describeMessageResult({ ok: true, verified: true, queued: true }), /in coda/);
-  assert.match(describeMessageResult({ ok: true, verified: false }), /non riesco ancora a confermare/i);
+  assert.equal(describeAnswerResult({ ok: true, verified: true }), 'Answer sent.');
+  assert.match(describeAnswerResult({ ok: true, verified: false }), /cannot confirm yet/i);
+  assert.match(describeAnswerResult({ ok: true, verified: true, warning: 'differs' }), /different choice/);
+  assert.equal(describeMessageResult({ ok: true, verified: true }), 'Message sent.');
+  assert.match(describeMessageResult({ ok: true, verified: true, queued: true }), /queued/);
+  assert.match(describeMessageResult({ ok: true, verified: false }), /cannot confirm yet/i);
 });
 
 // ---------------------------------------------------------------- viewport

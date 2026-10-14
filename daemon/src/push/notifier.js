@@ -68,18 +68,18 @@ export class Notifier {
     const base = { tag: `chat-${chat.id}`, url: `/#/chat/${encodeURIComponent(chat.id)}`, badge: this.#badge() };
     if (event.type === 'attention') {
       const a = event.attention;
-      if (a.kind === 'domanda') {
+      if (a.kind === 'question') {
         const prompt = oneLine(a.title || a.prompt, 120);
-        return { ...base, kind: 'domanda', title: 'Domanda in attesa', body: prompt ? `${where}\n${prompt}` : where };
+        return { ...base, kind: 'question', title: 'Domanda in attesa', body: prompt ? `${where}\n${prompt}` : where };
       }
-      if (a.kind === 'approvazione') {
+      if (a.kind === 'approval') {
         // Action TYPE only (command, edit, MCP...): never the raw command on the lock screen.
-        return { ...base, kind: 'approvazione', title: 'Approvazione richiesta', body: `${where}\n${toolActionLabel(a.toolName)}` };
+        return { ...base, kind: 'approval', title: 'Approvazione richiesta', body: `${where}\n${toolActionLabel(a.toolName)}` };
       }
       // The watcher notifies questions and approvals only (FINDINGS 9.1, 11); unknown types get a generic message.
-      return { ...base, kind: 'attenzione', title: 'Richiede attenzione', body: where };
+      return { ...base, kind: 'attention', title: 'Richiede attenzione', body: where };
     }
-    if (event.type === 'done') return { ...base, kind: 'finita', title: 'Chat finita', body: where };
+    if (event.type === 'done') return { ...base, kind: 'done', title: 'Chat finita', body: where };
     return { ...base, kind: 'info', title: 'Cursor Pocket', body: where };
   }
 
@@ -99,7 +99,7 @@ export class Notifier {
         const transient = r.status === 429 || r.status >= 500;
         if (!transient || attempt >= RETRY_DELAYS_MS.length) return { outcome: 'failed', status: r.status };
       } catch (err) {
-        if (attempt >= RETRY_DELAYS_MS.length) return { outcome: 'failed', status: 0, error: err?.name || 'errore' };
+        if (attempt >= RETRY_DELAYS_MS.length) return { outcome: 'failed', status: 0, error: err?.name || 'error' };
       }
       await this.#sleep(RETRY_DELAYS_MS[attempt]);
     }

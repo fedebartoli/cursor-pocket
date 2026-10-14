@@ -1,6 +1,7 @@
 // App bootstrap: session, hash router, live connection, service worker.
 import { api, onUnauthorized } from './api.js';
 import { forgetCommit, h } from './dom.js';
+import { initI18n, t } from './i18n/index.js';
 import { icon } from './icons.js';
 import { getLive, startLive, stopLive, subscribe } from './live.js';
 import { resyncPush } from './push.js';
@@ -27,18 +28,24 @@ const scrollMemory = new Map();
 
 // Bottom bar (thumb-reachable): Attention, Chats, Favorites, Settings. Visible only outside chats,
 // where the composer sits at the bottom.
-const tabBadge = h('span', { class: 'tab-badge', hidden: true });
-const tabDefs = [
-  { route: 'home', href: '#/', label: 'Attenzione', icon: 'inbox', badge: tabBadge },
-  { route: 'chats', href: '#/chat', label: 'Chat', icon: 'messages' },
-  { route: 'favorites', href: '#/preferite', label: 'Preferite', icon: 'heart' },
-  { route: 'settings', href: '#/impostazioni', label: 'Impostazioni', icon: 'settings' },
-];
-const tabEls = new Map(
-  tabDefs.map((t) => [t.route, h('a', { class: 'tab', href: t.href }, h('span.tab-icon', null, icon(t.icon, { size: 24 }), t.badge ?? null), h('span.tab-label', null, t.label))]),
-);
-const tabbar = h('nav', { class: 'tabbar', 'aria-label': 'Navigazione principale', hidden: true }, h('div.tabbar-inner', null, [...tabEls.values()]));
-document.body.append(tabbar);
+let tabBadge;
+let tabEls;
+let tabbar;
+
+function buildTabbar() {
+  tabBadge = h('span', { class: 'tab-badge', hidden: true });
+  const tabDefs = [
+    { route: 'home', href: '#/', label: t('app.tabAttention'), icon: 'inbox', badge: tabBadge },
+    { route: 'chats', href: '#/chat', label: t('app.tabChats'), icon: 'messages' },
+    { route: 'favorites', href: '#/preferite', label: t('app.tabFavorites'), icon: 'heart' },
+    { route: 'settings', href: '#/impostazioni', label: t('app.tabSettings'), icon: 'settings' },
+  ];
+  tabEls = new Map(
+    tabDefs.map((def) => [def.route, h('a', { class: 'tab', href: def.href }, h('span.tab-icon', null, icon(def.icon, { size: 24 }), def.badge ?? null), h('span.tab-label', null, def.label))]),
+  );
+  tabbar = h('nav', { class: 'tabbar', 'aria-label': t('app.mainNav'), hidden: true }, h('div.tabbar-inner', null, [...tabEls.values()]));
+  document.body.append(tabbar);
+}
 
 function updateTabbar(routeName) {
   const visible = mode === 'app' && routeName !== 'chat' && routeName !== 'history' && routeName !== 'newchat';
@@ -54,7 +61,7 @@ function updateTabbar(routeName) {
 function updateBadge(n) {
   tabBadge.hidden = n <= 0;
   tabBadge.textContent = n > 99 ? '99+' : String(n);
-  tabEls.get('home').setAttribute('aria-label', n > 0 ? `Attenzione, ${n} richieste da decidere` : 'Attenzione');
+  tabEls.get('home').setAttribute('aria-label', n > 0 ? t('app.tabAttentionWithCount', { count: n }) : t('app.tabAttentionLabel'));
 }
 
 function parseRoute() {
@@ -119,7 +126,7 @@ function onLive(lv) {
   view?.update?.(lv);
   const n = lv.payload?.state?.counts?.attention ?? 0;
   updateBadge(n);
-  document.title = n > 0 ? `(${n}) ${TITLE}` : TITLE;
+  document.title = n > 0 ? t('app.documentTitleWithCount', { count: n }) : TITLE;
 }
 
 function showLogin() {
@@ -184,12 +191,18 @@ async function boot() {
   enterApp();
 }
 
-initViewport();
-registerServiceWorker();
-onUnauthorized(showLogin);
-window.addEventListener('hashchange', mountRoute);
-// Relative times ("3 min ago") update even without new data.
-setInterval(() => {
-  if (mode === 'app' && document.visibilityState === 'visible') view?.update?.(getLive());
-}, 30_000);
-boot();
+async function main() {
+  await initI18n();
+  buildTabbar();
+  initViewport();
+  registerServiceWorker();
+  onUnauthorized(showLogin);
+  window.addEventListener('hashchange', mountRoute);
+  // Relative times ("3 min ago") update even without new data.
+  setInterval(() => {
+    if (mode === 'app' && document.visibilityState === 'visible') view?.update?.(getLive());
+  }, 30_000);
+  await boot();
+}
+
+main();

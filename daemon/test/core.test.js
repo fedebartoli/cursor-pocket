@@ -18,7 +18,7 @@ test('log: safe by design - strings pass only for allow-listed keys', () => {
     ok: true, n: 3, nulla: null, o: { a: 1 }, a: ['x'], long: 'y'.repeat(500),
   });
   assert.deepEqual({ reason: out.reason, kind: out.kind, host: out.host }, { reason: 'invalid', kind: 'done', host: '127.0.0.1' });
-  for (const k of ['name', 'dettaglio', 'token', 'endpoint', 'message', 'o', 'a', 'long']) assert.equal(out[k], '[omesso]', k);
+  for (const k of ['name', 'dettaglio', 'token', 'endpoint', 'message', 'o', 'a', 'long']) assert.equal(out[k], '[omitted]', k);
   assert.deepEqual({ ok: out.ok, n: out.n, nulla: out.nulla }, { ok: true, n: 3, nulla: null });
   assert.ok(sanitizeFields({ reason: 'y'.repeat(500) }).reason.length <= 80, 'allowed values are truncated too');
 });
@@ -173,22 +173,22 @@ const EV = (over = {}) => ({
   type: 'attention',
   dedupeKey: 'a:c1:tc1',
   chat: { id: 'chat-id-0001', name: 'Titolo chat', workspaceName: 'app' },
-  attention: { kind: 'domanda', toolName: 'ask_question', title: 'Come procedo?', prompt: 'Quale approccio?' },
+  attention: { kind: 'question', toolName: 'ask_question', title: 'Come procedo?', prompt: 'Quale approccio?' },
   ...over,
 });
 
 test('notifier: messages for question, unknown type (generic), chat done; badge and destination', () => {
   const { notifier } = notifierSetup();
   const q = notifier.compose(EV());
-  assert.deepEqual({ title: q.title, kind: q.kind, tag: q.tag, url: q.url, badge: q.badge }, { title: 'Domanda in attesa', kind: 'domanda', tag: 'chat-chat-id-0001', url: '/#/chat/chat-id-0001', badge: 3 });
+  assert.deepEqual({ title: q.title, kind: q.kind, tag: q.tag, url: q.url, badge: q.badge }, { title: 'Domanda in attesa', kind: 'question', tag: 'chat-chat-id-0001', url: '/#/chat/chat-id-0001', badge: 3 });
   assert.match(q.body, /Titolo chat - app\nCome procedo\?/);
   const generic = notifier.compose(EV({ attention: { kind: 'sconosciuto', toolName: 'run_terminal_command_v2' } }));
-  assert.deepEqual({ title: generic.title, kind: generic.kind }, { title: 'Richiede attenzione', kind: 'attenzione' });
+  assert.deepEqual({ title: generic.title, kind: generic.kind }, { title: 'Richiede attenzione', kind: 'attention' });
   assert.equal(generic.body.includes('run_terminal_command_v2'), false, 'tool name must not appear in notification');
   const d = notifier.compose({ type: 'done', dedupeKey: 'd', chat: EV().chat });
   assert.equal(d.title, 'Chat finita');
-  assert.equal(d.kind, 'finita');
-  assert.ok(Buffer.byteLength(JSON.stringify(notifier.compose(EV({ chat: { id: 'x', name: 'n'.repeat(5000), workspaceName: 'w'.repeat(5000) }, attention: { kind: 'domanda', title: 't'.repeat(5000) } })))) < 3000, 'payload stays well under push limit');
+  assert.equal(d.kind, 'done');
+  assert.ok(Buffer.byteLength(JSON.stringify(notifier.compose(EV({ chat: { id: 'x', name: 'n'.repeat(5000), workspaceName: 'w'.repeat(5000) }, attention: { kind: 'question', title: 't'.repeat(5000) } })))) < 3000, 'payload stays well under push limit');
 });
 
 test('notifier: sends to all subscriptions, once per dedupeKey', async () => {

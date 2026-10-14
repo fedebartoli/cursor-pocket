@@ -4,6 +4,7 @@ import { appbar, banner, switchRow } from '../components.js';
 import { commit, h, replace } from '../dom.js';
 import { timeAgo } from '../format.js';
 import { icon } from '../icons.js';
+import { t, LANGUAGES, getLanguagePreference, setLanguagePreference } from '../i18n/index.js';
 import { getLive, refresh as refreshLive } from '../live.js';
 import { PushError, disablePush, enablePush, getPushState, sendTestPush } from '../push.js';
 
@@ -23,6 +24,16 @@ export function mountSettings(root, { onLoggedOut }) {
   const mainHost = h('div.region');
   const diagHost = h('div.region');
   replace(root, h('div', { class: 'screen' }, mainHost, diagHost));
+
+  function actionStatusLabel(reason) {
+    const labels = {
+      ok: t('settings.actionStatusOk'),
+      off: t('settings.actionStatusOff'),
+      no_window: t('settings.actionStatusNoWindow'),
+      disabled: t('settings.actionStatusDisabled'),
+    };
+    return labels[reason] ?? reason;
+  }
 
   const refreshPush = () =>
     getPushState().then((s) => {
@@ -72,7 +83,7 @@ export function mountSettings(root, { onLoggedOut }) {
       setTimeout(() => alive && loadAwake(), 1500); // daemon applies change shortly after the response
     } catch (err) {
       awake = prev;
-      note = { error: true, text: err.message || 'Impostazione non salvata.' };
+      note = { error: true, text: err.message || t('settings.settingNotSaved') };
     }
     if (alive) render();
   }
@@ -81,8 +92,8 @@ export function mountSettings(root, { onLoggedOut }) {
     if (!awake?.supported) return null;
     const rows = [
       switchRow({
-        label: 'Resta sveglio mentre un agente lavora',
-        sub: awake.active ? 'Attivo adesso: il Mac non va in stop' : awake.enabled ? 'Si attiva quando un agente lavora' : null,
+        label: t('settings.awakeStayAwakeLabel'),
+        sub: awake.active ? t('settings.awakeStayAwakeSubActive') : awake.enabled ? t('settings.awakeStayAwakeSubEnabled') : null,
         checked: awake.enabled,
         onToggle: (v) => setAwake('enabled', v),
       }),
@@ -90,22 +101,28 @@ export function mountSettings(root, { onLoggedOut }) {
     if (awake.enabled) {
       rows.push(
         switchRow({
-          label: 'Anche a schermo chiuso e a batteria',
-          sub: awake.closed.available ? (awake.lowBattery ? 'Sospeso: batteria bassa' : awake.closed.active ? 'Attivo adesso' : null) : 'Non configurato: vedi Come funziona',
+          label: t('settings.awakeClosedLabel'),
+          sub: awake.closed.available
+            ? awake.lowBattery
+              ? t('settings.awakeClosedSubLowBattery')
+              : awake.closed.active
+                ? t('settings.awakeClosedSubActive')
+                : null
+            : t('settings.awakeNotConfigured'),
           checked: awake.closed.enabled,
           disabled: !awake.closed.available && !awake.closed.enabled,
           onToggle: (v) => setAwake('closed', v),
         }),
         switchRow({
-          label: 'Luminosit\u00e0 a zero a schermo chiuso',
-          sub: awake.dim.available ? (awake.dim.active ? 'Attivo adesso' : null) : 'Non configurato: vedi Come funziona',
+          label: t('settings.awakeDimLabel'),
+          sub: awake.dim.available ? (awake.dim.active ? t('settings.awakeDimSubActive') : null) : t('settings.awakeNotConfigured'),
           checked: awake.dim.enabled,
           disabled: !awake.dim.available && !awake.dim.enabled,
           onToggle: (v) => setAwake('dim', v),
         }),
       );
     }
-    return h('section.panel', null, h('div.panel-title', null, icon('zap', { size: 20 }), h('span.grow', null, 'Mac sveglio')), ...rows);
+    return h('section.panel', null, h('div.panel-title', null, icon('zap', { size: 20 }), h('span.grow', null, t('settings.awakeTitle'))), ...rows);
   }
 
   const loadDevices = () =>
@@ -137,28 +154,33 @@ export function mountSettings(root, { onLoggedOut }) {
       async () => {
         await api.post(`/api/devices/${d.id}/revoke`, {});
         devices = devices.filter((x) => x.id !== d.id);
-        note = { error: false, text: 'Dispositivo scollegato.' };
+        note = { error: false, text: t('settings.deviceUnpaired') };
       },
-      () => 'Non sono riuscito a scollegare il dispositivo.',
+      () => t('settings.deviceUnpairFailed'),
     );
   }
 
   function devicesPanel() {
     if (!devices || devices.length < 2) return null; // with only this device the panel is unnecessary
     const rows = devices.map((d) => {
-      const meta = d.current ? 'Questo dispositivo' : `Ultimo accesso ${timeAgo(d.lastSeenAt)}`;
+      const meta = d.current ? t('settings.deviceThisDevice') : t('settings.deviceLastAccess', { time: timeAgo(d.lastSeenAt) });
       const armed = armedDevice === d.id;
       return h(
         'div.device-row',
         null,
         icon('phone', { size: 20 }),
-        h('div.device-main', null, h('div.device-name', null, d.label || 'Dispositivo'), h('div.device-meta', null, meta, d.notifications ? ' \u00b7 notifiche attive' : '')),
+        h(
+          'div.device-main',
+          null,
+          h('div.device-name', null, d.label || t('settings.deviceDefaultName')),
+          h('div.device-meta', null, meta, d.notifications ? t('settings.deviceNotificationsOn') : ''),
+        ),
         d.current
           ? null
-          : h('button', { class: `btn small${armed ? ' armed' : ''}`, type: 'button', disabled: busy !== null, onClick: () => revokeDevice(d) }, armed ? 'Tocca ancora' : 'Scollega'),
+          : h('button', { class: `btn small${armed ? ' armed' : ''}`, type: 'button', disabled: busy !== null, onClick: () => revokeDevice(d) }, armed ? t('settings.deviceTapAgain') : t('settings.deviceUnpair')),
       );
     });
-    return h('section.panel', null, h('div.panel-title', null, icon('phone', { size: 20 }), h('span.grow', null, 'Dispositivi abbinati')), ...rows);
+    return h('section.panel', null, h('div.panel-title', null, icon('phone', { size: 20 }), h('span.grow', null, t('settings.devicesTitle'))), ...rows);
   }
 
   async function saveQuiet(patch) {
@@ -168,7 +190,7 @@ export function mountSettings(root, { onLoggedOut }) {
     try {
       quiet = await api.post('/api/settings/quiet', next);
     } catch {
-      note = { error: true, text: 'Orari non salvati.' };
+      note = { error: true, text: t('settings.quietSaveFailed') };
     }
     if (alive) render();
   }
@@ -177,7 +199,7 @@ export function mountSettings(root, { onLoggedOut }) {
     try {
       await api.post(`/api/workspaces/${encodeURIComponent(ws.id)}/prefs`, { muted });
     } catch {
-      note = { error: true, text: 'Impossibile aggiornare il progetto.' };
+      note = { error: true, text: t('settings.mutedUpdateFailed') };
     }
     await refreshLive().catch(() => {});
     if (alive) render();
@@ -185,13 +207,21 @@ export function mountSettings(root, { onLoggedOut }) {
 
   function quietPanel() {
     if (!quiet) return null;
-    const time = (label, key) => h('label', { class: 'time-field' }, h('span', null, label), h('input', { type: 'time', value: quiet[key], 'aria-label': label, onChange: (e) => e.target.value && saveQuiet({ [key]: e.target.value }) }));
+    const fromLabel = t('settings.quietFrom');
+    const toLabel = t('settings.quietTo');
+    const time = (label, key) =>
+      h('label', { class: 'time-field' }, h('span', null, label), h('input', { type: 'time', value: quiet[key], 'aria-label': label, onChange: (e) => e.target.value && saveQuiet({ [key]: e.target.value }) }));
     return h(
       'section.panel',
       null,
-      h('div.panel-title', null, icon('clock', { size: 20 }), h('span.grow', null, 'Orari senza notifiche')),
-      switchRow({ label: 'Silenzio programmato', sub: quiet.enabled ? `Dalle ${quiet.from} alle ${quiet.to}` : null, checked: quiet.enabled, onToggle: (v) => saveQuiet({ enabled: v }) }),
-      quiet.enabled ? h('div', { class: 'time-pair' }, time('Dalle', 'from'), time('Alle', 'to')) : null,
+      h('div.panel-title', null, icon('clock', { size: 20 }), h('span.grow', null, t('settings.quietTitle'))),
+      switchRow({
+        label: t('settings.quietScheduled'),
+        sub: quiet.enabled ? t('settings.quietRange', { from: quiet.from, to: quiet.to }) : null,
+        checked: quiet.enabled,
+        onToggle: (v) => saveQuiet({ enabled: v }),
+      }),
+      quiet.enabled ? h('div', { class: 'time-pair' }, time(fromLabel, 'from'), time(toLabel, 'to')) : null,
     );
   }
 
@@ -201,8 +231,28 @@ export function mountSettings(root, { onLoggedOut }) {
     return h(
       'section.panel',
       null,
-      h('div.panel-title', null, icon('bellOff', { size: 20 }), h('span.grow', null, 'Progetti silenziati')),
-      workspaces.map((ws) => switchRow({ label: ws.name, sub: ws.muted ? 'Nessuna notifica' : null, checked: ws.muted === true, onToggle: (v) => setProjectMuted(ws, v) })),
+      h('div.panel-title', null, icon('bellOff', { size: 20 }), h('span.grow', null, t('settings.mutedTitle'))),
+      workspaces.map((ws) => switchRow({ label: ws.name || (ws.home ? t('common.noFolder') : ''), sub: ws.muted ? t('settings.mutedNoNotifications') : null, checked: ws.muted === true, onToggle: (v) => setProjectMuted(ws, v) })),
+    );
+  }
+
+  function languagePanel() {
+    const pref = getLanguagePreference();
+    const selectId = 'settings-language';
+    const onChange = (e) => {
+      setLanguagePreference(e.target.value);
+      location.reload();
+    };
+    const options = [
+      h('option', { value: 'auto', selected: pref === 'auto' }, t('settings.languageAuto')),
+      ...LANGUAGES.map((l) => h('option', { value: l.code, selected: pref === l.code }, l.name)),
+    ];
+    return h(
+      'section.panel',
+      null,
+      h('div.panel-title', null, icon('globe', { size: 20 }), h('span.grow', null, t('settings.languageTitle'))),
+      h('label.lang-field', { for: selectId }, h('span.lang-label', null, t('settings.languageTitle')), h('select.lang-select', { id: selectId, onChange }, ...options)),
+      h('p.hint', null, t('settings.languageHint')),
     );
   }
 
@@ -227,12 +277,12 @@ export function mountSettings(root, { onLoggedOut }) {
       'enable',
       async () => {
         await enablePush();
-        note = { error: false, text: 'Notifiche attivate su questo dispositivo.' };
+        note = { error: false, text: t('settings.pushEnabled') };
       },
       (err) => {
-        if (err instanceof PushError && err.code === 'denied') return 'Permesso negato. Puoi abilitarlo dalle impostazioni di iOS.';
-        if (err instanceof PushError && err.code === 'dismissed') return 'Permesso non concesso.';
-        return 'Attivazione non riuscita. Riprova.';
+        if (err instanceof PushError && err.code === 'denied') return t('settings.pushDeniedIos');
+        if (err instanceof PushError && err.code === 'dismissed') return t('settings.pushDismissed');
+        return t('settings.pushEnableFailed');
       },
     );
 
@@ -241,9 +291,9 @@ export function mountSettings(root, { onLoggedOut }) {
       'disable',
       async () => {
         await disablePush();
-        note = { error: false, text: 'Notifiche disattivate su questo dispositivo.' };
+        note = { error: false, text: t('settings.pushDisabled') };
       },
-      () => 'Disattivazione non riuscita.',
+      () => t('settings.pushDisableFailed'),
     );
 
   const test = () =>
@@ -251,9 +301,9 @@ export function mountSettings(root, { onLoggedOut }) {
       'test',
       async () => {
         const r = await sendTestPush();
-        note = r.sent > 0 ? { error: false, text: 'Notifica di prova inviata.' } : { error: true, text: 'Nessuna notifica consegnata. Controlla i permessi di iOS.' };
+        note = r.sent > 0 ? { error: false, text: t('settings.pushTestSent') } : { error: true, text: t('settings.pushTestNone') };
       },
-      (err) => (err.code === 'too_fast' ? 'Attendi qualche secondo prima di riprovare.' : 'Invio non riuscito.'),
+      (err) => (err.code === 'too_fast' ? t('settings.pushTestTooFast') : t('settings.pushTestFailed')),
     );
 
   function logout() {
@@ -274,7 +324,7 @@ export function mountSettings(root, { onLoggedOut }) {
         await api.post('/api/logout');
         onLoggedOut();
       },
-      () => 'Uscita non riuscita.',
+      () => t('settings.logoutFailed'),
     );
   }
 
@@ -283,31 +333,31 @@ export function mountSettings(root, { onLoggedOut }) {
   }
 
   function notificationsPanel() {
-    const body = [h('div.panel-title', null, icon('bell', { size: 20 }), h('span.grow', null, 'Notifiche'))];
+    const body = [h('div.panel-title', null, icon('bell', { size: 20 }), h('span.grow', null, t('settings.notificationsTitle')))];
     switch (push?.kind) {
       case undefined:
       case null:
-        body.push(h('p.panel-note', null, 'Verifica in corso\u2026'));
+        body.push(h('p.panel-note', null, t('settings.pushChecking')));
         break;
       case 'install':
         body.push(
-          h('p.panel-note', null, 'Su iPhone le notifiche funzionano solo dall\u2019app installata:'),
-          h('ol.steps', null, h('li', null, 'In Safari tocca Condividi.'), h('li', null, 'Scegli Aggiungi alla schermata Home.'), h('li', null, 'Apri Cursor Pocket dalla Home e abbinala di nuovo.')),
+          h('p.panel-note', null, t('settings.pushInstallIntro')),
+          h('ol.steps', null, h('li', null, t('settings.pushInstallStep1')), h('li', null, t('settings.pushInstallStep2')), h('li', null, t('settings.pushInstallStep3'))),
         );
         break;
       case 'unsupported':
-        body.push(h('p.panel-note', null, 'Questo browser non supporta le notifiche push.'));
+        body.push(h('p.panel-note', null, t('settings.pushUnsupported')));
         break;
       case 'denied':
-        body.push(h('p.panel-note', null, 'Le notifiche sono bloccate per questa app. Abilitale da Impostazioni di iOS, Notifiche, Cursor Pocket.'));
+        body.push(h('p.panel-note', null, t('settings.pushDeniedHelp')));
         break;
       case 'off':
-        body.push(h('p.panel-note', null, 'Ricevi un avviso quando una chat pone una nuova domanda, aspetta una tua approvazione o termina il lavoro.'), h('div.panel-actions', null, btn('Attiva notifiche', 'bell', enable, { primary: true, name: 'enable' })));
+        body.push(h('p.panel-note', null, t('settings.pushOffNote')), h('div.panel-actions', null, btn(t('settings.pushEnableBtn'), 'bell', enable, { primary: true, name: 'enable' })));
         break;
       case 'on':
         body.push(
-          h('p.panel-note', null, 'Attive su questo dispositivo. Ricevi un avviso per ogni nuova domanda, per ogni approvazione richiesta e quando una chat termina.'),
-          h('div.panel-actions', null, btn('Invia notifica di prova', 'bell', test, { name: 'test' }), btn('Disattiva notifiche', 'bellOff', disable, { name: 'disable' })),
+          h('p.panel-note', null, t('settings.pushOnNote')),
+          h('div.panel-actions', null, btn(t('settings.pushTestBtn'), 'bell', test, { name: 'test' }), btn(t('settings.pushDisableBtn'), 'bellOff', disable, { name: 'disable' })),
         );
         break;
       default:
@@ -317,33 +367,31 @@ export function mountSettings(root, { onLoggedOut }) {
     return h('section.panel', null, body);
   }
 
-  const ACTION_LABEL = { ok: 'attive', off: 'non attive', no_window: 'finestra Agents chiusa', disabled: 'disattivate' };
-
   function actionsPanel() {
     const reason = getLive().payload?.status?.actions ?? info?.actions?.reason ?? null;
     const port = info?.actions?.port ?? 9222;
-    const body = [h('div.panel-title', null, icon('plug', { size: 20 }), h('span.grow', null, 'Rispondere dal telefono'))];
+    const body = [h('div.panel-title', null, icon('plug', { size: 20 }), h('span.grow', null, t('settings.actionsTitle')))];
     switch (reason) {
       case 'ok':
-        body.push(h('p.panel-note', null, 'Attivo. Dalle chat puoi rispondere alle domande di Cursor, saltarle e scrivere messaggi.'));
+        body.push(h('p.panel-note', null, t('settings.actionsOk')));
         break;
       case 'no_window':
-        body.push(h('p.panel-note', null, 'Cursor \u00e8 raggiungibile, ma la finestra Agents non \u00e8 aperta. Aprila sul Mac: questa pagina si aggiorna da sola.'));
+        body.push(h('p.panel-note', null, t('settings.actionsNoWindow')));
         break;
       case 'disabled':
-        body.push(h('p.panel-note', null, 'Le azioni sono disattivate nella configurazione del daemon (CP_ACTIONS).'));
+        body.push(h('p.panel-note', null, t('settings.actionsDisabled')));
         break;
       default:
         body.push(
-          h('p.panel-note', null, 'Per rispondere e scrivere dal telefono Cursor deve essere avviato con una porta di debug locale. Sul Mac:'),
+          h('p.panel-note', null, t('settings.actionsSetupIntro')),
           h(
             'ol.steps',
             null,
-            h('li', null, 'Chiudi Cursor. Le chat in corso si interrompono: aspetta che abbiano finito.'),
-            h('li', null, 'Riaprilo con ', h('code', null, 'tools/cursor-cdp.sh'), ' dalla cartella del progetto.'),
-            h('li', null, 'Questa pagina si aggiorna da sola quando Cursor risponde.'),
+            h('li', null, t('settings.actionsSetupStep1')),
+            h('li', null, t('settings.actionsSetupStep2Before'), h('code', null, 'tools/cursor-cdp.sh'), t('settings.actionsSetupStep2After')),
+            h('li', null, t('settings.actionsSetupStep3')),
           ),
-          h('p.hint', null, `Mentre la porta ${port} \u00e8 attiva, qualunque programma sul Mac pu\u00f2 controllare Cursor. Non \u00e8 raggiungibile dalla rete.`),
+          h('p.hint', null, t('settings.actionsPortHint', { port })),
         );
     }
     return h('section.panel', null, body);
@@ -353,60 +401,77 @@ export function mountSettings(root, { onLoggedOut }) {
     const lv = getLive();
     const rows = [];
     const total = lv.payload?.state?.counts?.total;
-    if (total != null) rows.push(['Chat visibili', String(total)]);
+    if (total != null) rows.push([t('settings.daemonVisibleChats'), String(total)]);
     if (info) {
-      rows.push(['Dispositivi con notifiche', String(info.subscriptions)]);
-      if (info.lastScanAt) rows.push(['Ultima lettura di Cursor', timeAgo(info.lastScanAt)]);
-      rows.push(['Richieste vecchie in \u201cIn sospeso\u201d dopo', info.pendingAfterHours > 0 ? `${info.pendingAfterHours} h` : 'mai']);
+      rows.push([t('settings.daemonPushDevices'), String(info.subscriptions)]);
+      if (info.lastScanAt) rows.push([t('settings.daemonLastScan'), timeAgo(info.lastScanAt)]);
+      rows.push([
+        t('settings.daemonPendingAfter'),
+        info.pendingAfterHours > 0 ? t('settings.daemonPendingHours', { hours: info.pendingAfterHours }) : t('settings.daemonPendingNever'),
+      ]);
     }
     const act = lv.payload?.status?.actions ?? info?.actions?.reason;
-    if (act) rows.push(['Risposte dal telefono', ACTION_LABEL[act] ?? act]);
-    rows.push(['Connessione', lv.offline ? 'non raggiungibile' : lv.connection === 'ok' ? 'attiva' : 'in corso']);
-    return h('section.panel', null, h('div.panel-title', null, icon('database', { size: 20 }), h('span.grow', null, 'Daemon sul Mac')), h('dl.kv', null, rows.flatMap(([k, v]) => [h('dt', null, k), h('dd', null, v)])));
+    if (act) rows.push([t('settings.daemonPhoneReplies'), actionStatusLabel(act)]);
+    rows.push([
+      t('settings.daemonConnection'),
+      lv.offline ? t('settings.connectionOffline') : lv.connection === 'ok' ? t('settings.connectionOk') : t('settings.connectionPending'),
+    ]);
+    return h('section.panel', null, h('div.panel-title', null, icon('database', { size: 20 }), h('span.grow', null, t('settings.daemonTitle'))), h('dl.kv', null, rows.flatMap(([k, v]) => [h('dt', null, k), h('dd', null, v)])));
   }
 
   function render() {
     if (!alive) return;
-    const out = [appbar({ title: 'Impostazioni' })];
-    if (getLive().offline) out.push(banner({ text: 'Daemon non raggiungibile' }));
-    out.push(notificationsPanel(), quietPanel(), mutedPanel(), awakePanel(), actionsPanel(), daemonPanel(), devicesPanel());
-    out.push(h('a', { class: 'row help-link', href: '#/archivio' }, icon('archive', { size: 20 }), h('div.row-main', null, h('div.row-title', null, 'Chat archiviate')), icon('chevronRight', { size: 18 })));
-    out.push(h('a', { class: 'row help-link', href: '#/come-funziona' }, icon('info', { size: 20 }), h('div.row-main', null, h('div.row-title', null, 'Come funziona')), icon('chevronRight', { size: 18 })));
+    const out = [appbar({ title: t('settings.title') })];
+    if (getLive().offline) out.push(banner({ text: t('settings.daemonUnreachable') }));
+    out.push(notificationsPanel(), languagePanel(), quietPanel(), mutedPanel(), awakePanel(), actionsPanel(), daemonPanel(), devicesPanel());
+    out.push(h('a', { class: 'row help-link', href: '#/archivio' }, icon('archive', { size: 20 }), h('div.row-main', null, h('div.row-title', null, t('settings.archivedChatsLink'))), icon('chevronRight', { size: 18 })));
+    out.push(h('a', { class: 'row help-link', href: '#/come-funziona' }, icon('info', { size: 20 }), h('div.row-main', null, h('div.row-title', null, t('settings.helpLink'))), icon('chevronRight', { size: 18 })));
     out.push(
       h(
         'section.panel',
         null,
-        h('div.panel-title', null, icon('lock', { size: 20 }), h('span.grow', null, 'Accesso')),
-        h('p.panel-note', null, 'Questo dispositivo resta abbinato per 90 giorni di inattivit\u00e0. Uscendo, le sue notifiche vengono rimosse.'),
-        h('div.panel-actions', null, btn(armedLogout ? 'Tocca ancora per uscire' : 'Esci da questo dispositivo', 'logout', logout, { name: 'logout' })),
+        h('div.panel-title', null, icon('lock', { size: 20 }), h('span.grow', null, t('settings.accessTitle'))),
+        h('p.panel-note', null, t('settings.accessNote')),
+        h('div.panel-actions', null, btn(armedLogout ? t('settings.logoutTapAgain') : t('settings.logoutBtn'), 'logout', logout, { name: 'logout' })),
       ),
     );
     commit(mainHost, out);
     renderDiag();
   }
 
-  const secs = (ms) => (ms == null ? 'n/d' : ms < 1000 ? `${ms} ms` : `${(ms / 1000).toFixed(1)} s`);
-  const ago = (t) => (t ? `${Math.max(0, Math.round((Date.now() - t) / 1000))} s fa` : 'mai');
+  function formatDiagSecs(ms) {
+    if (ms == null) return t('settings.diagNa');
+    if (ms < 1000) return t('settings.diagMs', { ms });
+    return t('settings.diagSec', { sec: (ms / 1000).toFixed(1) });
+  }
+
+  function formatDiagAgo(at) {
+    if (!at) return t('settings.diagAgoNever');
+    return t('settings.diagAgoSec', { sec: Math.max(0, Math.round((Date.now() - at) / 1000)) });
+  }
 
   /** Where time is lost between Mac and phone (updates every second, separate region: does not affect buttons). */
   function renderDiag() {
     const lv = getLive();
     const st = lv.stats;
     const rows = [
-      ['Flusso live', lv.connection === 'ok' ? 'attivo' : 'non attivo'],
-      ['Eventi ricevuti dal flusso', `${st.sseEvents}, ultimo ${ago(st.lastSseAt)}`],
-      ['Ritardo dell\u2019ultimo evento', `${secs(st.lastSseLagMs)} (stima)`],
-      ['Aggiornamenti arrivati in ritardo dal flusso', st.pollWins === 0 ? 'nessuno' : `${st.pollWins}, ultimo dopo ${secs(st.lastPollWinLagMs)}`],
-      ['Tempo di risposta del daemon', secs(st.lastRttMs)],
+      [t('settings.diagLiveFlow'), lv.connection === 'ok' ? t('settings.diagLiveActive') : t('settings.diagLiveInactive')],
+      [t('settings.diagSseEvents'), t('settings.diagSseEventsValue', { count: st.sseEvents, ago: formatDiagAgo(st.lastSseAt) })],
+      [t('settings.diagLastEventLag'), t('settings.diagLastEventLagValue', { secs: formatDiagSecs(st.lastSseLagMs) })],
+      [
+        t('settings.diagPollWins'),
+        st.pollWins === 0 ? t('settings.diagPollWinsNone') : t('settings.diagPollWinsValue', { count: st.pollWins, secs: formatDiagSecs(st.lastPollWinLagMs) }),
+      ],
+      [t('settings.diagRtt'), formatDiagSecs(st.lastRttMs)],
     ];
     commit(
       diagHost,
       h(
         'section.panel',
         null,
-        h('div.panel-title', null, icon('clock', { size: 20 }), h('span.grow', null, 'Diagnostica connessione')),
+        h('div.panel-title', null, icon('clock', { size: 20 }), h('span.grow', null, t('settings.diagTitle'))),
         h('dl.kv', null, rows.flatMap(([k, v]) => [h('dt', null, k), h('dd', null, v)])),
-        h('p.hint', null, 'Il ritardo \u00e8 una stima: confronta l\u2019orologio del Mac con quello del telefono. Se \u201carrivati in ritardo dal flusso\u201d cresce, gli aggiornamenti live non passano e la pagina si regge sul controllo periodico.'),
+        h('p.hint', null, t('settings.diagHint')),
       ),
     );
   }

@@ -1,5 +1,6 @@
 // Push notifications: capability detection, subscription, and sync with the daemon.
 import { api } from './api.js';
+import { getLanguage, t } from './i18n/index.js';
 
 export class PushError extends Error {
   constructor(code, message) {
@@ -29,7 +30,7 @@ export function environment() {
 }
 
 async function registration() {
-  const timeout = new Promise((_, reject) => setTimeout(() => reject(new PushError('no_sw', 'Service worker non pronto')), 5000));
+  const timeout = new Promise((_, reject) => setTimeout(() => reject(new PushError('no_sw', t('push.swNotReady'))), 5000));
   return Promise.race([navigator.serviceWorker.ready, timeout]);
 }
 
@@ -55,7 +56,7 @@ export async function getPushState() {
 export async function enablePush() {
   const permission = await Notification.requestPermission();
   if (permission !== 'granted') {
-    throw new PushError(permission === 'denied' ? 'denied' : 'dismissed', 'Permesso non concesso');
+    throw new PushError(permission === 'denied' ? 'denied' : 'dismissed', t('push.permissionDenied'));
   }
   const reg = await registration();
   const { publicKey } = await api.get('/api/push/public-key');
@@ -67,7 +68,7 @@ export async function enablePush() {
     sub = null;
   }
   sub = sub ?? (await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key }));
-  await api.post('/api/push/subscribe', { subscription: sub.toJSON() });
+  await api.post('/api/push/subscribe', { subscription: sub.toJSON(), lang: getLanguage() });
 }
 
 export async function disablePush() {
@@ -90,7 +91,7 @@ export async function resyncPush() {
   if (!env.hasApis || Notification.permission !== 'granted') return;
   try {
     const sub = await (await registration()).pushManager.getSubscription();
-    if (sub) await api.post('/api/push/subscribe', { subscription: sub.toJSON() });
+    if (sub) await api.post('/api/push/subscribe', { subscription: sub.toJSON(), lang: getLanguage() });
   } catch {
     // not critical
   }

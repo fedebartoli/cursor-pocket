@@ -265,7 +265,7 @@ export class Actions extends EventEmitter {
   #liveQuestion(chatId, key) {
     const chat = this.#chat(chatId);
     const a = chat.attention;
-    if (!a || a.kind !== 'domanda' || !a.live || a.key !== key) {
+    if (!a || a.kind !== 'question' || !a.live || a.key !== key) {
       throw new ActionError(409, 'stale', 'La domanda e\' cambiata o e\' gia\' stata risolta: aggiorna e riprova.');
     }
     const question = this.watcher.detail(chatId)?.question;
@@ -350,7 +350,7 @@ export class Actions extends EventEmitter {
     this.#requireReady();
     const chat = this.#chat(chatId);
     const a = chat.attention;
-    if (!a || a.kind !== 'approvazione' || !a.live || a.key !== key || !a.bubbleId) {
+    if (!a || a.kind !== 'approval' || !a.live || a.key !== key || !a.bubbleId) {
       throw new ActionError(409, 'stale', 'La richiesta e\' cambiata o e\' gia\' stata decisa: aggiorna e riprova.');
     }
     if (!SHELL_TOOLS.has(a.toolName)) {
@@ -371,7 +371,7 @@ export class Actions extends EventEmitter {
           const b = this.db.bubbleSummary(chatId, a.bubbleId);
           if (b?.tool && (b.tool.review?.status !== 'Requested' || b.tool.status !== 'loading')) return b;
           const now = this.watcher.last?.chats.find((c) => c.id === chatId)?.attention;
-          return !now || now.key !== key || now.kind !== 'approvazione' ? { moved: true } : null;
+          return !now || now.key !== key || now.kind !== 'approval' ? { moved: true } : null;
         }, 10_000);
         // Cursor's card loses its buttons as soon as the decision is accepted (`settled`): faster signal than the database.
         return { ok: true, verified: Boolean(r), decision };
@@ -393,7 +393,7 @@ export class Actions extends EventEmitter {
     this.#requireReady();
     const chat = this.#chat(chatId);
     if (!chat.running) throw new ActionError(409, 'not_running', 'L\'agente non sta lavorando: forse ha gia\' finito.');
-    if (chat.attention?.live && (chat.attention.kind === 'domanda' || chat.attention.kind === 'approvazione')) {
+    if (chat.attention?.live && (chat.attention.kind === 'question' || chat.attention.kind === 'approval')) {
       throw new ActionError(409, 'attention_pending', 'La chat aspetta una tua decisione: rispondi, approva o rifiuta invece di fermarla.');
     }
     const slot = this.#dedupe('stop', chatId, 'stop', 6_000);
@@ -567,12 +567,12 @@ export class Actions extends EventEmitter {
     const chat = this.#chat(chatId);
     const files = ids.length ? this.uploads?.paths(ids) : [];
     if (!files) throw new ActionError(409, 'image_expired', 'Un\'immagine non \u00e8 pi\u00f9 disponibile: allegala di nuovo.');
-    if (chat.attention?.kind === 'domanda' && chat.attention.live) {
+    if (chat.attention?.kind === 'question' && chat.attention.live) {
       throw new ActionError(409, 'question_pending', 'La chat ha una domanda in attesa: rispondi prima a quella.');
     }
     // With a pending approval, a new message's effect depends on Cursor settings (queue or
     // "stop and send", which would cancel the pending command): do not risk it; approve or reject on the Mac first.
-    if (chat.attention?.kind === 'approvazione' && chat.attention.live) {
+    if (chat.attention?.kind === 'approval' && chat.attention.live) {
       throw new ActionError(409, 'approval_pending', 'La chat aspetta una tua approvazione in Cursor: approvala o rifiutala dal Mac prima di scrivere.');
     }
     // A double tap on the button must not send the same text twice.

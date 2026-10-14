@@ -38,8 +38,8 @@ docs/
 state  = { counts:{attention,pending,running,total}, attention:[Card], pending:[Card],
            workspaces:[{ id, name, home, collapsed, lastUpdatedAt, counts, chats:[Card] }] }
 Card   = { id, name, subtitle, sectionId, workspaceName, state, running, unread, mode, lastUpdatedAt,
-           attention: { kind, key, live, since, label, reason, title, prompt } | null }
-state  = in_corso | attenzione | in_sospeso | finita | inattiva   (running | needs attention | pending | finished | idle)
+           attention: { kind, key, live, since, approvalAction?, reason, title, prompt } | null }
+state  = running | attention | pending | done | idle
 status = { ok, error: 'db' | null, actions: 'ok' | 'off' | 'no_window' | 'disabled' }
          (deliberately stable: no timestamps, so it does not trigger useless pushes)
 ```
@@ -59,24 +59,24 @@ expected debug port (for "Impostazioni" (Settings)).
   handled (no case in real data).
 - "Richiede attenzione" (Require attention) = like Cursor's dot: `hasBlockingPendingActions` or `hasPendingPlan`. The flag alone does not say
   what kind of request it is, so classification uses the last bubble:
-  - `domanda`: last `ask_question` bubble with no answer, i.e. `loading` (first seconds) or `completed` with
+  - `question`: last `ask_question` bubble with no answer, i.e. `loading` (first seconds) or `completed` with
     `additionalData.status: "pending"` (turn finished, question waiting for hours), with the flag on OR created less than
     120 s ago (Cursor's header arrives late, up to 60 s: FINDINGS 9.7); key = `toolCallId`; actionable in phase 2;
-  - `approvazione`: the last or second-to-last bubble is a tool (not `ask_question` or `create_plan`) with
+  - `approval`: the last or second-to-last bubble is a tool (not `ask_question` or `create_plan`) with
     `additionalData.reviewData.status === "Requested"`, as Cursor itself looks for; key = `toolCallId`. Live if the flag is
     on, or the chat is working, or the bubble is recent (less than 120 s); otherwise it is a leftover and does not count.
     Notified only after `CP_APPROVAL_DELAY_SECONDS` of continuous waiting, with only the action TYPE. Not actionable from the PWA
     (FINDINGS 11);
-  - `piano`: pending plan only;
-  - `residuo`: flag on but the last bubble is not an open question (question already answered or superseded by other messages,
+  - `plan`: pending plan only;
+  - `leftover`: flag on but the last bubble is not an open question (question already answered or superseded by other messages,
     or chat working with the flag still on); key = last tool or last bubble.
   - A tool WITHOUT `reviewData` is never a request: a running tool looks the same as an approval request based on
-    `loading` and lack of `userDecision` (hypothesis disproved live, FINDINGS 9.1). Only `domanda` and
-    `approvazione` are "live" and generate notifications; everything else is display-only.
-- A chat that is WORKING (`running`) with a leftover or plan does not need you: state "in corso", outside
+    `loading` and lack of `userDecision` (hypothesis disproved live, FINDINGS 9.1). Only `question` and
+    `approval` are "live" and generate notifications; everything else is display-only.
+- A chat that is WORKING (`running`) with a leftover or plan does not need you: state `running`, outside
   "Richiedono attenzione" (Cursor still shows the dot while the agent works). During the run only one
   live request counts (question or approval). When the run ends the leftover becomes visible again and can be ignored.
-- "In sospeso" (Pending) = ignored requests (`reason: ignorata`) or older than `CP_PENDING_AFTER_HOURS` (`reason: vecchia`).
+- "In sospeso" (Pending) = ignored requests (`reason: ignored`) or older than `CP_PENDING_AFTER_HOURS` (`reason: old`).
   The dot and "Richiedono attenzione" count do not include them.
 - "Ignora" (Ignore): writes only to the daemon store, key `(chatId, key)`. No interaction with Cursor. With a new request
   the key changes and the dot reappears. The API responds 409 `stale` if the submitted key is no longer that of the current

@@ -93,7 +93,7 @@ export class WorkspaceResolver {
       }
     }
     if (!p) {
-      return { key: HOME_KEY, sectionId: sectionIdFor(HOME_KEY), path: null, name: 'Senza cartella', parent: '', home: true };
+      return { key: HOME_KEY, sectionId: sectionIdFor(HOME_KEY), path: null, name: '', parent: '', home: true };
     }
     const key = `local:path:${p}`;
     let name = basenameOf(p);

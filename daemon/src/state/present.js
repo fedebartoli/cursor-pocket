@@ -3,11 +3,11 @@
 // compare snapshots and notify clients only when something actually changed.
 import { collapsedIds, orderSections } from '../cursor/sidebar.js';
 export const STATES = Object.freeze({
-  RUNNING: 'in_corso',
-  ATTENTION: 'attenzione',
-  PENDING: 'in_sospeso',
-  DONE: 'finita',
-  IDLE: 'inattiva',
+  RUNNING: 'running',
+  ATTENTION: 'attention',
+  PENDING: 'pending',
+  DONE: 'done',
+  IDLE: 'idle',
 });
 
 export function ignoreKey(chatId, key) {
@@ -16,11 +16,11 @@ export function ignoreKey(chatId, key) {
 
 export function attentionLabel(a) {
   switch (a.kind) {
-    case 'domanda':
+    case 'question':
       return 'Domanda in attesa';
-    case 'approvazione':
+    case 'approval':
       return 'Approvazione richiesta';
-    case 'piano':
+    case 'plan':
       return 'Piano in attesa';
     default:
       return 'Richiesta non risolta';
@@ -46,27 +46,48 @@ export function toolActionLabel(toolName) {
   }
 }
 
-// [tool names, label, category (PWA picks icon from category)]
+// [tool names, action code (PWA translates), category (PWA picks icon from category)]
 const TOOLS = [
-  [['read_file', 'read_file_v2'], 'Legge un file', 'read'],
-  [['edit_file', 'edit_file_v2', 'search_replace', 'write', 'apply_patch', 'multi_edit'], 'Modifica un file', 'edit'],
-  [['delete_file'], 'Elimina un file', 'delete'],
-  [['run_terminal_command_v2', 'run_terminal_cmd', 'run_terminal_command'], 'Esegue un comando', 'terminal'],
-  [['grep', 'ripgrep', 'ripgrep_raw_search', 'codebase_search', 'semantic_search', 'grep_search'], 'Cerca nel codice', 'search'],
-  [['glob_file_search', 'list_dir', 'file_search', 'list_dir_v2'], 'Esplora i file', 'search'],
-  [['web_search', 'web_fetch'], 'Cerca sul web', 'web'],
-  [['ask_question'], 'Pone una domanda', 'question'],
-  [['create_plan'], 'Prepara un piano', 'plan'],
-  [['todo_write'], 'Aggiorna le attivit\u00e0', 'todo'],
-  [['task', 'task_v2'], 'Avvia un sotto-agente', 'agent'],
-  [['read_lints'], 'Controlla gli errori', 'search'],
-  [['mcp', 'call_mcp_tool', 'read_mcp_resource'], 'Usa uno strumento MCP', 'tool'],
+  [['read_file', 'read_file_v2'], 'read_file', 'read'],
+  [['edit_file', 'edit_file_v2', 'search_replace', 'write', 'apply_patch', 'multi_edit'], 'edit_file', 'edit'],
+  [['delete_file'], 'delete_file', 'delete'],
+  [['run_terminal_command_v2', 'run_terminal_cmd', 'run_terminal_command'], 'run_command', 'terminal'],
+  [['grep', 'ripgrep', 'ripgrep_raw_search', 'codebase_search', 'semantic_search', 'grep_search'], 'search_code', 'search'],
+  [['glob_file_search', 'list_dir', 'file_search', 'list_dir_v2'], 'explore_files', 'search'],
+  [['web_search', 'web_fetch'], 'search_web', 'web'],
+  [['ask_question'], 'ask_question', 'question'],
+  [['create_plan'], 'create_plan', 'plan'],
+  [['todo_write'], 'update_todos', 'todo'],
+  [['task', 'task_v2'], 'start_subagent', 'agent'],
+  [['read_lints'], 'check_errors', 'search'],
+  [['mcp', 'call_mcp_tool', 'read_mcp_resource'], 'use_mcp', 'tool'],
 ];
 
-/** Label and category for a tool action TYPE (never parameters: commands and paths do not leave the daemon). */
+/** Action code and category for a tool TYPE (never parameters: commands and paths do not leave the daemon). */
 export function toolActivity(name) {
-  for (const [names, label, category] of TOOLS) if (names.includes(name)) return { label, category };
-  return { label: 'Esegue un\u2019azione', category: 'tool' };
+  for (const [names, action, category] of TOOLS) if (names.includes(name)) return { action, category };
+  return { action: 'other_action', category: 'tool' };
+}
+
+/** Approval action TYPE for notifications (Italian text); not sent in the state payload. */
+export function toolApprovalAction(toolName) {
+  switch (toolName) {
+    case 'run_terminal_command_v2':
+    case 'run_terminal_cmd':
+    case 'run_terminal_command':
+      return 'run_command';
+    case 'edit_file':
+    case 'edit_file_v2':
+      return 'edit_file';
+    case 'mcp':
+    case 'call_mcp_tool':
+    case 'read_mcp_resource':
+      return 'mcp_tool';
+    case 'web_fetch':
+      return 'web_request';
+    default:
+      return 'generic';
+  }
 }
 
 function toolState(status) {
@@ -104,20 +125,20 @@ const firstLine = (t, n) => {
 
 /**
  * Recent activity for a chat from bubbles (db.recentActivity), newest to oldest:
- * `{ id (bubble), at, kind: 'user' | 'assistant' | 'tool', category (tools only), label, state, preview }`. Tools show action type only;
+ * `{ id (bubble), at, kind: 'user' | 'assistant' | 'tool', category (tools only), action, state, preview }`. Tools show action type only;
  * empty bubbles (no text or tool) are skipped. A tool "running" for more than 15 minutes is no longer treated as active.
  */
 export function activityOf(items, now = Date.now()) {
   const out = [];
   for (const b of items ?? []) {
     if (b.tool) {
-      const { label, category } = toolActivity(b.tool.name);
-      out.push({ id: b.id, at: b.at, kind: 'tool', category, label, state: staleRunning(toolState(b.tool.status), b.at, now), preview: '' });
+      const { action, category } = toolActivity(b.tool.name);
+      out.push({ id: b.id, at: b.at, kind: 'tool', category, action, state: staleRunning(toolState(b.tool.status), b.at, now), preview: '' });
     } else if (b.text) {
       out.push(
         b.type === 1
-          ? { id: b.id, at: b.at, kind: 'user', label: 'Messaggio inviato', state: '', preview: firstLine(b.text, 140) }
-          : { id: b.id, at: b.at, kind: 'assistant', label: 'Risposta dell\u2019agente', state: '', preview: firstLine(b.text, 140) },
+          ? { id: b.id, at: b.at, kind: 'user', action: 'message_sent', state: '', preview: firstLine(b.text, 140) }
+          : { id: b.id, at: b.at, kind: 'assistant', action: 'agent_reply', state: '', preview: firstLine(b.text, 140) },
       );
     }
   }
@@ -137,8 +158,8 @@ export function stateOf(chat, { ignored, now, pendingAfterMs }) {
   if (a && (a.live || !chat.running)) {
     const isIgnored = ignored.has(ignoreKey(chat.id, a.key));
     const isOld = pendingAfterMs > 0 && now - a.since > pendingAfterMs;
-    if (isIgnored) return { state: STATES.PENDING, reason: 'ignorata' };
-    if (isOld) return { state: STATES.PENDING, reason: 'vecchia' };
+    if (isIgnored) return { state: STATES.PENDING, reason: 'ignored' };
+    if (isOld) return { state: STATES.PENDING, reason: 'old' };
     return { state: STATES.ATTENTION, reason: null };
   }
   if (chat.running) return { state: STATES.RUNNING, reason: null };
@@ -169,8 +190,7 @@ function card(chat, label, ctx) {
           key: a.key,
           live: a.live,
           since: a.since,
-          label: attentionLabel(a),
-          detail: a.kind === 'approvazione' ? toolActionLabel(a.toolName) : '',
+          ...(a.kind === 'approval' ? { approvalAction: toolApprovalAction(a.toolName) } : {}),
           reason,
           title: a.question?.title ?? '',
           prompt: a.question?.questions?.[0]?.prompt?.slice(0, 160) ?? '',

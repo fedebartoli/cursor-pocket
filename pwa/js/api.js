@@ -1,4 +1,6 @@
 // Daemon API client. Session cookie is HttpOnly: JavaScript never sees it.
+import { t } from './i18n/index.js';
+
 export class ApiError extends Error {
   constructor(status, code, message) {
     super(message);
@@ -38,7 +40,7 @@ async function request(method, path, body) {
       body: body === undefined ? undefined : JSON.stringify(body),
     });
   } catch {
-    throw new ApiError(0, 'network', 'Daemon non raggiungibile');
+    throw new ApiError(0, 'network', t('api.daemonUnreachable'));
   }
   let data = null;
   try {
@@ -48,7 +50,7 @@ async function request(method, path, body) {
   }
   if (!res.ok) {
     if (res.status === 401 && path !== '/api/pair') for (const fn of unauthorizedHandlers) fn();
-    throw new ApiError(res.status, data?.error || 'http', data?.message || `Errore ${res.status}`);
+    throw new ApiError(res.status, data?.error || 'http', data?.message || t('api.httpError', { status: res.status }));
   }
   return data;
 }
@@ -59,7 +61,7 @@ async function upload(blob) {
   try {
     res = await fetch('/api/uploads', { signal: timeoutSignal(UPLOAD_TIMEOUT_MS), method: 'POST', credentials: 'same-origin', cache: 'no-store', headers: { 'Content-Type': blob.type || 'image/jpeg' }, body: blob });
   } catch {
-    throw new ApiError(0, 'network', 'Daemon non raggiungibile');
+    throw new ApiError(0, 'network', t('api.daemonUnreachable'));
   }
   let data = null;
   try {
@@ -69,7 +71,7 @@ async function upload(blob) {
   }
   if (!res.ok) {
     if (res.status === 401) for (const fn of unauthorizedHandlers) fn();
-    throw new ApiError(res.status, data?.error || 'http', data?.message || `Errore ${res.status}`);
+    throw new ApiError(res.status, data?.error || 'http', data?.message || t('api.httpError', { status: res.status }));
   }
   return data;
 }

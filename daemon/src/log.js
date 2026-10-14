@@ -8,7 +8,7 @@
 
 const STRING_KEYS = new Set(['reason', 'kind', 'signal', 'error', 'errcode', 'host', 'state']);
 const LEVELS = { debug: 10, info: 20, warn: 30, error: 40 };
-const OMITTED = '[omesso]';
+const OMITTED = '[omitted]';
 
 function sanitizeValue(key, v) {
   if (v == null || typeof v === 'number' || typeof v === 'boolean') return v;

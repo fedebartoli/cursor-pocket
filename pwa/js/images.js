@@ -1,5 +1,7 @@
 // Prepare images to attach to a message: resize (max long side) and re-encode as JPEG, so a
 // HEIC or 12 MP photo becomes a light file, readable by Cursor and without original photo metadata (location).
+import { t } from './i18n/index.js';
+
 export const MAX_IMAGES = 4; // same as daemon UPLOAD_LIMITS.perMessage
 const MAX_SIDE = 2048;
 const QUALITY = 0.85;
@@ -47,5 +49,5 @@ export async function prepareImage(file) {
     // fallback below
   }
   if (PASS_THROUGH.has(file.type) && file.size <= MAX_BYTES) return file;
-  throw new Error('Formato immagine non supportato.');
+  throw new Error(t('images.unsupportedFormat'));
 }

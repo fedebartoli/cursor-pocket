@@ -109,7 +109,7 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
 
     if (path === '/api/state' && method === 'GET') {
       const cur = hub.current;
-      return sendJson(res, 200, cur ?? { version: 0, state: null, status: { ok: false, error: 'avvio' } }, headers);
+      return sendJson(res, 200, cur ?? { version: 0, state: null, status: { ok: false, error: 'starting' } }, headers);
     }
     if (path === '/api/events' && method === 'GET') {
       return hub.addClient(req, res, headers);

@@ -111,7 +111,7 @@ try {
   check('home: no "Impostazioni" icon in header (it\'s in the bar)', (await page.locator('.appbar [aria-label=Impostazioni]').count()) === 0);
   const attRow = page.locator('.swipe .row').first();
   check('row: title, project and status on separate lines', (await attRow.locator('.row-title').isVisible()) && (await attRow.locator('.row-meta').isVisible()) && (await attRow.locator('.row-state svg').count()) === 1);
-  check('row: attention state in red (not just the dot)', await attRow.locator('.row-state.attenzione').isVisible());
+  check('row: attention state in red (not just the dot)', await attRow.locator('.row-state.attention').isVisible());
   // swipe: dragging the row left reveals "Ignora" without opening the chat
   const swipeBox = await page.locator('.swipe').nth(1).boundingBox();
   const sy = swipeBox.y + swipeBox.height / 2;
@@ -667,6 +667,25 @@ try {
   await stalled.waitForSelector('text=Daemon non raggiungibile', { timeout: 14000 });
   check('startup with stuck connection: after timeout shows "Daemon non raggiungibile" with "Riprova"', (await stalled.locator('button', { hasText: 'Riprova' }).count()) === 1);
   await stalled.close();
+
+  // --- language: English via the selector, then every supported language renders its tab bar without missing keys ---
+  await page.goto(`${BASE}/#/impostazioni`);
+  await page.waitForSelector('select.lang-select');
+  check('language: the phone is Italian, so "Automatic" shows the Italian interface', (await page.locator('.tabbar .tab-label').allInnerTexts()).join('|').includes('Impostazioni'));
+  await Promise.all([page.waitForEvent('load'), page.selectOption('select.lang-select', 'en')]);
+  await page.waitForSelector('.tabbar .tab-label');
+  const enTabs = (await page.locator('.tabbar .tab-label').allInnerTexts()).map((x) => x.trim());
+  check('language: choosing English reloads and translates the tab bar', enTabs.join('|') === 'Attention|Chats|Favorites|Settings', enTabs.join('|'));
+  check('language: html lang follows the choice', (await page.evaluate(() => document.documentElement.lang)) === 'en');
+  for (const code of ['es', 'fr', 'de', 'pt', 'ja', 'zh']) {
+    await page.evaluate((c) => localStorage.setItem('cp.lang', c), code);
+    await page.reload();
+    await page.waitForSelector('.tabbar .tab-label');
+    const labels = (await page.locator('.tabbar .tab-label').allInnerTexts()).map((x) => x.trim());
+    check(`language ${code}: tab bar translated (no raw keys, different from English)`, labels.length === 4 && labels.join('|') !== 'Attention|Chats|Favorites|Settings' && labels.every((l) => l && !/^[a-zA-Z]+\.[a-zA-Z]+/.test(l)), labels.join('|'));
+  }
+  await page.evaluate(() => localStorage.removeItem('cp.lang'));
+  await page.goto(`${BASE}/#/`);
 
   // --- no horizontal scroll ---
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

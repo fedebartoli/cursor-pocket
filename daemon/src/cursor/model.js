@@ -107,7 +107,7 @@ export function isPendingReview(tool) {
  * @param {object|null} [p.prevBubble] CursorDb.bubbleSummary() of the second-to-last bubble (find pending approval)
  * @param {boolean} [p.running]     chat is working now (header + composer state)
  * @param {number} p.now
- * @returns {null | {kind: 'domanda'|'approvazione'|'piano'|'residuo', key: string, live: boolean, since: number,
+ * @returns {null | {kind: 'question'|'approval'|'plan'|'leftover', key: string, live: boolean, since: number,
  *                   toolName: string|null, toolCallId: string|null, bubbleId: string|null}}
  */
 export function classifyAttention({ entry, tail, bubble, prevBubble = null, running = false, now }) {
@@ -130,7 +130,7 @@ export function classifyAttention({ entry, tail, bubble, prevBubble = null, runn
     // Verified live (FINDINGS 9.1): flag on + last bubble `ask_question` unanswered.
     // Key is toolCallId: stays the same even if Cursor rewrites the bubble (changes `createdAt`).
     return {
-      kind: 'domanda',
+      kind: 'question',
       key: tool.toolCallId || `b:${lastId}`,
       live: true,
       since: bubble.createdAt ?? baseSince,
@@ -151,7 +151,7 @@ export function classifyAttention({ entry, tail, bubble, prevBubble = null, runn
     const freshReview = typeof reviewBubble.createdAt === 'number' && now - reviewBubble.createdAt <= FRESH_QUESTION_MS;
     if (flag || running || freshReview) {
       return {
-        kind: 'approvazione',
+        kind: 'approval',
         key: rt.toolCallId || `b:${rid}`,
         live: true,
         since: reviewBubble.createdAt ?? baseSince,
@@ -168,7 +168,7 @@ export function classifyAttention({ entry, tail, bubble, prevBubble = null, runn
     // Flag on but last bubble is not an open question (e.g. already answered or superseded by other
     // messages, or chat is working): Cursor "stuck" leftover that did not recalculate the flag.
     return {
-      kind: 'residuo',
+      kind: 'leftover',
       key: tool?.toolCallId || (lastId ? `b:${lastId}` : 'chat'),
       live: false,
       since: baseSince,
@@ -179,7 +179,7 @@ export function classifyAttention({ entry, tail, bubble, prevBubble = null, runn
   }
 
   return {
-    kind: 'piano',
+    kind: 'plan',
     key: `plan:${lastId ?? 'chat'}`,
     live: false,
     since: baseSince,
@@ -194,7 +194,7 @@ export function buildChat({ entry, ws, attention, now, staleRunMs, running }) {
   const h = entry.header || {};
   return {
     id: entry.id,
-    name: clampStr(typeof h.name === 'string' && h.name.trim() ? h.name.trim() : 'Senza titolo', 200),
+    name: clampStr(typeof h.name === 'string' && h.name.trim() ? h.name.trim() : '', 200),
     subtitle: clampStr(typeof h.subtitle === 'string' ? h.subtitle.trim() : '', 300),
     mode: typeof h.unifiedMode === 'string' ? h.unifiedMode : null,
     sectionId: ws.sectionId,

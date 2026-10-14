@@ -24,7 +24,7 @@ function chat(id, over = {}) {
     ...over,
   };
 }
-const att = (over = {}) => ({ kind: 'domanda', key: 'tc-1', live: true, since: NOW - H, toolName: 'ask_question', question: { title: 'T', questions: [{ prompt: 'Scegli' }] }, ...over });
+const att = (over = {}) => ({ kind: 'question', key: 'tc-1', live: true, since: NOW - H, toolName: 'ask_question', question: { title: 'T', questions: [{ prompt: 'Scegli' }] }, ...over });
 const ctx = (over = {}) => ({ ignored: new Set(), now: NOW, pendingAfterMs: DAY, ...over });
 
 test('state: attention > running > done (unread) > idle', () => {
@@ -35,9 +35,9 @@ test('state: attention > running > done (unread) > idle', () => {
 });
 
 test('chat that is working with stale flag is "running", not "needs attention"; when run ends stale returns', () => {
-  const residuo = att({ kind: 'residuo', live: false, toolName: 'run_terminal_command_v2' });
+  const residuo = att({ kind: 'leftover', live: false, toolName: 'run_terminal_command_v2' });
   assert.deepEqual(stateOf(chat('a', { attention: residuo, running: true }), ctx()), { state: STATES.RUNNING, reason: null });
-  assert.equal(stateOf(chat('a', { attention: att({ kind: 'piano', live: false }), running: true }), ctx()).state, STATES.RUNNING);
+  assert.equal(stateOf(chat('a', { attention: att({ kind: 'plan', live: false }), running: true }), ctx()).state, STATES.RUNNING);
   // even if stale was ignored: during run show work in progress
   const ignored = new Set([ignoreKey('a', 'tc-1')]);
   assert.equal(stateOf(chat('a', { attention: residuo, running: true }), ctx({ ignored })).state, STATES.RUNNING);
@@ -60,7 +60,7 @@ test('chat that is working with stale flag is "running", not "needs attention"; 
 
 test('Ignore: chat moves to pending; NEW question (different key) brings attention back', () => {
   const ignored = new Set([ignoreKey('a', 'tc-1')]);
-  assert.deepEqual(stateOf(chat('a', { attention: att() }), ctx({ ignored })), { state: STATES.PENDING, reason: 'ignorata' });
+  assert.deepEqual(stateOf(chat('a', { attention: att() }), ctx({ ignored })), { state: STATES.PENDING, reason: 'ignored' });
   assert.deepEqual(stateOf(chat('a', { attention: att({ key: 'tc-2' }) }), ctx({ ignored })), { state: STATES.ATTENTION, reason: null });
   // ignore on another chat with same key does not apply
   assert.equal(stateOf(chat('b', { attention: att() }), ctx({ ignored })).state, STATES.ATTENTION);
@@ -68,16 +68,16 @@ test('Ignore: chat moves to pending; NEW question (different key) brings attenti
 
 test('pending threshold: requests older than threshold; 0 = never', () => {
   const old = chat('a', { attention: att({ since: NOW - DAY - 1 }) });
-  assert.deepEqual(stateOf(old, ctx()), { state: STATES.PENDING, reason: 'vecchia' });
+  assert.deepEqual(stateOf(old, ctx()), { state: STATES.PENDING, reason: 'old' });
   assert.equal(stateOf(old, ctx({ pendingAfterMs: 0 })).state, STATES.ATTENTION);
   assert.equal(stateOf(chat('a', { attention: att({ since: NOW - DAY + 1000 }) }), ctx()).state, STATES.ATTENTION);
 });
 
 test('attention labels', () => {
-  assert.equal(attentionLabel({ kind: 'domanda' }), 'Domanda in attesa');
-  assert.equal(attentionLabel({ kind: 'approvazione' }), 'Approvazione richiesta');
-  assert.equal(attentionLabel({ kind: 'piano' }), 'Piano in attesa');
-  assert.equal(attentionLabel({ kind: 'residuo' }), 'Richiesta non risolta');
+  assert.equal(attentionLabel({ kind: 'question' }), 'Domanda in attesa');
+  assert.equal(attentionLabel({ kind: 'approval' }), 'Approvazione richiesta');
+  assert.equal(attentionLabel({ kind: 'plan' }), 'Piano in attesa');
+  assert.equal(attentionLabel({ kind: 'leftover' }), 'Richiesta non risolta');
   assert.equal(attentionLabel({ kind: 'sconosciuto' }), 'Richiesta non risolta');
 });
 
@@ -89,12 +89,12 @@ test('approval: only action TYPE is public, never the command; counts as attenti
   assert.equal(toolActionLabel('web_fetch'), 'Richiesta web');
   assert.equal(toolActionLabel(undefined), 'Azione da approvare');
 
-  const a = att({ kind: 'approvazione', key: 'tc-ap', toolName: 'run_terminal_command_v2', question: undefined, since: NOW - 60_000 });
+  const a = att({ kind: 'approval', key: 'tc-ap', toolName: 'run_terminal_command_v2', question: undefined, since: NOW - 60_000 });
   const out = presentState({ chats: [chat('a1', { running: true, attention: a })], settings: null, ignored: new Set(), now: NOW, pendingAfterMs: DAY });
   assert.equal(out.counts.attention, 1);
   assert.equal(out.attention[0].state, STATES.ATTENTION, 'waiting on you, not "running"');
   const card = out.attention[0].attention;
-  assert.deepEqual({ kind: card.kind, label: card.label, detail: card.detail, live: card.live }, { kind: 'approvazione', label: 'Approvazione richiesta', detail: 'Comando da eseguire', live: true });
+  assert.deepEqual({ kind: card.kind, approvalAction: card.approvalAction, live: card.live }, { kind: 'approval', approvalAction: 'run_command', live: true });
   assert.equal(card.prompt, '');
   assert.equal(JSON.stringify(out).includes('toolName'), false, 'tool name not exposed to PWA');
 
@@ -102,9 +102,9 @@ test('approval: only action TYPE is public, never the command; counts as attenti
   const ignored = new Set([ignoreKey('a1', 'tc-ap')]);
   assert.equal(stateOf(chat('a1', { attention: a }), ctx({ ignored })).state, STATES.PENDING);
   assert.equal(stateOf(chat('a1', { attention: { ...a, key: 'tc-ap2' } }), ctx({ ignored })).state, STATES.ATTENTION);
-  // other request kinds have no detail
+  // other request kinds have no approvalAction
   const q = presentState({ chats: [chat('q1', { attention: att() })], settings: null, ignored: new Set(), now: NOW, pendingAfterMs: DAY });
-  assert.equal(q.attention[0].attention.detail, '');
+  assert.equal(q.attention[0].attention.approvalAction, undefined);
 });
 
 test('presentState: groups in Cursor order, chats by last update, counts and feeds', () => {
@@ -112,7 +112,7 @@ test('presentState: groups in Cursor order, chats by last update, counts and fee
     chat('a1', { sectionId: 's1', workspaceName: 'uno', lastUpdatedAt: NOW - 3 * H }),
     chat('a2', { sectionId: 's1', workspaceName: 'uno', lastUpdatedAt: NOW - H, attention: att({ since: NOW - 2 * H }) }),
     chat('b1', { sectionId: 's2', workspaceName: 'due', lastUpdatedAt: NOW - 10 * H, running: true }),
-    chat('c1', { sectionId: 's3', workspaceName: 'tre', lastUpdatedAt: NOW - 5 * H, attention: att({ key: 'k', kind: 'residuo', live: false, since: NOW - 2 * DAY }) }),
+    chat('c1', { sectionId: 's3', workspaceName: 'tre', lastUpdatedAt: NOW - 5 * H, attention: att({ key: 'k', kind: 'leftover', live: false, since: NOW - 2 * DAY }) }),
   ];
   const settings = { sortGroupsBy: 'manual', sectionOrderByGroupBy: { workspace: ['s2', 's1', 's3'] }, collapsedSectionIdsByGroupBy: { workspace: ['s3'] } };
   const out = presentState({ chats, settings, ignored: new Set(), now: NOW, pendingAfterMs: DAY });
@@ -122,9 +122,9 @@ test('presentState: groups in Cursor order, chats by last update, counts and fee
   assert.deepEqual(out.workspaces.find((w) => w.id === 's1').chats.map((c) => c.id), ['a2', 'a1'], 'by last update');
   assert.equal(out.workspaces.find((w) => w.id === 's3').collapsed, true);
   assert.deepEqual(out.attention.map((c) => c.id), ['a2']);
-  assert.deepEqual(out.pending.map((c) => [c.id, c.attention.reason]), [['c1', 'vecchia']]);
+  assert.deepEqual(out.pending.map((c) => [c.id, c.attention.reason]), [['c1', 'old']]);
   assert.equal(out.attention[0].attention.prompt, 'Scegli');
-  assert.equal(out.attention[0].attention.label, 'Domanda in attesa');
+  assert.equal(out.attention[0].attention.kind, 'question');
 });
 
 test('presentState: duplicate workspace names distinguished with parent folder', () => {

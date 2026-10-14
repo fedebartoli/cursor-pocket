@@ -57,7 +57,7 @@ test('on startup no notifications for existing state (leftovers, chat in progres
   s.tick();
   s.tick();
   assert.deepEqual(s.events, []);
-  assert.equal(s.chatOf('residuo-0001').attention.kind, 'residuo');
+  assert.equal(s.chatOf('residuo-0001').attention.kind, 'leftover');
   assert.equal(s.chatOf('inizio-0002').running, true);
   s.cleanup();
 });
@@ -73,7 +73,7 @@ test('live question at startup: recent -> notification; old -> no notification b
   s.watcher.tick();
   assert.deepEqual(s.events.map((e) => [e.type, e.chat.id, e.dedupeKey]), [['attention', 'recente-0001', 'a:recente-0001:tc-new']]);
   assert.equal(s.store.hasNotified('a:vecchia-0002:tc-old'), true, 'marked silently: will never fire late');
-  assert.equal(s.chatOf('vecchia-0002').attention.kind, 'domanda', 'but remains visible in app');
+  assert.equal(s.chatOf('vecchia-0002').attention.kind, 'question', 'but remains visible in app');
   s.cleanup();
 });
 
@@ -91,7 +91,7 @@ test('new question after startup: one event; a later question generates another'
   assert.equal(s.events.length, 1);
   const ev = s.events[0];
   assert.equal(ev.type, 'attention');
-  assert.equal(ev.attention.kind, 'domanda');
+  assert.equal(ev.attention.kind, 'question');
   assert.equal(ev.attention.prompt, QUESTION_PARAMS.questions[0].prompt);
   assert.equal(ev.attention.title, QUESTION_PARAMS.title);
   assert.equal(s.chatOf('chat-00000001').attention.question.questions[0].options.length, 2);
@@ -99,7 +99,7 @@ test('new question after startup: one event; a later question generates another'
   // turn ends: same question, now completed/pending (real lifecycle) -> still a question, no new event
   askingConversation(s.fx, 'chat-00000001', { toolCallId: 'tc-1', at: T0 + 400, status: 'completed', additionalData: { status: 'pending' } });
   s.tick();
-  assert.equal(s.chatOf('chat-00000001').attention.kind, 'domanda');
+  assert.equal(s.chatOf('chat-00000001').attention.kind, 'question');
   assert.equal(s.chatOf('chat-00000001').attention.live, true);
   assert.equal(s.events.length, 1);
 
@@ -128,7 +128,7 @@ test('a leftover (flag without live request) never generates notifications but a
   s.tick();
   s.tick();
   assert.deepEqual(s.events, []);
-  assert.equal(s.chatOf('chat-00000001').attention.kind, 'residuo');
+  assert.equal(s.chatOf('chat-00000001').attention.kind, 'leftover');
   s.cleanup();
 });
 
@@ -215,7 +215,7 @@ test('real question lifecycle: loading, then completed/pending when run ends, th
   s.tick(6000);
   s.tick(30_000);
   assert.deepEqual(s.events.map((e) => e.type), ['attention'], 'neither "done" nor a second notification for same question');
-  assert.equal(s.chatOf(id).attention.kind, 'domanda');
+  assert.equal(s.chatOf(id).attention.kind, 'question');
   assert.equal(s.chatOf(id).attention.live, true);
 
   // header catches up (marker removed): nothing new
@@ -330,7 +330,7 @@ test('late header (FINDINGS 9.7): freshly posted question notifies immediately w
   // answer given: bubble becomes submitted while flag stays on until next header write
   askingConversation(s.fx, id, { toolCallId: 'tc-fresh', at: T0 + 500, status: 'completed', additionalData: { status: 'submitted' }, composerStatus: 'completed' });
   s.tick(5000);
-  assert.equal(s.chatOf(id).attention.kind, 'residuo');
+  assert.equal(s.chatOf(id).attention.kind, 'leftover');
   assert.equal(s.events.length, 1);
   s.cleanup();
 });
@@ -369,7 +369,7 @@ test('flag on from old question while chat is working: running commands are not 
     s.tick(5000);
     assert.deepEqual(s.events, [], `command ${i} running: no notification`);
     const a = s.chatOf(id).attention;
-    assert.deepEqual({ kind: a.kind, live: a.live }, { kind: 'residuo', live: false }, `command ${i}: stays leftover`);
+    assert.deepEqual({ kind: a.kind, live: a.live }, { kind: 'leftover', live: false }, `command ${i}: stays leftover`);
     bubbles[bubbles.length - 1] = { ...bubbles[bubbles.length - 1], tool: tool('completed', 'success') };
   }
 
@@ -393,7 +393,7 @@ test('pending approval (FINDINGS 11): notifies only after approvalDelayMs, once,
   approvingConversation(s.fx, id, { toolCallId: 'tc-ap', at: T0 + 500, composerStatus: 'aborted' });
   s.tick(1000);
   const a = s.chatOf(id).attention;
-  assert.deepEqual({ kind: a.kind, live: a.live, key: a.key, toolName: a.toolName }, { kind: 'approvazione', live: true, key: 'tc-ap', toolName: 'run_terminal_command_v2' });
+  assert.deepEqual({ kind: a.kind, live: a.live, key: a.key, toolName: a.toolName }, { kind: 'approval', live: true, key: 'tc-ap', toolName: 'run_terminal_command_v2' });
   assert.deepEqual(s.events, [], 'just appeared: wait, you may approve on Mac immediately');
   s.tick(5000);
   s.tick(2000);
@@ -401,7 +401,7 @@ test('pending approval (FINDINGS 11): notifies only after approvalDelayMs, once,
   s.tick(1000); // 8 s continuous wait
   assert.equal(s.events.length, 1);
   const e = s.events[0];
-  assert.deepEqual([e.type, e.dedupeKey, e.attention.kind, e.attention.toolName], ['attention', `a:${id}:tc-ap`, 'approvazione', 'run_terminal_command_v2']);
+  assert.deepEqual([e.type, e.dedupeKey, e.attention.kind, e.attention.toolName], ['attention', `a:${id}:tc-ap`, 'approval', 'run_terminal_command_v2']);
   assert.doesNotMatch(JSON.stringify(e), /echo prova/, 'command never leaves daemon');
 
   s.tick(60_000);
@@ -478,7 +478,7 @@ test('approval already present at startup: recent = notify immediately; old = ap
   s.watcher.tick();
   assert.deepEqual(s.events.map((e) => [e.type, e.chat.id, e.dedupeKey]), [['attention', 'recente-0001', 'a:recente-0001:tc-new']], 'without waiting for delay from scratch');
   assert.equal(s.store.hasNotified('a:vecchia-0002:tc-old'), true, 'marked silently');
-  assert.equal(s.chatOf('vecchia-0002').attention.kind, 'approvazione', 'but remains visible in app');
+  assert.equal(s.chatOf('vecchia-0002').attention.kind, 'approval', 'but remains visible in app');
   s.tick(30_000);
   s.tick(30_000);
   assert.equal(s.events.length, 1);
@@ -686,7 +686,7 @@ test('on-demand detail: last assistant message and question text (open or alread
     ]);
   conversation('pending');
   s.watcher.tick();
-  assert.equal(s.chatOf('chat-00000001').attention.kind, 'domanda');
+  assert.equal(s.chatOf('chat-00000001').attention.kind, 'question');
   const d = s.watcher.detail('chat-00000001');
   assert.equal(d.lastMessage.text, 'Ultima risposta');
   assert.equal(d.question.title, QUESTION_PARAMS.title);
@@ -695,7 +695,7 @@ test('on-demand detail: last assistant message and question text (open or alread
   // question already answered but flag still on (leftover): text still readable
   conversation('submitted');
   s.tick();
-  assert.equal(s.chatOf('chat-00000001').attention.kind, 'residuo');
+  assert.equal(s.chatOf('chat-00000001').attention.kind, 'leftover');
   assert.equal(s.watcher.detail('chat-00000001').question.title, QUESTION_PARAMS.title);
   s.cleanup();
 });
@@ -713,13 +713,13 @@ test('on-demand detail: "recent activity" newest-first, tool action type only (n
   s.tick();
   const a = s.watcher.detail('chat-00000001').activity;
   assert.deepEqual(
-    a.map((x) => [x.kind, x.label, x.state]),
+    a.map((x) => [x.kind, x.action, x.state]),
     [
-      ['tool', 'Esegue un\u2019azione', 'running'],
-      ['tool', 'Esegue un comando', 'done'],
-      ['assistant', 'Risposta dell\u2019agente', ''],
-      ['tool', 'Legge un file', 'done'],
-      ['user', 'Messaggio inviato', ''],
+      ['tool', 'other_action', 'running'],
+      ['tool', 'run_command', 'done'],
+      ['assistant', 'agent_reply', ''],
+      ['tool', 'read_file', 'done'],
+      ['user', 'message_sent', ''],
     ],
   );
   assert.equal(a[4].preview, 'Fai il refactoring');
@@ -737,7 +737,7 @@ test('newly created question: params still empty but text read from toolCallBina
   const bubbles = (t) => [{ id: 'b1', type: 2, createdAt: T0 - 500, tool: t }];
   s.fx.conversation(id, bubbles(tool({ binary: encodeQuestion(q) })));
   s.tick();
-  assert.equal(s.chatOf(id).attention.kind, 'domanda');
+  assert.equal(s.chatOf(id).attention.kind, 'question');
   assert.equal(s.watcher.detail(id).question.questions[0].prompt, 'Quale?');
   assert.deepEqual(s.watcher.detail(id).question.questions[0].options.map((o) => o.id), ['a', 'b']);
   // then Cursor writes params: same question
@@ -747,7 +747,7 @@ test('newly created question: params still empty but text read from toolCallBina
   // empty binary and empty params (args not written yet): live attention but no text
   s.fx.conversation(id, bubbles(tool({})));
   s.tick(2000);
-  assert.equal(s.chatOf(id).attention.kind, 'domanda');
+  assert.equal(s.chatOf(id).attention.kind, 'question');
   assert.equal(s.watcher.detail(id).question, null);
   s.cleanup();
 });

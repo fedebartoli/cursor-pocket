@@ -623,7 +623,7 @@ test('HTTP approval: detail shows command to decide; approve clicks Run on corre
     assert.equal(d.approval.supported, true);
     assert.equal(d.approval.key, 'tc-ap');
     assert.equal(d.approval.command, 'echo prova');
-    assert.equal(d.approval.type, 'Esegue un comando');
+    assert.equal(d.approval.action, 'run_command');
     // Cursor records decision: reviewData becomes Done
     ui.onApproval = () => approvingConversation(h.fx, ID, { toolCallId: 'tc-ap', at: T0 - 2000, reviewStatus: 'Done', toolStatus: 'completed', composerStatus: 'aborted' });
     const r = await post('approval', { key: 'tc-ap', decision: 'approve' });

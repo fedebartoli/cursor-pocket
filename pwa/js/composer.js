@@ -4,6 +4,7 @@
 // `update()` only changes availability and notices. Drafts stay in memory per chat: never on disk.
 import { createAttachments } from './attachments.js';
 import { h } from './dom.js';
+import { t } from './i18n/index.js';
 import { icon } from './icons.js';
 
 export const MESSAGE_MAX = 8000; // same as daemon LIMITS.messageChars
@@ -34,12 +35,12 @@ export function createComposer({ chatId, onSend, onStop }) {
     class: 'composer-input',
     rows: 1,
     maxlength: MESSAGE_MAX,
-    placeholder: 'Scrivi a Cursor',
-    'aria-label': 'Messaggio per Cursor',
+    placeholder: t('composer.placeholderReady'),
+    'aria-label': t('composer.messageLabel'),
     autocapitalize: 'sentences',
     enterkeyhint: 'enter',
   });
-  const sendBtn = h('button', { class: 'send', type: 'submit', 'aria-label': 'Invia messaggio' }, icon('arrowUp', { size: 22 }));
+  const sendBtn = h('button', { class: 'send', type: 'submit', 'aria-label': t('composer.sendMessage') }, icon('arrowUp', { size: 22 }));
   const sendIcon = sendBtn.firstChild;
   const stopIcon = icon('stop', { size: 18 });
   const files = createAttachments({ onChange: () => sync(), onError: (t) => showStatus(t, true), onNote: (t) => showStatus(t) });
@@ -68,7 +69,7 @@ export function createComposer({ chatId, onSend, onStop }) {
     if (!stop) disarm();
     sendBtn.classList.toggle('stop', Boolean(stop));
     sendBtn.classList.toggle('armed', Boolean(stop && armed));
-    sendBtn.setAttribute('aria-label', stop ? (armed ? 'Tocca ancora per fermare l\u2019agente' : 'Ferma l\u2019agente') : 'Invia messaggio');
+    sendBtn.setAttribute('aria-label', stop ? (armed ? t('composer.tapAgainToStop') : t('composer.stopAgent')) : t('composer.sendMessage'));
     sendBtn.replaceChildren(stop ? stopIcon : sendIcon);
     sendBtn.disabled = stop ? busy : locked || files.uploading() || (area.value.trim().length === 0 && files.readyIds().length === 0);
   }
@@ -97,7 +98,7 @@ export function createComposer({ chatId, onSend, onStop }) {
   async function doStop() {
     if (!armed) {
       armed = true;
-      showStatus('Tocca ancora per fermare l\u2019agente.');
+      showStatus(t('composer.tapAgainToStopHint'));
       clearTimeout(armTimer);
       armTimer = setTimeout(() => {
         armed = false;
@@ -114,7 +115,7 @@ export function createComposer({ chatId, onSend, onStop }) {
     try {
       showStatus(await onStop());
     } catch (err) {
-      showStatus(err?.message || 'Non sono riuscito a fermare l\u2019agente.', true);
+      showStatus(err?.message || t('composer.stopFailed'), true);
     }
     busy = false;
     sync();
@@ -138,7 +139,7 @@ export function createComposer({ chatId, onSend, onStop }) {
       area.blur(); // dismiss keyboard: chat state should be visible
       showStatus(msg);
     } catch (err) {
-      showStatus(err?.message || 'Invio non riuscito.', true);
+      showStatus(err?.message || t('composer.sendFailed'), true);
     }
     busy = false;
     sync();
@@ -174,7 +175,7 @@ export function createComposer({ chatId, onSend, onStop }) {
         hintEl.append(note);
         if (hintLink) hintEl.append(' ', h('a', { class: 'link', href: hintLink.href }, hintLink.label));
       }
-      area.placeholder = next === 'ready' ? 'Scrivi a Cursor' : next === 'blocked' ? 'Rispondi prima alla domanda' : 'Scrittura non disponibile';
+      area.placeholder = next === 'ready' ? t('composer.placeholderReady') : next === 'blocked' ? t('composer.placeholderBlocked') : t('composer.placeholderUnavailable');
       sync();
     },
     destroy() {

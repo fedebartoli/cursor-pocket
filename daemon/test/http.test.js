@@ -81,7 +81,7 @@ test('state and Ignore: ignored request moves to pending; stale key = 409; resto
     const s1 = (await h.req({ path: '/api/state', cookie })).json();
     assert.deepEqual(s1.state.counts, { attention: 1, pending: 0, running: 0, total: 1 });
     const card = s1.state.attention[0];
-    assert.equal(card.attention.kind, 'domanda');
+    assert.equal(card.attention.kind, 'question');
     assert.equal(card.attention.prompt, QUESTION_PARAMS.questions[0].prompt);
 
     assert.equal((await h.req({ method: 'POST', path: `/api/chats/${ID}/ignore`, cookie, body: { key: 'altra-chiave' } })).status, 409);
@@ -90,7 +90,7 @@ test('state and Ignore: ignored request moves to pending; stale key = 409; resto
 
     const s2 = (await h.req({ path: '/api/state', cookie })).json();
     assert.deepEqual(s2.state.counts, { attention: 0, pending: 1, running: 0, total: 1 });
-    assert.equal(s2.state.pending[0].attention.reason, 'ignorata');
+    assert.equal(s2.state.pending[0].attention.reason, 'ignored');
     assert.ok(s2.version > s1.version);
 
     // same chat asks a NEW question: dot reappears
@@ -230,20 +230,20 @@ test('push: pending approval = notification with action TYPE, never the command;
     assert.equal(h.sent.length, 1);
     const payload = JSON.parse(h.sent[0].payload);
     assert.equal(payload.title, 'Approvazione richiesta');
-    assert.equal(payload.kind, 'approvazione');
+    assert.equal(payload.kind, 'approval');
     assert.match(payload.body, /Migrazione/);
     assert.match(payload.body, /Comando da eseguire/);
     assert.equal(payload.url, `/#/chat/${ID}`);
     assert.equal(h.sent[0].payload.includes('echo prova'), false, 'command never leaves the daemon');
     assert.equal(payload.badge, 1);
     // timings in log (numbers only): from request start to notification, including 5 s delay
-    const sentLog = h.logLines.map((l) => JSON.parse(l)).find((l) => l.event === 'push_sent' && l.kind === 'approvazione');
+    const sentLog = h.logLines.map((l) => JSON.parse(l)).find((l) => l.event === 'push_sent' && l.kind === 'approval');
     assert.ok(sentLog, 'push_sent with notification kind');
     assert.ok(Number.isFinite(sentLog.detectMs) && sentLog.detectMs >= 5000, `detectMs=${sentLog.detectMs}`);
     assert.ok(Number.isFinite(sentLog.sendMs));
     const st = (await h.req({ path: '/api/state', cookie })).json();
-    assert.equal(st.state.attention[0].attention.kind, 'approvazione');
-    assert.equal(st.state.attention[0].attention.detail, 'Comando da eseguire');
+    assert.equal(st.state.attention[0].attention.kind, 'approval');
+    assert.equal(st.state.attention[0].attention.approvalAction, 'run_command');
   } finally {
     await h.stop();
   }
@@ -547,7 +547,7 @@ test('conversation: pages from bottom, tools as rows without params, truncated t
     assert.ok(p1.items.every((i, k, a) => k === 0 || a[k - 1].index < i.index), 'chronological order');
     assert.ok(!p1.items.some((i) => i.role !== 'tool' && !i.text), 'empty bubbles skipped');
     const tool = p1.items.find((i) => i.role === 'tool');
-    assert.equal(tool.label, 'Esegue un comando');
+    assert.equal(tool.action, 'run_command');
     assert.ok(!JSON.stringify(p1).includes('SEGRETO'), 'no command in payload');
     const last = p1.items.find((i) => i.index === 67);
     assert.equal(last.text.length, 6000);

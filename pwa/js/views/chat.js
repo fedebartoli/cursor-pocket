@@ -7,7 +7,8 @@
 import { describeActionError, describeAnswerResult, describeMessageResult, shouldRefreshAfter } from '../action-errors.js';
 import { activityPanel } from '../activity.js';
 import { api } from '../api.js';
-import { STATE, STATE_PILL, appbar, banner, emptyState, iconButton, skeleton } from '../components.js';
+import { t } from '../i18n/index.js';
+import { STATE, STATE_PILL, appbar, attentionKindLabel, banner, emptyState, iconButton, skeleton } from '../components.js';
 import { createComposer } from '../composer.js';
 import { commit, forgetCommit, h, replace } from '../dom.js';
 import { timeAgo } from '../format.js';
@@ -41,29 +42,34 @@ function findCard(payload, id) {
 
 const signatureOf = (c) => (c ? `${c.state}|${c.attention?.key ?? ''}|${c.lastUpdatedAt}|${c.running}` : 'none');
 
+function staleAttentionLabel(kind, ignored) {
+  const status = ignored ? t('chat.statusIgnored') : t('chat.statusStale');
+  return t('chat.attentionHeading', { label: attentionKindLabel(kind), status });
+}
+
 function explanation(a) {
   switch (a.kind) {
-    case 'approvazione':
-      return 'Da qui si decidono solo i comandi di terminale: approva o rifiuta sul Mac.';
-    case 'piano':
-      return 'Piano in attesa: aprilo in Cursor sul Mac.';
-    case 'residuo':
-      return 'Possibile residuo: non risulta una richiesta aperta.';
+    case 'approval':
+      return t('chat.explanationApprovazione');
+    case 'plan':
+      return t('chat.explanationPiano');
+    case 'leftover':
+      return t('chat.explanationResiduo');
     default:
-      return 'Apri Cursor sul Mac per rispondere.';
+      return t('chat.explanationDefault');
   }
 }
 
 /** Why actions are unavailable (state published by the daemon) and what to do. */
 function unavailableReason(actions, offline) {
-  if (offline) return { text: 'Daemon non raggiungibile.' };
+  if (offline) return { text: t('chat.daemonOffline') };
   switch (actions) {
     case 'disabled':
-      return { text: 'Le azioni dal telefono sono disattivate nella configurazione del daemon.' };
+      return { text: t('chat.phoneActionsDisabled') };
     case 'no_window':
-      return { text: 'La finestra Agents di Cursor non \u00e8 aperta sul Mac.' };
+      return { text: t('chat.agentsWindowClosed') };
     default:
-      return { text: 'Per rispondere e scrivere da qui serve la porta di debug di Cursor.', link: { href: '#/impostazioni', label: 'Come attivarla' } };
+      return { text: t('chat.debugPortRequired'), link: { href: '#/impostazioni', label: t('chat.howToEnable') } };
   }
 }
 
@@ -71,7 +77,7 @@ function unavailableReason(actions, offline) {
 // Cursor always adds a final "Altro" free-text option; show it here too.
 function optionRows(options) {
   const row = (n, text, cls) => h(`li.option${cls}`, null, h('span.num', { 'aria-hidden': 'true' }, String(n)), h('span', null, text));
-  return [...options.map((o, i) => row(i + 1, o.label, '')), row(options.length + 1, 'Altro: risposta libera', '.other')];
+  return [...options.map((o, i) => row(i + 1, o.label, '')), row(options.length + 1, t('chat.optionOther'), '.other')];
 }
 
 function questionBlocks(q) {
@@ -84,7 +90,7 @@ function questionBlocks(q) {
         { class: 'question' },
         h('p.question-prompt', null, item.prompt),
         item.options?.length
-          ? h('ul.options', { 'aria-label': item.allowMultiple ? 'Opzioni, scelta multipla, sola lettura' : 'Opzioni, sola lettura' }, optionRows(item.options))
+          ? h('ul.options', { 'aria-label': item.allowMultiple ? t('chat.optionsAriaMultiple') : t('chat.optionsAriaReadonly') }, optionRows(item.options))
           : null,
       ),
     );
@@ -196,7 +202,7 @@ export function mountChat(root, id) {
     try {
       await api[method](`/api/chats/${enc}/ignore`, { key: card.attention.key });
     } catch (err) {
-      notice = err.code === 'stale' ? 'La richiesta \u00e8 cambiata nel frattempo: la vista \u00e8 stata aggiornata.' : `${failure}: ${err.message}`;
+      notice = err.code === 'stale' ? t('chat.requestChanged') : `${failure}: ${err.message}`;
     }
     await refresh().catch(() => {});
     busy = false;
@@ -261,7 +267,12 @@ export function mountChat(root, id) {
       sentAt = Date.now();
       markActed(sentAt);
       formNotice = {
-        text: res?.verified === false ? 'Decisione inviata. Non riesco ancora a confermare che Cursor l\u2019abbia registrata.' : decision === 'approve' ? 'Comando approvato.' : 'Comando rifiutato.',
+        text:
+          res?.verified === false
+            ? t('chat.approvalSentUnverified')
+            : decision === 'approve'
+              ? t('chat.approvalApproved')
+              : t('chat.approvalRejected'),
         error: false,
       };
       refreshSoon();
@@ -275,7 +286,7 @@ export function mountChat(root, id) {
   }
 
   const submitAnswer = (answers) => questionAction('answer', { answers }, describeAnswerResult);
-  const skipQuestion = () => questionAction('skip', {}, () => 'Domanda saltata.');
+  const skipQuestion = () => questionAction('skip', {}, () => t('chat.questionSkipped'));
 
   async function stopAgent() {
     try {
@@ -283,7 +294,7 @@ export function mountChat(root, id) {
       markActed(Date.now());
       refreshSoon();
       load();
-      return res?.verified === false ? 'Richiesta inviata. Non riesco ancora a confermare che Cursor si sia fermato.' : 'Agente fermato.';
+      return res?.verified === false ? t('chat.stopSentUnverified') : t('chat.stopAgentStopped');
     } catch (err) {
       if (shouldRefreshAfter(err)) refresh().catch(() => {});
       throw new Error(describeActionError(err));
@@ -297,7 +308,7 @@ export function mountChat(root, id) {
     try {
       const res = await api.post(`/api/chats/${enc}/rename`, { name });
       renaming = false;
-      manageNote = { text: res?.verified === false ? 'Richiesta inviata. Non riesco ancora a confermare che Cursor abbia cambiato il nome.' : 'Nome cambiato.', error: false };
+      manageNote = { text: res?.verified === false ? t('chat.renameSentUnverified') : t('chat.renameSuccess'), error: false };
       await refresh().catch(() => {});
     } catch (err) {
       manageNote = { text: describeActionError(err), error: true };
@@ -330,7 +341,7 @@ export function mountChat(root, id) {
     try {
       const res = await api.post(`/api/chats/${enc}/pin`, { pinned: next });
       pinned = res?.pinned === next ? next : pinned;
-      manageNote = { text: pinned ? 'Chat fissata in cima alla sidebar di Cursor.' : 'Chat tolta dai fissati.', error: false };
+      manageNote = { text: pinned ? t('chat.pinnedNotice') : t('chat.unpinnedNotice'), error: false };
     } catch (err) {
       manageNote = { text: describeActionError(err), error: true };
       if (shouldRefreshAfter(err)) refresh().catch(() => {});
@@ -384,7 +395,7 @@ export function mountChat(root, id) {
     const nodes = [];
     if (manageNote) nodes.push(h('p', { class: `hint${manageNote.error ? ' error-text' : ''}`, role: 'status' }, manageNote.text));
     if (renaming) {
-      const input = h('input', { type: 'text', id: 'rename-input', maxlength: '100', value: card.name || '', 'aria-label': 'Nuovo nome della chat', autocomplete: 'off', autocapitalize: 'sentences', enterkeyhint: 'done' });
+      const input = h('input', { type: 'text', id: 'rename-input', maxlength: '100', value: card.name || '', 'aria-label': t('chat.renameInputAria'), autocomplete: 'off', autocapitalize: 'sentences', enterkeyhint: 'done' });
       const save = () => {
         const v = input.value.trim();
         if (!v) return;
@@ -398,8 +409,8 @@ export function mountChat(root, id) {
           'div',
           { class: 'rename-form' },
           input,
-          h('button', { class: 'btn small primary', type: 'button', disabled: manageBusy, onClick: save }, icon('check', { size: 18 }), 'Salva'),
-          h('button', { class: 'btn small', type: 'button', disabled: manageBusy, onClick: () => { renaming = false; renderManage(true); } }, 'Annulla'),
+          h('button', { class: 'btn small primary', type: 'button', disabled: manageBusy, onClick: save }, icon('check', { size: 18 }), t('chat.save')),
+          h('button', { class: 'btn small', type: 'button', disabled: manageBusy, onClick: () => { renaming = false; renderManage(true); } }, t('chat.cancel')),
         ),
       );
     } else {
@@ -407,13 +418,13 @@ export function mountChat(root, id) {
         h(
           'div',
           { class: 'panel-actions' },
-          h('button', { class: 'btn', type: 'button', disabled: manageBusy, onClick: () => { renaming = true; manageNote = null; renderManage(true); setTimeout(() => { const i = document.getElementById('rename-input'); i?.focus(); i?.select(); }, 0); } }, icon('pencil', { size: 18 }), 'Rinomina'),
-          pinned === null ? null : h('button', { class: 'btn', type: 'button', disabled: manageBusy, onClick: togglePin }, icon(pinned ? 'pinOff' : 'pin', { size: 18 }), pinned ? 'Togli' : 'Fissa'),
-          h('button', { class: `btn${archiveArmed ? ' armed' : ''}`, type: 'button', disabled: manageBusy || running, onClick: archiveTap }, icon('archive', { size: 18 }), archiveArmed ? 'Conferma' : 'Archivia'),
+          h('button', { class: 'btn', type: 'button', disabled: manageBusy, onClick: () => { renaming = true; manageNote = null; renderManage(true); setTimeout(() => { const i = document.getElementById('rename-input'); i?.focus(); i?.select(); }, 0); } }, icon('pencil', { size: 18 }), t('chat.rename')),
+          pinned === null ? null : h('button', { class: 'btn', type: 'button', disabled: manageBusy, onClick: togglePin }, icon(pinned ? 'pinOff' : 'pin', { size: 18 }), pinned ? t('chat.unpin') : t('chat.pin')),
+          h('button', { class: `btn${archiveArmed ? ' armed' : ''}`, type: 'button', disabled: manageBusy || running, onClick: archiveTap }, icon('archive', { size: 18 }), archiveArmed ? t('chat.confirm') : t('chat.archive')),
         ),
       );
-      if (running) nodes.push(h('p.hint', null, 'Per archiviare, ferma prima l\u2019agente.'));
-      else if (archiveArmed) nodes.push(h('p.hint', null, 'Tocca ancora per archiviare. Si ripristina da Impostazioni.'));
+      if (running) nodes.push(h('p.hint', null, t('chat.archiveStopFirst')));
+      else if (archiveArmed) nodes.push(h('p.hint', null, t('chat.archiveConfirmHint')));
     }
     const changed = commit(manageHost, h('section', { class: 'panel manage' }, nodes));
     if (force && changed && renaming) document.getElementById('rename-input')?.focus();
@@ -437,14 +448,14 @@ export function mountChat(root, id) {
   function attentionPanel(card, actionsStatus, offline, preparingNow) {
     const a = card.attention;
     const live = card.state === STATE.ATTENTION;
-    const ignored = card.state === STATE.PENDING && a.reason === 'ignorata';
-    const heading = live ? a.label : `${a.label} (${ignored ? 'ignorata' : 'non risolta da tempo'})`;
-    const kindIcon = { domanda: 'question', approvazione: 'approval', piano: 'plan' }[a.kind] ?? 'alert';
+    const ignored = card.state === STATE.PENDING && a.reason === 'ignored';
+    const heading = live ? attentionKindLabel(a.kind) : staleAttentionLabel(a.kind, ignored);
+    const kindIcon = { question: 'question', approval: 'approval', plan: 'plan' }[a.kind] ?? 'alert';
     const q = detail?.chat?.attention?.key === a.key ? detail.question : null;
 
     const actionsOk = actionsStatus === 'ok' && !offline;
     const ap = detail?.approval?.key === a.key ? detail.approval : null;
-    const children = [h('div', { class: `panel-title${live ? ' danger' : ''}` }, preparingNow ? icon('spinner', { size: 20, className: 'spin' }) : icon(kindIcon, { size: 20 }), h('span.grow', null, preparingNow ? 'L\u2019agente sta preparando la domanda' : heading), h('span.hint', null, timeAgo(a.since)))];
+    const children = [h('div', { class: `panel-title${live ? ' danger' : ''}` }, preparingNow ? icon('spinner', { size: 20, className: 'spin' }) : icon(kindIcon, { size: 20 }), h('span.grow', null, preparingNow ? t('chat.preparingQuestion') : heading), h('span.hint', null, timeAgo(a.since)))];
     if (preparingNow) {
       // title already says enough: no extra copy
     } else if (q) {
@@ -455,11 +466,11 @@ export function mountChat(root, id) {
       }
     } else if (ap?.supported && ap.command) {
       if (ap.description) children.push(h('p.panel-detail', null, ap.description));
-      children.push(h('pre.cmd', { tabindex: '0', 'aria-label': 'Comando da eseguire' }, ap.command));
-      if (ap.truncated) children.push(h('p.panel-note', null, 'Comando troppo lungo per essere mostrato per intero: per eseguirlo usa Cursor sul Mac. Da qui puoi solo rifiutarlo.'));
+      children.push(h('pre.cmd', { tabindex: '0', 'aria-label': t('chat.commandAria') }, ap.command));
+      if (ap.truncated) children.push(h('p.panel-note', null, t('chat.commandTruncated')));
       if (live && !actionsOk) children.push(h('p.panel-note', null, unavailableReason(actionsStatus, offline).text));
     } else {
-      if (a.detail) children.push(h('p.panel-detail', null, a.detail));
+      if (a.approvalAction) children.push(h('p.panel-detail', null, t(`attention.approvalDetail.${a.approvalAction}`)));
       children.push(h('p.panel-note', null, explanation(a)));
     }
 
@@ -470,15 +481,15 @@ export function mountChat(root, id) {
       const dis = busy || waitingDecision;
       const noApprove = ap.truncated === true;
       const btn = (decision, label, iconName, cls) =>
-        h('button', { class: `btn block${armed === decision ? ' armed' : ''}${cls}`, type: 'button', disabled: dis || (decision === 'approve' && noApprove), onClick: () => approvalTap(decision) }, icon(iconName, { size: 18 }), armed === decision ? 'Conferma' : label);
-      actions.push(h('div.decision', null, btn('approve', 'Esegui', 'check', ' primary'), btn('reject', 'Rifiuta', 'close', '')));
+        h('button', { class: `btn block${armed === decision ? ' armed' : ''}${cls}`, type: 'button', disabled: dis || (decision === 'approve' && noApprove), onClick: () => approvalTap(decision) }, icon(iconName, { size: 18 }), armed === decision ? t('chat.confirm') : label);
+      actions.push(h('div.decision', null, btn('approve', t('chat.run'), 'check', ' primary'), btn('reject', t('chat.reject'), 'close', '')));
       if (formNotice) actions.push(h('p', { class: `hint${formNotice.error ? ' error-text' : ''}`, role: 'status' }, formNotice.text));
-      else if (armed) actions.push(h('p.hint', null, 'Tocca ancora per confermare.'));
+      else if (armed) actions.push(h('p.hint', null, t('chat.tapAgainConfirm')));
     }
     if (live) {
-      actions.push(h('button', { class: 'btn block', type: 'button', disabled: busy, onClick: () => ignoreAction('post', card, 'Impossibile ignorare') }, icon('eyeOff', { size: 18 }), 'Ignora'));
+      actions.push(h('button', { class: 'btn block', type: 'button', disabled: busy, onClick: () => ignoreAction('post', card, t('chat.ignoreFailed')) }, icon('eyeOff', { size: 18 }), t('chat.ignore')));
     } else if (ignored) {
-      actions.push(h('button', { class: 'btn block', type: 'button', disabled: busy, onClick: () => ignoreAction('del', card, 'Impossibile ripristinare') }, icon('restore', { size: 18 }), 'Ripristina'));
+      actions.push(h('button', { class: 'btn block', type: 'button', disabled: busy, onClick: () => ignoreAction('del', card, t('chat.restoreFailed')) }, icon('restore', { size: 18 }), t('chat.restore')));
     }
     if (actions.length) children.push(h('div.panel-actions', null, actions));
 
@@ -489,7 +500,7 @@ export function mountChat(root, id) {
     try {
       await api.post(`/api/chats/${enc}/prefs`, { favorite: !card.favorite });
     } catch (err) {
-      notice = `Impossibile aggiornare le preferite: ${err.message}`;
+      notice = t('chat.favoriteUpdateFailed', { message: err.message });
     }
     await refresh().catch(() => {});
     render();
@@ -499,33 +510,33 @@ export function mountChat(root, id) {
     try {
       await api.post(`/api/chats/${enc}/prefs`, { muted: !card.muted });
     } catch (err) {
-      notice = `Impossibile aggiornare le notifiche: ${err.message}`;
+      notice = t('chat.muteUpdateFailed', { message: err.message });
     }
     await refresh().catch(() => {});
     render();
   }
 
   function renderTop(lv, card) {
-    const actions = [iconButton({ label: 'Aggiorna', name: 'refresh', onClick: () => refresh().catch(() => {}) })];
-    if (card) actions.unshift(iconButton({ label: card.muted ? 'Riattiva le notifiche di questa chat' : 'Silenzia le notifiche di questa chat', name: card.muted ? 'bellOff' : 'bell', onClick: () => toggleMute(card) }));
-    if (card) actions.unshift(iconButton({ label: card.favorite ? 'Togli dalle preferite' : 'Aggiungi alle preferite', name: card.favorite ? 'heartOff' : 'heart', onClick: () => toggleFavorite(card) }));
+    const actions = [iconButton({ label: t('chat.refresh'), name: 'refresh', onClick: () => refresh().catch(() => {}) })];
+    if (card) actions.unshift(iconButton({ label: card.muted ? t('chat.unmuteChat') : t('chat.muteChat'), name: card.muted ? 'bellOff' : 'bell', onClick: () => toggleMute(card) }));
+    if (card) actions.unshift(iconButton({ label: card.favorite ? t('chat.removeFavorite') : t('chat.addFavorite'), name: card.favorite ? 'heartOff' : 'heart', onClick: () => toggleFavorite(card) }));
     if (!card) {
       return commit(
         topHost,
-        appbar({ title: 'Chat', backHref: '#/', actions }),
-        lv.loaded ? emptyState({ iconName: 'info', title: 'Chat non trovata', text: 'Potrebbe essere stata archiviata o eliminata in Cursor.' }) : skeleton(2),
+        appbar({ title: t('chat.titleDefault'), backHref: '#/', actions }),
+        lv.loaded ? emptyState({ iconName: 'info', title: t('chat.notFoundTitle'), text: t('chat.notFoundText') }) : skeleton(2),
       );
     }
     const pill = STATE_PILL[card.state] ?? STATE_PILL[STATE.IDLE];
-    const out = [appbar({ title: card.workspaceName || 'Chat', backHref: '#/', actions })];
-    if (lv.offline) out.push(banner({ text: 'Daemon non raggiungibile', detail: 'Questi dati potrebbero non essere aggiornati.' }));
+    const out = [appbar({ title: card.workspaceName || t('common.noFolder'), backHref: '#/', actions })];
+    if (lv.offline) out.push(banner({ text: t('chat.daemonOfflineBanner'), detail: t('chat.offlineDataStale') }));
     if (notice) out.push(banner({ text: notice }));
     out.push(
       h(
         'section.chat-head',
         null,
-        h('h2.chat-name', null, card.name || 'Chat senza titolo'),
-        h('div.chat-meta', null, h('span', { class: `pill ${pill.cls}` }, pill.text), h('span', null, `Aggiornata ${timeAgo(card.lastUpdatedAt)}`)),
+        h('h2.chat-name', null, card.name || t('common.untitled')),
+        h('div.chat-meta', null, h('span', { class: `pill ${pill.cls}` }, pill.text), h('span', null, t('chat.updatedAgo', { time: timeAgo(card.lastUpdatedAt) }))),
       ),
     );
     return commit(topHost, out);
@@ -535,14 +546,14 @@ export function mountChat(root, id) {
     const a = card?.attention;
     // A working chat is not waiting on you: Cursor's flag may be stale (see stateOf in the daemon).
     // After an answer Cursor keeps the flag on for a while: if the agent is clearly working, do not show "residuo".
-    const show = Boolean(card && a && card.state !== STATE.RUNNING && !(a.kind === 'residuo' && mode !== 'idle'));
+    const show = Boolean(card && a && card.state !== STATE.RUNNING && !(a.kind === 'leftover' && mode !== 'idle'));
     preparing = false;
     // You can answer an ignored or old question ("In sospeso") while Cursor still keeps it open (`live`): required by
     // "answer even after hours or days". If no longer open the daemon returns 409.
     const interactive =
       show &&
       actionsOk &&
-      a.kind === 'domanda' &&
+      a.kind === 'question' &&
       a.live === true &&
       (card.state === STATE.ATTENTION || card.state === STATE.PENDING) &&
       detail?.chat?.attention?.key === a.key &&
@@ -560,8 +571,8 @@ export function mountChat(root, id) {
           onIgnore: () => {
             const c = findCard(getLive().payload, id);
             if (!c?.attention) return;
-            if (c.attention.reason === 'ignorata') ignoreAction('del', c, 'Impossibile ripristinare');
-            else ignoreAction('post', c, 'Impossibile ignorare');
+            if (c.attention.reason === 'ignored') ignoreAction('del', c, t('chat.restoreFailed'));
+            else ignoreAction('post', c, t('chat.ignoreFailed'));
           },
         });
         panelHost.replaceChildren(form.el);
@@ -571,12 +582,12 @@ export function mountChat(root, id) {
       if (sentKey === a.key && Date.now() - sentAt >= RESEND_AFTER_MS) {
         // Question still open long after submit: Cursor did not record it. User can retry.
         sentKey = null;
-        formNotice = { text: 'La risposta non risulta ancora registrata da Cursor: controlla sul Mac o riprova.', error: true };
+        formNotice = { text: t('chat.answerNotRecorded'), error: true };
       }
       const stale = card.state === STATE.PENDING;
-      const ignoredNow = a.reason === 'ignorata';
+      const ignoredNow = a.reason === 'ignored';
       form.update({
-        heading: stale ? `${a.label} (${ignoredNow ? 'ignorata' : 'non risolta da tempo'})` : a.label,
+        heading: stale ? staleAttentionLabel(a.kind, ignoredNow) : attentionKindLabel(a.kind),
         since: a.since,
         ignored: ignoredNow,
         stale,
@@ -593,7 +604,7 @@ export function mountChat(root, id) {
       forgetCommit(panelHost);
     }
     if (sentKey && a?.key !== sentKey) formNotice = null; // question resolved: notice no longer needed
-    if (show && a.kind === 'domanda' && a.live === true && card.state === STATE.ATTENTION && !(detail?.chat?.attention?.key === a.key && detail.question)) {
+    if (show && a.kind === 'question' && a.live === true && card.state === STATE.ATTENTION && !(detail?.chat?.attention?.key === a.key && detail.question)) {
       // Cursor writes question text only at end of turn (10–30 s after creating it): say so instead of generic "open Cursor on Mac".
       const fresh = Date.now() - a.since < PREPARING_MAX_MS;
       preparing = fresh && !detailFailed;
@@ -626,7 +637,7 @@ export function mountChat(root, id) {
     const m = detail?.lastMessage;
     if (!card) return commit(messageHost, null);
     if (!m?.text) {
-      return commit(messageHost, detailFailed ? h('div.panel.muted', null, h('p.panel-note', null, 'Impossibile caricare i dettagli della chat.')) : null);
+      return commit(messageHost, detailFailed ? h('div.panel.muted', null, h('p.panel-note', null, t('chat.loadDetailsFailed'))) : null);
     }
     const long = m.text.length > 600 || m.text.split('\n').length > 10;
     return commit(
@@ -634,7 +645,7 @@ export function mountChat(root, id) {
       h(
         'section.panel',
         null,
-        h('div.panel-title', null, h('span.grow', null, 'Ultimo messaggio dell\u2019agente'), h('span.hint', null, timeAgo(m.createdAt))),
+        h('div.panel-title', null, h('span.grow', null, t('chat.lastAgentMessage')), h('span.hint', null, timeAgo(m.createdAt))),
         h('div', { class: `message${long && !expanded ? ' clamped' : ''}` }, renderMarkdown(m.text)),
         long
           ? h(
@@ -647,7 +658,7 @@ export function mountChat(root, id) {
                   render();
                 },
               },
-              expanded ? 'Mostra meno' : 'Mostra tutto',
+              expanded ? t('chat.showLess') : t('chat.showAll'),
             )
           : null,
       ),
@@ -664,8 +675,8 @@ export function mountChat(root, id) {
       const why = unavailableReason(actionsStatus, lv.offline);
       composer.update({ mode: 'unavailable', hint: why.text, hintLink: why.link });
     } else if (
-      (card.attention?.kind === 'domanda' && card.state === STATE.ATTENTION) ||
-      (card.attention?.kind === 'approvazione' && card.attention.live)
+      (card.attention?.kind === 'question' && card.state === STATE.ATTENTION) ||
+      (card.attention?.kind === 'approval' && card.attention.live)
     ) {
       // With pending question or approval the panel is above and the daemon would reject a message anyway.
       composer.update({ mode: 'blocked' });
@@ -682,7 +693,7 @@ export function mountChat(root, id) {
     const actionsOk = lv.payload?.status?.actions === 'ok' && !lv.offline;
     const mode = activityMode(card);
     const changed = [renderTop(lv, card), renderPanel(lv, card, actionsOk, mode), renderActivity(card, mode), renderMessage(card)].some(Boolean);
-    commit(linkHost, card ? h('a', { class: 'row help-link', href: `#/chat/${enc}/storia` }, icon('messages', { size: 20 }), h('div.row-main', null, h('div.row-title', null, 'Conversazione intera')), icon('chevronRight', { size: 18 })) : null);
+    commit(linkHost, card ? h('a', { class: 'row help-link', href: `#/chat/${enc}/storia` }, icon('messages', { size: 20 }), h('div.row-main', null, h('div.row-title', null, t('chat.fullConversation'))), icon('chevronRight', { size: 18 })) : null);
     renderManage();
     renderComposer(lv, card);
     if (changed) window.scrollTo(0, y);

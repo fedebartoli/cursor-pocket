@@ -3,14 +3,15 @@ import { api } from '../api.js';
 import { logoImg } from '../components.js';
 import { h, replace } from '../dom.js';
 import { icon } from '../icons.js';
+import { t } from '../i18n/index.js';
 import { environment } from '../push.js';
 
 function messageFor(err) {
-  if (err.status === 0) return 'Daemon non raggiungibile. Controlla la connessione.';
-  if (err.status === 429) return 'Troppi tentativi. Riprova tra qualche minuto.';
-  if (err.status === 401) return 'Codice non valido o scaduto. Generane uno nuovo sul Mac.';
-  if (err.status === 403) return 'Richiesta rifiutata dal daemon.';
-  return err.message || 'Abbinamento non riuscito.';
+  if (err.status === 0) return t('login.daemonUnreachable');
+  if (err.status === 429) return t('login.tooManyAttempts');
+  if (err.status === 401) return t('login.invalidCode');
+  if (err.status === 403) return t('login.rejected');
+  return err.message || t('login.pairFailed');
 }
 
 export function mountLogin(root, { onSuccess }) {
@@ -25,11 +26,11 @@ export function mountLogin(root, { onSuccess }) {
     autocorrect: 'off',
     spellcheck: 'false',
     maxlength: '9',
-    placeholder: 'XXXX-XXXX',
+    placeholder: t('login.codePlaceholder'),
     'aria-describedby': 'code-error',
   });
   const error = h('p', { id: 'code-error', class: 'error', role: 'alert' });
-  const button = h('button', { class: 'btn primary block', type: 'submit' }, 'Abbina');
+  const button = h('button', { class: 'btn primary block', type: 'submit' }, t('login.pairButton'));
   let busy = false;
 
   input.addEventListener('input', () => {
@@ -42,7 +43,7 @@ export function mountLogin(root, { onSuccess }) {
     if (busy) return;
     const code = input.value.replace(/[^A-Za-z0-9]/g, '');
     if (code.length < 8) {
-      error.textContent = 'Inserisci il codice di 8 caratteri.';
+      error.textContent = t('login.codeTooShort');
       return;
     }
     busy = true;
@@ -60,12 +61,7 @@ export function mountLogin(root, { onSuccess }) {
 
   const iosNote =
     env.ios && !env.standalone
-      ? h(
-          'div.banner.info',
-          null,
-          icon('info', { size: 20 }),
-          h('div.grow', null, 'Su iPhone abbina il dispositivo dall\u2019app installata: aggiungi prima Cursor Pocket alla schermata Home (Condividi, poi Aggiungi alla schermata Home) e aprila da l\u00ec. Safari e l\u2019app non condividono l\u2019accesso.'),
-        )
+      ? h('div.banner.info', null, icon('info', { size: 20 }), h('div.grow', null, t('login.iosBanner')))
       : null;
 
   replace(
@@ -74,9 +70,9 @@ export function mountLogin(root, { onSuccess }) {
       'main.login',
       null,
       h('div.brand', null, logoImg(44), h('h1', null, 'Cursor Pocket')),
-      h('p', null, 'Abbina questo dispositivo al daemon in esecuzione sul tuo Mac.'),
-      h('form', { onSubmit: submit, novalidate: true }, h('div.field', null, h('label', { for: 'code' }, 'Codice di abbinamento'), input, error), button),
-      h('p.hint', null, 'Sul Mac, dalla cartella del daemon, esegui ', h('code', null, 'npm run pair'), ' per ottenere un codice valido 15 minuti.'),
+      h('p', null, t('login.subtitle')),
+      h('form', { onSubmit: submit, novalidate: true }, h('div.field', null, h('label', { for: 'code' }, t('login.codeLabel')), input, error), button),
+      h('p.hint', null, t('login.hintBefore'), h('code', null, 'npm run pair'), t('login.hintAfter')),
     ),
     iosNote,
   );
@@ -89,8 +85,8 @@ export function mountUnreachable(root, { onRetry }) {
     h(
       'main',
       null,
-      h('div.empty', null, icon('offline', { size: 32 }), h('h2', null, 'Daemon non raggiungibile'), h('p', null, 'Controlla che il daemon sia in esecuzione sul Mac e che Tailscale sia connesso.')),
-      h('div.panel-actions', null, h('button', { class: 'btn primary', type: 'button', onClick: onRetry }, icon('refresh', { size: 18 }), 'Riprova')),
+      h('div.empty', null, icon('offline', { size: 32 }), h('h2', null, t('login.unreachableTitle')), h('p', null, t('login.unreachableBody'))),
+      h('div.panel-actions', null, h('button', { class: 'btn primary', type: 'button', onClick: onRetry }, icon('refresh', { size: 18 }), t('login.retry'))),
     ),
   );
 }

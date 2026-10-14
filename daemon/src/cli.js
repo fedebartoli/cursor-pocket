@@ -127,7 +127,7 @@ async function cdp() {
   }
   if (sub === 'inspect') {
     const info = await ui.inspect();
-    const out = { ...info, targets: (info.targets ?? []).map((t, i) => ({ finestra: i + 1, titolo: showNames ? t.title : `(${t.title.length} chars)`, url: t.url.split('?')[0].slice(0, 60) })) };
+    const out = { ...info, targets: (info.targets ?? []).map((t, i) => ({ window: i + 1, title: showNames ? t.title : `(${t.title.length} chars)`, url: t.url.split('?')[0].slice(0, 60) })) };
     if (out.page && !showNames) delete out.page.title;
     console.log(JSON.stringify(out, null, 2));
     return;
@@ -139,13 +139,13 @@ async function cdp() {
       return;
     }
     const out = {
-      opzioni: view.options.map((o) => ({ i: o.i, selezionata: o.selected, segnale: o.signal, ...(showTexts ? { badge: o.badge, etichetta: o.label } : {}) })),
-      campoLibero: view.freeform,
-      primario: view.primary,
-      secondario: view.secondary,
-      ...(showTexts ? { testo: view.text.slice(0, 600) } : {}),
+      options: view.options.map((o) => ({ i: o.i, selected: o.selected, signal: o.signal, ...(showTexts ? { badge: o.badge, label: o.label } : {}) })),
+      freeform: view.freeform,
+      primary: view.primary,
+      secondary: view.secondary,
+      ...(showTexts ? { text: view.text.slice(0, 600) } : {}),
     };
-    if (!showTexts) out.campoLibero = { ...view.freeform, text: view.freeform.text ? '(present)' : '' };
+    if (!showTexts) out.freeform = { ...view.freeform, text: view.freeform.text ? '(present)' : '' };
     console.log(JSON.stringify(out, null, 2));
     return;
   }

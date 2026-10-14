@@ -115,7 +115,7 @@ export class Watcher extends EventEmitter {
 
   #onError(err, now) {
     // Never the error message (may contain paths or content fragments): name and code only.
-    const detail = String(err?.errstr || err?.code || err?.name || 'errore');
+    const detail = String(err?.errstr || err?.code || err?.name || 'error');
     if (now - this.#lastErrorLogAt >= ERROR_LOG_EVERY_MS) {
       this.#lastErrorLogAt = now;
       this.#log.warn('db_unreadable', errorFields(err));
@@ -160,7 +160,7 @@ export class Watcher extends EventEmitter {
     const running = isRunning(entry.header, now, this.#cfg.staleRunMs) && tail?.status !== 'completed';
     const att = classifyAttention({ entry, tail, bubble, prevBubble, running, now });
     let question = null;
-    if (att?.kind === 'domanda' && att.bubbleId) {
+    if (att?.kind === 'question' && att.bubbleId) {
       try {
         question = normalizeQuestionParams(this.#db.toolParams(entry.id, att.bubbleId));
       } catch {
@@ -190,7 +190,7 @@ export class Watcher extends EventEmitter {
     // Same for a chat just answered or written from the phone (`boost`): next question or
     // run end shows up after ~0.25 s instead of after `fullScanMs`.
     const boosted = (this.#boost.get(entry.id) ?? 0) > now;
-    const hot = scan?.att?.kind === 'approvazione' && !this.#announced.has(`a:${entry.id}:${scan.att.key}`);
+    const hot = scan?.att?.kind === 'approval' && !this.#announced.has(`a:${entry.id}:${scan.att.key}`);
     const refresh = scan !== null && now - scan.at >= (boosted ? Math.min(cfg.fullScanMs, BOOST_POLL_MS) : hot ? Math.min(cfg.fullScanMs, 1000) : cfg.fullScanMs);
     if (!scan || scan.sig !== sig || refresh) {
       scan = this.#scan(entry, sig, now);
@@ -228,7 +228,7 @@ export class Watcher extends EventEmitter {
     // 1) New live request: a question (`ask_question`) or approval (`reviewData` Requested), never a running tool
     // (FINDINGS 9.1, 11). Approval must stay pending for `approvalDelayMs` before notify.
     let ready = true;
-    if (attention?.kind === 'approvazione') {
+    if (attention?.kind === 'approval') {
       if (m.approvalKey !== attention.key) {
         m.approvalKey = attention.key;
         m.approvalFirstAt = now;
@@ -346,7 +346,7 @@ export class Watcher extends EventEmitter {
       const ws = this.#resolver.resolve(entry);
       out.push({
         id: entry.id,
-        name: (typeof entry.header.name === 'string' && entry.header.name.trim()) || 'Senza titolo',
+        name: (typeof entry.header.name === 'string' && entry.header.name.trim()) || '',
         workspaceName: ws.name,
         sectionId: ws.sectionId,
         lastUpdatedAt: entry.lastUpdatedAt,
@@ -368,8 +368,8 @@ export class Watcher extends EventEmitter {
     const items = [];
     for (const b of page.items) {
       if (b.tool) {
-        const { label, category } = toolActivity(b.tool.name);
-        items.push({ id: b.id, index: b.index, at: b.at, role: 'tool', label, category, state: toolStateOf(b.tool.status, b.at, now) });
+        const { action, category } = toolActivity(b.tool.name);
+        items.push({ id: b.id, index: b.index, at: b.at, role: 'tool', action, category, state: toolStateOf(b.tool.status, b.at, now) });
       } else if (b.text) {
         items.push({ id: b.id, index: b.index, at: b.at, role: b.type === 1 ? 'user' : 'assistant', text: b.text, truncated: b.truncated });
       }
@@ -390,9 +390,9 @@ export class Watcher extends EventEmitter {
         lastMessage = this.#db.lastAssistantMessage(id, { maxChars: 4000 });
         activity = activityOf(this.#db.recentActivity(id, { limit: 10 }), this.#now());
         const att = chat.attention;
-        if (att?.kind === 'approvazione' && att.live && att.bubbleId) {
+        if (att?.kind === 'approval' && att.live && att.bubbleId) {
           const shell = SHELL_TOOLS.has(att.toolName);
-          approval = { key: att.key, type: toolActivity(att.toolName).label, supported: shell, ...(shell ? this.#db.approvalDetails(id, att.bubbleId) : {}) };
+          approval = { key: att.key, action: toolActivity(att.toolName).action, supported: shell, ...(shell ? this.#db.approvalDetails(id, att.bubbleId) : {}) };
         }
         const a = chat.attention;
         if (!question && a?.toolName === 'ask_question' && a.bubbleId) {

@@ -5,6 +5,7 @@
 import { AnswerState, FREEFORM_MAX, optionBadge } from './answers.js';
 import { h } from './dom.js';
 import { timeAgo } from './format.js';
+import { t } from './i18n/index.js';
 import { icon } from './icons.js';
 
 const SKIP_ARM_MS = 4000;
@@ -26,7 +27,7 @@ export function createQuestionForm({ key, question, onSubmit, onSkip, onIgnore }
   const choices = []; // { btn, qid, optId }
   const others = []; // { btn, box, text, qid }
 
-  const headingEl = h('span.grow', null, 'Domanda in attesa');
+  const headingEl = h('span.grow', null, t('questionForm.heading'));
   const sinceEl = h('span.hint');
   const noticeEl = h('p', { class: 'panel-note', role: 'status', hidden: true });
   const gapEl = h('p', { class: 'hint form-gap', hidden: true });
@@ -52,8 +53,8 @@ export function createQuestionForm({ key, question, onSubmit, onSkip, onIgnore }
       class: 'field-input',
       rows: 3,
       maxlength: FREEFORM_MAX,
-      placeholder: 'Scrivi la tua risposta',
-      'aria-label': 'Risposta libera',
+      placeholder: t('questionForm.freeformPlaceholder'),
+      'aria-label': t('questionForm.freeformLabel'),
       autocapitalize: 'sentences',
     });
     text.addEventListener('input', () => {
@@ -65,7 +66,7 @@ export function createQuestionForm({ key, question, onSubmit, onSkip, onIgnore }
       'button',
       { class: 'choice other', type: 'button', role, 'aria-checked': 'false', onClick: () => pickOther(q.id) },
       h('span.badge', { 'aria-hidden': 'true' }, icon('pencil', { size: 16 })),
-      h('span.choice-label', null, 'Altro'),
+      h('span.choice-label', null, t('questionForm.other')),
       h('span.tick', { 'aria-hidden': 'true' }, icon('check', { size: 18 })),
     );
     others.push({ btn: otherBtn, box, text, qid: q.id });
@@ -74,7 +75,7 @@ export function createQuestionForm({ key, question, onSubmit, onSkip, onIgnore }
       'div.question',
       null,
       h('p', { class: 'question-prompt', id: promptId }, q.prompt),
-      multi ? h('p.hint', null, 'Puoi scegliere pi\u00f9 risposte.') : null,
+      multi ? h('p.hint', null, t('questionForm.multiHint')) : null,
       h('div', { class: 'choices', role: multi ? 'group' : 'radiogroup', 'aria-labelledby': promptId }, options, otherBtn),
       box,
     );
@@ -120,16 +121,16 @@ export function createQuestionForm({ key, question, onSubmit, onSkip, onIgnore }
     }
     const missing = state.missing();
     submitBtn.disabled = locked || missing > 0;
-    if (sent) setBtn(submitBtn, 'check', 'Risposta inviata');
-    else if (busy) setBtn(submitBtn, 'spinner', 'Invio in corso\u2026', true);
-    else setBtn(submitBtn, 'send', 'Invia risposta');
+    if (sent) setBtn(submitBtn, 'check', t('questionForm.sent'));
+    else if (busy) setBtn(submitBtn, 'spinner', t('questionForm.sending'), true);
+    else setBtn(submitBtn, 'send', t('questionForm.submit'));
     gapEl.hidden = locked || missing === 0;
-    gapEl.textContent = missing === 1 ? 'Manca la risposta a una domanda.' : `Mancano le risposte a ${missing} domande.`;
+    gapEl.textContent = missing === 1 ? t('questionForm.missingOne') : t('questionForm.missingMany', { count: missing });
     skipBtn.disabled = locked;
     ignoreBtn.disabled = locked;
-    if (ignoredState) setBtn(ignoreBtn, 'restore', 'Ripristina');
-    else setBtn(ignoreBtn, 'eyeOff', 'Ignora');
-    setBtn(skipBtn, 'skip', armedSkip ? 'Tocca ancora per saltare' : 'Salta');
+    if (ignoredState) setBtn(ignoreBtn, 'restore', t('questionForm.restore'));
+    else setBtn(ignoreBtn, 'eyeOff', t('questionForm.ignore'));
+    setBtn(skipBtn, 'skip', armedSkip ? t('questionForm.tapAgainToSkip') : t('questionForm.skip'));
   }
 
   function pick(qid, optionId) {
@@ -179,8 +180,8 @@ export function createQuestionForm({ key, question, onSubmit, onSkip, onIgnore }
       ignoredState = Boolean(ignored);
       el.classList.toggle('muted-attention', Boolean(stale));
       sync();
-      const t = since ? timeAgo(since) : '';
-      if (sinceEl.textContent !== t) sinceEl.textContent = t;
+      const ago = since ? timeAgo(since) : '';
+      if (sinceEl.textContent !== ago) sinceEl.textContent = ago;
     },
     setBusy(v) {
       if (busy === Boolean(v)) return;

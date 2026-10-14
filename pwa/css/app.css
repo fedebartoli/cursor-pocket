@@ -217,8 +217,8 @@ button.section-head { cursor: pointer; }
 .row-meta { margin-top: 2px; color: var(--text-2); font-size: 13px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .row-state { display: flex; align-items: center; gap: 5px; margin-top: 3px; color: var(--text-2); font-size: 13px; font-weight: 600; }
 .row-state span { min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
-.row-state.attenzione { color: var(--danger); }
-.row-state.in_corso, .row-state.finita { color: var(--accent); }
+.row-state.attention { color: var(--danger); }
+.row-state.running, .row-state.done { color: var(--accent); }
 .row-prompt {
   margin-top: 4px;
   color: var(--text);
@@ -634,3 +634,20 @@ button.section-head { cursor: pointer; }
 .newchat-tools .grow { flex: 1; min-width: 0; }
 
 .attach.wide { width: auto; padding: 0 14px; gap: 8px; display: inline-flex; align-items: center; border: 1px solid var(--line); border-radius: var(--r-control); color: var(--text); font-weight: 600; font-size: 15px; }
+
+/* language selector */
+.lang-field { display: flex; flex-direction: column; gap: 8px; margin-top: 8px; }
+.lang-label { font-size: 14px; font-weight: 600; color: var(--text-2); }
+.lang-select {
+  width: 100%;
+  min-height: 44px;
+  padding: 0 12px;
+  border: 1px solid var(--line);
+  border-radius: var(--r-control);
+  background: var(--surface-2);
+  color: var(--text);
+  font: 16px/1.3 var(--font);
+  -webkit-appearance: none;
+  appearance: none;
+}
+.lang-select:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
