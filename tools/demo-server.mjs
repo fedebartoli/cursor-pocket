@@ -301,7 +301,17 @@ const app = createApp({
   // "Mac sveglio" finto: nessun processo vero.
   actionsDeps: {
     ...(withActions ? { ui: demoUi } : { ui: { probe: async () => ({ up: false }), hasWindow: async () => false } }),
-    awake: { spawn: () => Object.assign(new EventEmitter(), { kill() {}, unref() {} }), exists: () => true },
+    awake: {
+      spawn: () => Object.assign(new EventEmitter(), { kill() {}, unref() {} }),
+      exists: () => true,
+      // Mac finto: nessun comando di sistema, nessuna modifica reale.
+      power: {
+        brightnessCmd: '', brightnessAvailable: true,
+        canControlSleep: async () => true, setSleepDisabled: async () => {}, sleepDisabled: async () => true,
+        lidClosed: async () => false, battery: async () => ({ onAC: true, percent: 100 }),
+        getBrightness: async () => 0.8, setBrightness: async () => true,
+      },
+    },
   },
   // Nessun invio reale: si conta solo.
   send: async () => {

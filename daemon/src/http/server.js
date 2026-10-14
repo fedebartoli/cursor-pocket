@@ -242,14 +242,20 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
 
     // --- Mac sveglio mentre un agente lavora ---
     if (path === '/api/settings/awake') {
-      if (method === 'GET') return sendJson(res, 200, awake.status, headers);
+      if (method === 'GET') return sendJson(res, 200, await awake.describe(), headers);
       if (method === 'POST') {
         const body = await readJson(req);
-        if (typeof body.enabled !== 'boolean') throw new HttpError(400, 'bad_awake', 'Valore non valido');
-        if (body.enabled && !awake.supported) throw new HttpError(409, 'awake_unsupported', 'Questa funzione non e\' disponibile su questo computer.');
-        awake.enabled = body.enabled;
-        logger.info('keep_awake_setting', { enabled: body.enabled });
-        return sendJson(res, 200, awake.status, headers);
+        const keys = ['enabled', 'closed', 'dim'].filter((k) => body[k] !== undefined);
+        if (!keys.length || keys.some((k) => typeof body[k] !== 'boolean')) throw new HttpError(400, 'bad_awake', 'Valore non valido');
+        const before = await awake.describe();
+        if (!before.supported) throw new HttpError(409, 'awake_unsupported', 'Questa funzione non e\' disponibile su questo computer.');
+        if (body.closed === true && !before.closed.available) throw new HttpError(409, 'awake_closed_unavailable', 'Serve prima la configurazione una tantum sul Mac (tools/mac/power-setup.sh, vedi Come funziona).');
+        if (body.dim === true && !before.dim.available) throw new HttpError(409, 'awake_dim_unavailable', 'Manca l\'assistente per la luminosita\' (tools/mac/build.sh, vedi Come funziona).');
+        if (body.enabled !== undefined) awake.enabled = body.enabled;
+        if (body.closed !== undefined) awake.closedEnabled = body.closed;
+        if (body.dim !== undefined) awake.dimEnabled = body.dim;
+        logger.info('keep_awake_setting', Object.fromEntries(keys.map((k) => [k, body[k]])));
+        return sendJson(res, 200, await awake.describe(), headers);
       }
     }
 

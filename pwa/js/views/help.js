@@ -20,6 +20,14 @@ const SECTIONS = [
     ],
   },
   {
+    title: 'Mac sveglio',
+    items: [
+      'Con l\u2019interruttore acceso, il Mac non va in stop mentre un agente lavora e torna normale subito dopo. Con lo schermo chiuso funziona solo con il caricatore collegato.',
+      'A schermo chiuso e a batteria serve una configurazione una tantum sul Mac: sudo tools/mac/power-setup.sh install. Il Mac torna a poter dormire a fine lavoro, se il daemon si ferma e se la batteria scende sotto il 20%.',
+      'Per la luminosit\u00e0 a zero: tools/mac/build.sh (serve swiftc). La luminosit\u00e0 torna com\u2019era all\u2019apertura dello schermo o a fine lavoro.',
+    ],
+  },
+  {
     title: 'Notifiche',
     items: [
       'Arrivano per una nuova domanda, per un\u2019approvazione ancora in attesa dopo qualche secondo e quando una chat finisce il lavoro.',

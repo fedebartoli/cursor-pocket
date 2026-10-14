@@ -148,6 +148,9 @@ Da sapere:
 | `CP_APPROVALS` | `true` | `false` disattiva solo Esegui/Rifiuta dal telefono (restano risposte e messaggi) |
 | `CP_KEEP_AWAKE_CMD` | `/usr/bin/caffeinate` | comando usato da "Mac sveglio" (vuoto = funzione non disponibile) |
 | `CP_KEEP_AWAKE_GRACE_MS` | `120000` | tolleranza dopo l'ultima chat in corso prima di lasciar dormire il Mac |
+| `CP_KEEP_AWAKE_POLL_MS` | `5000` | controllo di schermo, batteria e sospensione mentre il Mac e' tenuto sveglio |
+| `CP_KEEP_AWAKE_MIN_BATTERY` | `20` | sotto questa % a batteria "a schermo chiuso" si sospende |
+| `CP_BRIGHTNESS_CMD` | `daemon/data/bin/cp-brightness` | assistente per la luminosita' (si crea con `tools/mac/build.sh`) |
 | `CP_CDP_PORT` | `9222` | Porta di debug di Cursor (solo loopback) |
 | `CP_CDP_POLL_MS` | `5000` | Ogni quanto si controlla se la porta di debug e la finestra Agents rispondono |
 | `CP_ACTION_TIMEOUT_SECONDS` | `45` | Tempo massimo di un'azione prima di rispondere "timeout" al telefono |

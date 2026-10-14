@@ -49,22 +49,29 @@ export function mountSettings(root, { onLoggedOut }) {
     })
     .catch(() => {});
 
-  api
-    .get('/api/settings/awake')
-    .then((a) => {
-      if (!alive) return;
-      awake = a;
-      render();
-    })
-    .catch(() => {});
+  const loadAwake = () =>
+    api
+      .get('/api/settings/awake')
+      .then((a) => {
+        if (!alive) return;
+        awake = a;
+        render();
+      })
+      .catch(() => {});
+  loadAwake();
+  const awakeTimer = setInterval(() => {
+    if (document.visibilityState === 'visible') loadAwake();
+  }, 6000);
 
-  async function setAwake(enabled) {
-    awake = { ...awake, enabled }; // subito, poi conferma dal daemon
+  async function setAwake(key, value) {
+    const prev = awake;
+    awake = key === 'enabled' ? { ...awake, enabled: value } : { ...awake, [key]: { ...awake[key], enabled: value } }; // subito, poi conferma dal daemon
     render();
     try {
-      awake = await api.post('/api/settings/awake', { enabled });
+      awake = await api.post('/api/settings/awake', { [key]: value });
+      setTimeout(() => alive && loadAwake(), 1500); // il daemon applica il cambio subito dopo la risposta
     } catch (err) {
-      awake = { ...awake, enabled: !enabled };
+      awake = prev;
       note = { error: true, text: err.message || 'Impostazione non salvata.' };
     }
     if (alive) render();
@@ -72,17 +79,33 @@ export function mountSettings(root, { onLoggedOut }) {
 
   function awakePanel() {
     if (!awake?.supported) return null;
-    return h(
-      'section.panel',
-      null,
-      h('div.panel-title', null, icon('zap', { size: 20 }), h('span.grow', null, 'Mac sveglio')),
+    const rows = [
       switchRow({
         label: 'Resta sveglio mentre un agente lavora',
         sub: awake.active ? 'Attivo adesso: il Mac non va in stop' : awake.enabled ? 'Si attiva quando un agente lavora' : null,
         checked: awake.enabled,
-        onToggle: setAwake,
+        onToggle: (v) => setAwake('enabled', v),
       }),
-    );
+    ];
+    if (awake.enabled) {
+      rows.push(
+        switchRow({
+          label: 'Anche a schermo chiuso e a batteria',
+          sub: awake.closed.available ? (awake.lowBattery ? 'Sospeso: batteria bassa' : awake.closed.active ? 'Attivo adesso' : null) : 'Non configurato: vedi Come funziona',
+          checked: awake.closed.enabled,
+          disabled: !awake.closed.available && !awake.closed.enabled,
+          onToggle: (v) => setAwake('closed', v),
+        }),
+        switchRow({
+          label: 'Luminosit\u00e0 a zero a schermo chiuso',
+          sub: awake.dim.available ? (awake.dim.active ? 'Attivo adesso' : null) : 'Non configurato: vedi Come funziona',
+          checked: awake.dim.enabled,
+          disabled: !awake.dim.available && !awake.dim.enabled,
+          onToggle: (v) => setAwake('dim', v),
+        }),
+      );
+    }
+    return h('section.panel', null, h('div.panel-title', null, icon('zap', { size: 20 }), h('span.grow', null, 'Mac sveglio')), ...rows);
   }
 
   const loadDevices = () =>
@@ -398,6 +421,7 @@ export function mountSettings(root, { onLoggedOut }) {
       alive = false;
       clearTimeout(armTimer);
       clearTimeout(deviceTimer);
+      clearInterval(awakeTimer);
       clearInterval(diagTimer);
     },
   };

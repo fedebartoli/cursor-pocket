@@ -25,7 +25,7 @@ export function publicStatus(s, actions = 'off') {
 }
 
 /**
- * @param {{ config: object, logger: object, now?: Function, send?: Function, actionsDeps?: { ui?: object, sleep?: Function, awake?: { spawn?: Function, exists?: Function } } }} p
+ * @param {{ config: object, logger: object, now?: Function, send?: Function, actionsDeps?: { ui?: object, sleep?: Function, awake?: { spawn?: Function, exists?: Function, power?: object } } }} p
  *   `actionsDeps` serve ai test: interfaccia di Cursor finta e attese veloci.
  */
 export function createApp({ config, logger, now = Date.now, send, actionsDeps = {} } = {}) {
@@ -98,6 +98,7 @@ export function createApp({ config, logger, now = Date.now, send, actionsDeps = 
       maintain();
       maintenance = setInterval(maintain, DAY);
       maintenance.unref();
+      await awake.init();
       void notifier.publicKey; // genera le chiavi VAPID al primo avvio
       await http.listen();
       watcher.start();
@@ -107,7 +108,7 @@ export function createApp({ config, logger, now = Date.now, send, actionsDeps = 
       if (maintenance) clearInterval(maintenance);
       watcher.stop();
       actions.stop();
-      awake.close();
+      await awake.close();
       await http.close();
       store.close();
     },

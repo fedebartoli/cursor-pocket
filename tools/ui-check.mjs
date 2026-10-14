@@ -536,8 +536,12 @@ try {
   await awakeSw.click();
   await page.waitForFunction(() => document.querySelector('.switch[aria-label="Resta sveglio mentre un agente lavora"]')?.getAttribute('aria-checked') === 'true', null, { timeout: 8000 });
   await page.waitForSelector('text=Attivo adesso', { timeout: 8000 });
-  check('mac sveglio: acceso, con chat in corso risulta attivo', await page.locator('text=Attivo adesso').isVisible());
+  check('mac sveglio: acceso compaiono i due livelli (schermo chiuso, luminosita)', (await page.locator('.switch[aria-label="Anche a schermo chiuso e a batteria"]').isVisible()) && (await page.locator('.switch[aria-label^="Luminosit"]').isVisible()));
+  await page.locator('.switch[aria-label="Anche a schermo chiuso e a batteria"]').click();
+  await page.waitForFunction(() => document.querySelector('.switch[aria-label="Anche a schermo chiuso e a batteria"]')?.getAttribute('aria-checked') === 'true', null, { timeout: 8000 });
+  await page.waitForSelector('text=Attivo adesso >> nth=1', { timeout: 8000 });
   await shot('17-awake');
+  await page.locator('.switch[aria-label="Anche a schermo chiuso e a batteria"]').click();
   await awakeSw.click();
   await page.waitForFunction(() => document.querySelector('.switch[aria-label="Resta sveglio mentre un agente lavora"]')?.getAttribute('aria-checked') === 'false', null, { timeout: 8000 });
 

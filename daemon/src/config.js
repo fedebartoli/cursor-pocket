@@ -72,6 +72,10 @@ export function loadConfig(env = process.env) {
     // Mac sveglio mentre un agente lavora (si attiva dalle Impostazioni): comando e tolleranza prima di spegnerlo.
     keepAwakeCmd: env.CP_KEEP_AWAKE_CMD ?? '/usr/bin/caffeinate', // vuoto = funzione non disponibile
     keepAwakeGraceMs: int(env, 'CP_KEEP_AWAKE_GRACE_MS', 120_000, { min: 0, max: 3_600_000 }),
+    keepAwakePollMs: int(env, 'CP_KEEP_AWAKE_POLL_MS', 5000, { min: 200, max: 60_000 }),
+    // A batteria sotto questa soglia il Mac torna a poter dormire anche con "a schermo chiuso" acceso.
+    keepAwakeMinBattery: int(env, 'CP_KEEP_AWAKE_MIN_BATTERY', 20, { min: 0, max: 100 }),
+    keepAwakeBrightnessCmd: env.CP_BRIGHTNESS_CMD ?? path.join(env.CP_DATA_DIR || path.join(repoRoot, 'daemon', 'data'), 'bin', 'cp-brightness'),
     cdpPort: int(env, 'CP_CDP_PORT', 9222, { min: 1, max: 65535 }),
     cdpPollMs: int(env, 'CP_CDP_POLL_MS', 5000, { min: 500, max: 600_000 }),
     actionTimeoutMs: int(env, 'CP_ACTION_TIMEOUT_SECONDS', 45, { min: 5, max: 300 }) * 1000,

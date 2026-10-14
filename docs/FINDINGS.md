@@ -601,16 +601,20 @@ viewport, che su iOS 10+ impedisce lo zoom automatico al focus ma lascia lo zoom
 - PWA: `#/chat/<id>/storia` (link "Conversazione intera" nella pagina della chat): parte dal fondo, "Messaggi precedenti" carica
   la pagina prima mantenendo il punto di lettura. Testo dell'agente in Markdown sicuro (nessun link attivo).
 
-### 10.4i Mac sveglio mentre un agente lavora (15/10) [OK in test; `caffeinate` verificato a mano; chiusura schermo NON PROVATA]
-- Opzionale, SPENTO di default (Impostazioni > Mac sveglio; `GET/POST /api/settings/awake`, `meta.keep_awake`). Acceso e con almeno
-  una chat in corso, il daemon tiene un `caffeinate -i -m -s -w <pid del daemon>` (nessun permesso speciale, nessuna modifica alle
-  impostazioni di sistema; se il daemon muore muore anche lui). Dopo l'ultima chat in corso resta 2 minuti (tolleranza) poi si chiude.
-- Verificato a mano con `pmset -g assertions`: compaiono `PreventSystemSleep` e `PreventUserIdleSystemSleep` finche' vive `caffeinate`.
-- Lo schermo NON e' tenuto acceso (niente `-d`): si spegne come al solito. Luminosita' a zero: non implementata (serve un comando
-  esterno, da decidere).
-- LIMITE da provare: chiudendo lo schermo, `-s` vale solo con alimentatore collegato (a batteria macOS lo ignora e il Mac dorme).
-  Se in carica dorme comunque, l'alternativa e' `sudo pmset -a disablesleep 1` (richiede amministratore e resta attivo finche' non
-  lo si toglie: NON e' stato fatto, da concordare).
+### 10.4i Mac sveglio mentre un agente lavora (15/10) [OK in test; `caffeinate`, lettura di schermo/batteria/luminosita' verificati a mano; chiusura schermo e `pmset` NON PROVATI]
+- Opzionale, SPENTO di default (Impostazioni > Mac sveglio; `GET/POST /api/settings/awake` con `enabled`, `closed`, `dim`; stato in `meta`).
+- Livello 1 (sempre, nessun permesso): con almeno una chat in corso, `caffeinate -i -m -s -w <pid del daemon>`; dopo l'ultima chat resta
+  2 minuti (tolleranza) poi si chiude. Verificato con `pmset -g assertions` (`PreventSystemSleep`, `PreventUserIdleSystemSleep`). Lo
+  schermo NON e' tenuto acceso (niente `-d`). Chiudendo lo schermo `-s` vale solo con il caricatore (a batteria macOS lo ignora).
+- Livello 2 "anche a schermo chiuso e a batteria": `sudo -n pmset -a disablesleep 1|0` dal daemon, possibile SOLO dopo
+  `sudo tools/mac/power-setup.sh install` (regola sudoers che ammette esattamente quei due comandi; controllata con `visudo -cf`;
+  `uninstall` la toglie). Rimesso a 0 con quattro protezioni: fine lavoro, spegnimento del daemon, processo di guardia
+  (`/bin/sh` staccato che attende la morte del daemon, anche per SIGKILL), batteria < 20% a batteria (si riprende sopra il 25%).
+  All'avvio il daemon ripara un `disablesleep 1` o una luminosita' rimasti da un arresto brusco (segni in `meta`); durante il lavoro
+  riporta a 1 il valore se qualcuno lo rimette a 0. Se mai restasse a 1: `sudo pmset -a disablesleep 0`.
+- Luminosita' a zero: `tools/mac/build.sh` compila `daemon/data/bin/cp-brightness` (Swift, DisplayServices non documentato; letta con
+  successo: 1.0). Con lo schermo chiuso (`ioreg AppleClamshellState = Yes`) e un agente al lavoro si porta a 0 salvando il valore
+  (anche in `meta` e nella guardia); si ripristina all'apertura o a fine lavoro. Non prova possibile senza chiudere davvero lo schermo.
 
 ### 10.5 Da verificare dal vivo, con Cursor riavviato con la porta di debug [NON PROVATO]
 Ogni punto ha una diagnostica pronta: `cd daemon && npm run cdp -- status | inspect | tray` (stampa la struttura della
