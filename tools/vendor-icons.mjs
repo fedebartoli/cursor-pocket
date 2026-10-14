@@ -32,6 +32,7 @@ const ICONS = {
   bell: 'bell',
   bellOff: 'bell-off',
   stop: 'square',
+  zap: 'zap',
   settings: 'settings',
   home: 'house',
   refresh: 'refresh-cw',

@@ -13,6 +13,7 @@ export function mountSettings(root, { onLoggedOut }) {
   let busy = null; // 'enable' | 'disable' | 'test' | 'logout'
   let note = null; // { error: boolean, text }
   let quiet = null; // { enabled, from, to }
+  let awake = null; // { supported, enabled, active }
   let devices = null; // [{ id, label, createdAt, lastSeenAt, current, notifications }]
   let armedDevice = null; // id del dispositivo in attesa del secondo tocco
   let deviceTimer = null;
@@ -47,6 +48,42 @@ export function mountSettings(root, { onLoggedOut }) {
       render();
     })
     .catch(() => {});
+
+  api
+    .get('/api/settings/awake')
+    .then((a) => {
+      if (!alive) return;
+      awake = a;
+      render();
+    })
+    .catch(() => {});
+
+  async function setAwake(enabled) {
+    awake = { ...awake, enabled }; // subito, poi conferma dal daemon
+    render();
+    try {
+      awake = await api.post('/api/settings/awake', { enabled });
+    } catch (err) {
+      awake = { ...awake, enabled: !enabled };
+      note = { error: true, text: err.message || 'Impostazione non salvata.' };
+    }
+    if (alive) render();
+  }
+
+  function awakePanel() {
+    if (!awake?.supported) return null;
+    return h(
+      'section.panel',
+      null,
+      h('div.panel-title', null, icon('zap', { size: 20 }), h('span.grow', null, 'Mac sveglio')),
+      switchRow({
+        label: 'Resta sveglio mentre un agente lavora',
+        sub: awake.active ? 'Attivo adesso: il Mac non va in stop' : awake.enabled ? 'Si attiva quando un agente lavora' : null,
+        checked: awake.enabled,
+        onToggle: setAwake,
+      }),
+    );
+  }
 
   const loadDevices = () =>
     api
@@ -309,7 +346,7 @@ export function mountSettings(root, { onLoggedOut }) {
     if (!alive) return;
     const out = [appbar({ title: 'Impostazioni' })];
     if (getLive().offline) out.push(banner({ text: 'Daemon non raggiungibile' }));
-    out.push(notificationsPanel(), quietPanel(), mutedPanel(), actionsPanel(), daemonPanel(), devicesPanel());
+    out.push(notificationsPanel(), quietPanel(), mutedPanel(), awakePanel(), actionsPanel(), daemonPanel(), devicesPanel());
     out.push(h('a', { class: 'row help-link', href: '#/come-funziona' }, icon('info', { size: 20 }), h('div.row-main', null, h('div.row-title', null, 'Come funziona')), icon('chevronRight', { size: 18 })));
     out.push(
       h(

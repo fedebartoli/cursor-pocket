@@ -72,7 +72,7 @@ function validSubscription(sub) {
  * @param {object} deps
  * @returns {{server: http.Server, listen: () => Promise<void>, close: () => Promise<void>}}
  */
-export function createHttpServer({ config, store, auth, hub, watcher, notifier, actions, logger, now = Date.now }) {
+export function createHttpServer({ config, store, auth, hub, watcher, notifier, actions, awake, logger, now = Date.now }) {
   let lastTestAt = 0;
 
   async function api(req, res, path, headers, secure) {
@@ -237,6 +237,19 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
           throw new HttpError(400, 'bad_quiet', 'Orari non validi (formato HH:MM)');
         }
         return sendJson(res, 200, notifier.quiet, headers);
+      }
+    }
+
+    // --- Mac sveglio mentre un agente lavora ---
+    if (path === '/api/settings/awake') {
+      if (method === 'GET') return sendJson(res, 200, awake.status, headers);
+      if (method === 'POST') {
+        const body = await readJson(req);
+        if (typeof body.enabled !== 'boolean') throw new HttpError(400, 'bad_awake', 'Valore non valido');
+        if (body.enabled && !awake.supported) throw new HttpError(409, 'awake_unsupported', 'Questa funzione non e\' disponibile su questo computer.');
+        awake.enabled = body.enabled;
+        logger.info('keep_awake_setting', { enabled: body.enabled });
+        return sendJson(res, 200, awake.status, headers);
       }
     }
 

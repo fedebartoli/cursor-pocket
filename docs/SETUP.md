@@ -61,7 +61,7 @@ la porta di debug chiusa.
 node tools/ui-check.mjs webkit            # il motore di Safari, viewport iPhone 14
 node tools/ui-check.mjs chromium --dark   # tema scuro; --shots salva gli screenshot
 ```
-Percorre l'app contro il server dimostrativo (115-117 controlli: logo, questionario, compositore, approvazione, doppio tocco, CSP...). Serve
+Percorre l'app contro il server dimostrativo (117-119 controlli: logo, questionario, compositore, approvazione, doppio tocco, CSP...). Serve
 `playwright-core` con i browser installati (`npx playwright install chromium webkit`), fuori dal repository, che non ne
 dipende: se non e' risolvibile imposta `PLAYWRIGHT_CORE=/percorso/node_modules/playwright-core/index.mjs`. Non sostituisce una
 prova su un iPhone vero (zoom con doppio tocco, tastiera, schermo intero).
@@ -146,6 +146,8 @@ Da sapere:
 | `CP_VAPID_SUBJECT` | `mailto:cursor-pocket@example.com` | Contatto indicato ai servizi push nelle intestazioni VAPID. Consigliato: un indirizzo che controlli. Lo vede solo il servizio push (Apple), non e' pubblico |
 | `CP_ACTIONS` | `true` | `false` disattiva le azioni dal telefono (la PWA resta in sola lettura) |
 | `CP_APPROVALS` | `true` | `false` disattiva solo Esegui/Rifiuta dal telefono (restano risposte e messaggi) |
+| `CP_KEEP_AWAKE_CMD` | `/usr/bin/caffeinate` | comando usato da "Mac sveglio" (vuoto = funzione non disponibile) |
+| `CP_KEEP_AWAKE_GRACE_MS` | `120000` | tolleranza dopo l'ultima chat in corso prima di lasciar dormire il Mac |
 | `CP_CDP_PORT` | `9222` | Porta di debug di Cursor (solo loopback) |
 | `CP_CDP_POLL_MS` | `5000` | Ogni quanto si controlla se la porta di debug e la finestra Agents rispondono |
 | `CP_ACTION_TIMEOUT_SECONDS` | `45` | Tempo massimo di un'azione prima di rispondere "timeout" al telefono |

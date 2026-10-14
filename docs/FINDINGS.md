@@ -601,6 +601,17 @@ viewport, che su iOS 10+ impedisce lo zoom automatico al focus ma lascia lo zoom
 - PWA: `#/chat/<id>/storia` (link "Conversazione intera" nella pagina della chat): parte dal fondo, "Messaggi precedenti" carica
   la pagina prima mantenendo il punto di lettura. Testo dell'agente in Markdown sicuro (nessun link attivo).
 
+### 10.4i Mac sveglio mentre un agente lavora (15/10) [OK in test; `caffeinate` verificato a mano; chiusura schermo NON PROVATA]
+- Opzionale, SPENTO di default (Impostazioni > Mac sveglio; `GET/POST /api/settings/awake`, `meta.keep_awake`). Acceso e con almeno
+  una chat in corso, il daemon tiene un `caffeinate -i -m -s -w <pid del daemon>` (nessun permesso speciale, nessuna modifica alle
+  impostazioni di sistema; se il daemon muore muore anche lui). Dopo l'ultima chat in corso resta 2 minuti (tolleranza) poi si chiude.
+- Verificato a mano con `pmset -g assertions`: compaiono `PreventSystemSleep` e `PreventUserIdleSystemSleep` finche' vive `caffeinate`.
+- Lo schermo NON e' tenuto acceso (niente `-d`): si spegne come al solito. Luminosita' a zero: non implementata (serve un comando
+  esterno, da decidere).
+- LIMITE da provare: chiudendo lo schermo, `-s` vale solo con alimentatore collegato (a batteria macOS lo ignora e il Mac dorme).
+  Se in carica dorme comunque, l'alternativa e' `sudo pmset -a disablesleep 1` (richiede amministratore e resta attivo finche' non
+  lo si toglie: NON e' stato fatto, da concordare).
+
 ### 10.5 Da verificare dal vivo, con Cursor riavviato con la porta di debug [NON PROVATO]
 Ogni punto ha una diagnostica pronta: `cd daemon && npm run cdp -- status | inspect | tray` (stampa la struttura della
 pagina e mai i testi).

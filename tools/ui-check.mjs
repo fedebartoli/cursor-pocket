@@ -528,6 +528,19 @@ try {
   await page.locator('.appbar-back').click();
   await page.waitForSelector('.chat-head');
 
+  // --- Mac sveglio: interruttore in Impostazioni (con una chat in corso diventa attivo) ---
+  await page.goto(`${BASE}/#/impostazioni`);
+  await page.waitForSelector('.switch[aria-label="Resta sveglio mentre un agente lavora"]');
+  const awakeSw = page.locator('.switch[aria-label="Resta sveglio mentre un agente lavora"]');
+  check('mac sveglio: spento di default', (await awakeSw.getAttribute('aria-checked')) === 'false');
+  await awakeSw.click();
+  await page.waitForFunction(() => document.querySelector('.switch[aria-label="Resta sveglio mentre un agente lavora"]')?.getAttribute('aria-checked') === 'true', null, { timeout: 8000 });
+  await page.waitForSelector('text=Attivo adesso', { timeout: 8000 });
+  check('mac sveglio: acceso, con chat in corso risulta attivo', await page.locator('text=Attivo adesso').isVisible());
+  await shot('17-awake');
+  await awakeSw.click();
+  await page.waitForFunction(() => document.querySelector('.switch[aria-label="Resta sveglio mentre un agente lavora"]')?.getAttribute('aria-checked') === 'false', null, { timeout: 8000 });
+
   // --- dispositivi abbinati: l'altro dispositivo si scollega con due tocchi ---
   await page.goto(`${BASE}/#/impostazioni`);
   await page.waitForSelector('.device-row');

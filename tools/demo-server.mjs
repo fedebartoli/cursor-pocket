@@ -6,6 +6,7 @@
 //   --animate     dopo l'avvio una chat finisce e ne compare una con una nuova domanda (per vedere gli aggiornamenti live)
 //   --no-actions  simula Cursor SENZA porta di debug (la PWA resta in sola lettura). Di default un "Cursor" finto
 //                 accetta risposte e messaggi e li scrive nel database sintetico, come farebbe quello vero.
+import { EventEmitter } from 'node:events';
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -297,7 +298,11 @@ const demoUi = {
 const app = createApp({
   config,
   logger: createLogger({ level: 'warn', stream: process.stderr }),
-  actionsDeps: withActions ? { ui: demoUi } : { ui: { probe: async () => ({ up: false }), hasWindow: async () => false } },
+  // "Mac sveglio" finto: nessun processo vero.
+  actionsDeps: {
+    ...(withActions ? { ui: demoUi } : { ui: { probe: async () => ({ up: false }), hasWindow: async () => false } }),
+    awake: { spawn: () => Object.assign(new EventEmitter(), { kill() {}, unref() {} }), exists: () => true },
+  },
   // Nessun invio reale: si conta solo.
   send: async () => {
     pushes += 1;

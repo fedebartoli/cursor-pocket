@@ -69,6 +69,9 @@ export function loadConfig(env = process.env) {
     // Approvare o rifiutare dal telefono i comandi in attesa (clic su "Run"/"Skip" in Cursor). Piu' delicato delle risposte:
     // si puo' spegnere da solo con CP_APPROVALS=0 lasciando attive risposte e messaggi.
     approvalsEnabled: bool(env, 'CP_APPROVALS', true),
+    // Mac sveglio mentre un agente lavora (si attiva dalle Impostazioni): comando e tolleranza prima di spegnerlo.
+    keepAwakeCmd: env.CP_KEEP_AWAKE_CMD ?? '/usr/bin/caffeinate', // vuoto = funzione non disponibile
+    keepAwakeGraceMs: int(env, 'CP_KEEP_AWAKE_GRACE_MS', 120_000, { min: 0, max: 3_600_000 }),
     cdpPort: int(env, 'CP_CDP_PORT', 9222, { min: 1, max: 65535 }),
     cdpPollMs: int(env, 'CP_CDP_POLL_MS', 5000, { min: 500, max: 600_000 }),
     actionTimeoutMs: int(env, 'CP_ACTION_TIMEOUT_SECONDS', 45, { min: 5, max: 300 }) * 1000,

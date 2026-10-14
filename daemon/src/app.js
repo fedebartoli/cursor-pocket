@@ -2,6 +2,7 @@
 import path from 'node:path';
 import { Actions } from './actions.js';
 import { Auth } from './auth.js';
+import { KeepAwake } from './awake.js';
 import { AgentsUi } from './cursor/agents-ui.js';
 import { CursorDb } from './cursor/db.js';
 import { WorkspaceResolver } from './cursor/workspaces.js';
@@ -24,7 +25,7 @@ export function publicStatus(s, actions = 'off') {
 }
 
 /**
- * @param {{ config: object, logger: object, now?: Function, send?: Function, actionsDeps?: { ui?: object, sleep?: Function } }} p
+ * @param {{ config: object, logger: object, now?: Function, send?: Function, actionsDeps?: { ui?: object, sleep?: Function, awake?: { spawn?: Function, exists?: Function } } }} p
  *   `actionsDeps` serve ai test: interfaccia di Cursor finta e attese veloci.
  */
 export function createApp({ config, logger, now = Date.now, send, actionsDeps = {} } = {}) {
@@ -44,7 +45,8 @@ export function createApp({ config, logger, now = Date.now, send, actionsDeps = 
   });
   const ui = actionsDeps.ui ?? new AgentsUi({ port: config.cdpPort, restoreSelection: config.restoreSelection });
   const actions = new Actions({ ui, db, watcher, config, logger, now, ...(actionsDeps.sleep ? { sleep: actionsDeps.sleep } : {}) });
-  const http = createHttpServer({ config, store, auth, hub, watcher, notifier, actions, logger, now });
+  const awake = new KeepAwake({ store, config, logger, ...(actionsDeps.awake ?? {}) });
+  const http = createHttpServer({ config, store, auth, hub, watcher, notifier, actions, awake, logger, now });
 
   function publish() {
     const last = watcher.last;
@@ -63,6 +65,7 @@ export function createApp({ config, logger, now = Date.now, send, actionsDeps = 
     hub.update(state, publicStatus(watcher.status, actions.status.reason));
   }
 
+  watcher.on('snapshot', (snap) => awake.update(snap.chats.filter((c) => c.running).length));
   watcher.on('snapshot', publish);
   watcher.on('status', publish);
   actions.on('change', publish);
@@ -87,6 +90,7 @@ export function createApp({ config, logger, now = Date.now, send, actionsDeps = 
     hub,
     watcher,
     actions,
+    awake,
     auth,
     notifier,
     http,
@@ -103,6 +107,7 @@ export function createApp({ config, logger, now = Date.now, send, actionsDeps = 
       if (maintenance) clearInterval(maintenance);
       watcher.stop();
       actions.stop();
+      awake.close();
       await http.close();
       store.close();
     },
