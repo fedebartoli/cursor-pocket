@@ -17,9 +17,18 @@ Mac sveglio mentre un agente lavora (anche a schermo chiuso con una regola sudo 
 
 Stato: in uso su un iPhone reale con avvio automatico (`tools/launchd.sh install`). Le azioni su Cursor sono state provate dal vivo su
 un Cursor vero (FINDINGS 10.x e 11.x); "Esegui" su un comando vero e' coperto solo da test e dal rifiuto, che usa lo stesso percorso.
-Test: `cd daemon && npm test` (248 test) e, facoltativi, 138-140 controlli nel browser (`tools/ui-check.mjs`, WebKit e Chromium).
+Test: `cd daemon && npm test` (254 test) e, facoltativi, 141-143 controlli nel browser (`tools/ui-check.mjs`, WebKit e Chromium).
 Ancora da verificare su iPhone vero: le novita' dopo la Fase 2 (barra, stop, nuova chat, allegati, rinomina/archivia/fissa), push a
 schermo bloccato, tocco sulla notifica, badge, tenuta nei giorni. Vedi `docs/ROADMAP.md`.
+
+<p>
+<img src="docs/screenshots/01-home.png" width="220" alt="Elenco delle chat che richiedono attenzione">
+<img src="docs/screenshots/02-question.png" width="220" alt="Domanda dell'agente con le opzioni di risposta">
+<img src="docs/screenshots/21-newchat.png" width="220" alt="Nuova chat con scelta di ramo e modello">
+<img src="docs/screenshots/16-history.png" width="220" alt="Conversazione intera in sola lettura">
+</p>
+
+Le schermate sono del server dimostrativo (`npm run demo`, dati inventati).
 
 Prova rapida senza toccare i dati reali (nessuna installazione necessaria, serve Node >= 22.13):
 ```
@@ -31,6 +40,8 @@ npm run demo
 - `docs/FINDINGS.md`     cosa e' stato verificato (e cosa no)
 - `docs/ARCHITECTURE.md` architettura e regole di derivazione
 - `docs/ROADMAP.md`      fasi
+- `docs/IPHONE-CHECKLIST.md` prove da fare su un iPhone vero
+- `SECURITY.md`          modello di minaccia e segnalazione di problemi
 - `daemon/`              daemon (sola lettura sul database di Cursor), test con `npm test`
 - `pwa/`                 app web (HTML/CSS/JS senza build)
 - `tools/`               generatori di icone, server dimostrativo, `launchd.sh` (avvio automatico), `cursor-cdp.sh`

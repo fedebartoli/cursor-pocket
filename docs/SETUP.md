@@ -1,8 +1,8 @@
 # Setup
 
-Guida per far girare il daemon sul Mac e usare la PWA dall'iPhone. Stato: Fase 1 in uso (sola lettura, notifiche push per domande,
-approvazioni e chat finite, pulsante Ignora locale). Fase 2 (rispondere alle domande, saltarle, scrivere messaggi) scritta e provata su simulatori, ma
-NON ancora su un Cursor vero: e' facoltativa e si attiva come alla sezione 6.
+Guida per far girare il daemon sul Mac e usare la PWA dall'iPhone. Stato: notifiche push e sola lettura funzionano senza altro;
+le azioni (rispondere, approvare, scrivere, fermare, nuova chat, rinomina/fissa/archivia) richiedono Cursor avviato con una porta di debug
+locale e sono state provate dal vivo su un Cursor vero (FINDINGS 10.x e 11.x). Si attivano come alla sezione 6.
 
 ## 1. Requisiti
 - Mac con Cursor 3.x (Agents Window) e Node >= 22.13 (`node -v`). Nessun `npm install`: zero dipendenze.
