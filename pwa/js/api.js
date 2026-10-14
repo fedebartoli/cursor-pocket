@@ -15,10 +15,21 @@ export function onUnauthorized(fn) {
   return () => unauthorizedHandlers.delete(fn);
 }
 
+// Un collegamento che non risponde (es. VPN in riconnessione) non deve lasciare l'app ferma per sempre.
+// Le azioni (invio, nuova chat) possono richiedere piu' tempo: il daemon aspetta Cursor, non si abbandona a meta'.
+const REQUEST_TIMEOUT_MS = 15_000;
+const ACTION_TIMEOUT_MS = 120_000;
+const timeoutSignal = (ms) => {
+  const ctl = new AbortController();
+  setTimeout(() => ctl.abort(), ms);
+  return ctl.signal;
+};
+
 async function request(method, path, body) {
   let res;
   try {
     res = await fetch(path, {
+      signal: timeoutSignal(path === '/api/session' ? 10_000 : method === 'GET' ? REQUEST_TIMEOUT_MS : ACTION_TIMEOUT_MS),
       method,
       credentials: 'same-origin',
       cache: 'no-store',

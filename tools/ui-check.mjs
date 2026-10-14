@@ -638,6 +638,21 @@ try {
   await page.waitForFunction(() => !document.querySelector('.send.stop'), null, { timeout: 12000 });
   check('ferma: dopo il secondo tocco l\'agente e\' fermo e il pulsante torna "Invia"', (await page.locator('.send').count()) === 1);
 
+  // --- collegamento bloccato: l'avvio non resta fermo sullo scheletro, dopo il timeout compare "Riprova" ---
+  const stalled = await ctx.newPage();
+  // La richiesta di sessione non riceve mai risposta e si interrompe solo se l'app la annulla (con un segnale di timeout).
+  await stalled.addInitScript(() => {
+    const real = window.fetch.bind(window);
+    window.fetch = (url, opts) =>
+      url === '/api/session'
+        ? new Promise((_, reject) => opts?.signal?.addEventListener('abort', () => reject(new DOMException('annullata', 'AbortError'))))
+        : real(url, opts);
+  });
+  await stalled.goto(`${BASE}/`);
+  await stalled.waitForSelector('text=Daemon non raggiungibile', { timeout: 14000 });
+  check('avvio con collegamento bloccato: dopo il timeout compare "Daemon non raggiungibile" con "Riprova"', (await stalled.locator('button', { hasText: 'Riprova' }).count()) === 1);
+  await stalled.close();
+
   // --- niente scorrimento orizzontale ---
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
   check('nessun scorrimento orizzontale', overflow <= 0, `${overflow}px`);
