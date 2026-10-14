@@ -46,6 +46,8 @@
     <div id="previews"></div>
     <input type="file" id="files" multiple accept="image/*,.pdf" hidden>
     <div class="tiptap ProseMirror ui-prompt-input-editor__input" contenteditable="true" role="textbox" id="composer"></div>
+    <button type="button" aria-label="Add context" id="addctx">+</button>
+    <button type="button" id="modelbtn">Claude Sonnet 5.5 High</button>
     <button type="button" aria-label="Send message" id="send" disabled>Invia</button>
     <button type="button" aria-label="Stop generation" id="stop" hidden>Stop</button>
   </div>
@@ -106,11 +108,13 @@
       head.append(b);
       heads.append(head);
     }
+    $('#modelbtn').textContent = S.model;
     const bar = $('#newchat-bar');
     bar.hidden = !S.newChat;
     if (S.newChat) {
       const t = bar.querySelectorAll('.ui-select-trigger');
       t[0].textContent = S.newChat.project.toLowerCase();
+      t[1].textContent = S.branch;
       t[2].textContent = S.env ?? 'This Mac';
     }
     for (const id of Object.keys(S.chats)) {
@@ -167,6 +171,62 @@
     root.append(m);
   }
   document.addEventListener('keydown', (ev) => { if (ev.key === 'Escape') $('#menu-root').replaceChildren(); });
+  function branchMenu() {
+    const root = $('#menu-root');
+    root.replaceChildren();
+    const lb = document.createElement('div');
+    lb.setAttribute('role', 'listbox');
+    lb.style.cssText = 'position:absolute;left:230px;top:40px;border:1px solid #888;background:#fff;z-index:9';
+    for (const name of S.branches) {
+      const row = document.createElement('div');
+      row.setAttribute('role', 'option');
+      row.setAttribute('data-component', 'search-menu-row');
+      row.setAttribute('aria-selected', String(name === S.branch));
+      row.style.padding = '6px 10px';
+      const span = document.createElement('span');
+      span.setAttribute('data-branch-name', name);
+      span.textContent = name;
+      row.append(span);
+      row.addEventListener('click', () => { S.branch = name; S.picks.push({ branch: name }); root.replaceChildren(); sidebar(); });
+      lb.append(row);
+    }
+    root.append(lb);
+  }
+  function modelMenu() {
+    const root = $('#menu-root');
+    root.replaceChildren();
+    const m = document.createElement('div');
+    m.setAttribute('role', 'menu');
+    m.style.cssText = 'position:absolute;left:230px;top:40px;border:1px solid #888;background:#fff;z-index:9';
+    for (const label of ['Context 300K', 'Effort High', `Model ${S.model}`]) {
+      const el = document.createElement('div');
+      el.setAttribute('role', 'menuitem');
+      el.style.padding = '6px 10px';
+      el.textContent = label;
+      if (label.startsWith('Model')) el.addEventListener('mouseover', () => {
+        if (root.querySelector('[data-sub]')) return;
+        const sub = document.createElement('div');
+        sub.setAttribute('role', 'menu');
+        sub.setAttribute('data-sub', '');
+        sub.style.cssText = 'position:absolute;left:450px;top:40px;border:1px solid #888;background:#fff;z-index:9';
+        const entries = [{ t: 'Auto' }, { t: 'MAX Mode', box: true }, ...S.models.filter((x) => x !== 'Auto').map((t) => ({ t })), { t: 'Add Models' }];
+        for (const e of entries) {
+          const it = document.createElement('div');
+          it.setAttribute('role', e.box ? 'menuitemcheckbox' : 'menuitem');
+          if (e.box) it.setAttribute('aria-checked', 'false');
+          it.style.padding = '6px 10px';
+          it.textContent = e.t;
+          if (!e.box && e.t !== 'Add Models') it.addEventListener('click', () => { S.model = e.t; S.picks.push({ model: e.t }); root.replaceChildren(); sidebar(); });
+          sub.append(it);
+        }
+        root.append(sub);
+      });
+      m.append(el);
+    }
+    root.append(m);
+  }
+  $('#modelbtn').addEventListener('click', () => modelMenu());
+  document.querySelectorAll('.ui-select-trigger')[1].addEventListener('click', () => branchMenu());
   $('#customize').addEventListener('click', () => {
     menu([{ label: 'Archived', checkbox: true, checked: S.showArchived, run: () => { S.showArchived = !S.showArchived; sidebar(); } }]);
   });
@@ -300,6 +360,7 @@
       const id = `new-${S.newChats.length + 1}`;
       S.chats[id] = { name: text.slice(0, 20) || 'Chat nuova' };
       S.newChats.push({ id, project: S.newChat.project, text, images });
+      S.choices.push({ branch: S.branch, model: S.model });
       S.newChat = null;
       S.current = id;
       // Come Cursor: per un attimo c'e' anche una riga "bozza" (altro id) che poi sparisce.
@@ -357,7 +418,7 @@
   window.__mock = {
     reset(cfg) {
       document.querySelector('#previews').replaceChildren();
-      S = { current: cfg.current ?? null, chats: cfg.chats, qstate: {}, done: {}, submitted: [], skipped: [], sent: [], clicks: 0, log: [], decided: {}, stopped: [], renamed: [], archived: [], unarchived: [], pins: [], showArchived: false, renaming: null, noPreview: cfg.noPreview === true, projects: cfg.projects ?? [], env: cfg.env ?? null, newChat: null, newChats: [] };
+      S = { current: cfg.current ?? null, chats: cfg.chats, qstate: {}, done: {}, submitted: [], skipped: [], sent: [], clicks: 0, log: [], decided: {}, stopped: [], renamed: [], archived: [], unarchived: [], pins: [], showArchived: false, renaming: null, noPreview: cfg.noPreview === true, projects: cfg.projects ?? [], env: cfg.env ?? null, newChat: null, newChats: [], branches: cfg.branches ?? ['main'], branch: cfg.branch ?? (cfg.branches ?? ['main'])[0], model: cfg.model ?? 'Claude Sonnet 5.5 High', models: cfg.models ?? ['Auto', 'Composer 2.5', 'Claude Sonnet 5.5 High', 'Claude Opus 4.6 High'], picks: [], choices: [] };
       for (const [id, c] of Object.entries(S.chats)) {
         S.qstate[id] = { step: 0, selections: JSON.parse(JSON.stringify(cfg.initialSelections?.[id] ?? {})), freeform: { ...(cfg.initialFreeform?.[id] ?? {}) } };
         if (c.questions) {
@@ -370,7 +431,7 @@
       refreshSend();
       render();
     },
-    state() { return JSON.stringify({ current: S.current, submitted: S.submitted, skipped: S.skipped, sent: S.sent, clicks: S.clicks, log: S.log, decided: S.decided, stopped: S.stopped, renamed: S.renamed, archived: S.archived, unarchived: S.unarchived, pins: S.pins, showArchived: S.showArchived, renaming: S.renaming, newChats: S.newChats, newChat: S.newChat }); },
+    state() { return JSON.stringify({ current: S.current, submitted: S.submitted, skipped: S.skipped, sent: S.sent, clicks: S.clicks, log: S.log, decided: S.decided, stopped: S.stopped, renamed: S.renamed, archived: S.archived, unarchived: S.unarchived, pins: S.pins, showArchived: S.showArchived, renaming: S.renaming, newChats: S.newChats, newChat: S.newChat, picks: S.picks, choices: S.choices, branch: S.branch, model: S.model }); },
   };
 })();
 </script>

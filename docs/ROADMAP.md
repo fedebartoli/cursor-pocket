@@ -110,4 +110,5 @@ clic con Cursor in secondo piano, interfaccia dalla PWA su iPhone.
 - [x] Nuova chat locale dal telefono su un progetto, con testo e immagini (provata dal vivo con un messaggio vero).
 - [x] Fissa/Togli chat (Pin) dal telefono (provato dal vivo).
 - [ ] Da provare su iPhone: tutte le novita' di questa lista (finora verificate in WebKit/Chromium e sul Cursor vero via CDP).
-- [ ] Idee ancora aperte: avviare chat su un progetto senza chat locali, scegliere ramo/modello della nuova chat.
+- [x] Scelta di ramo e modello per la nuova chat (provata dal vivo senza inviare; invio vero non provato).
+- [ ] Idee ancora aperte: avviare chat su un progetto senza chat locali (non verificabile: il daemon conosce i progetti dalle chat).

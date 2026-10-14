@@ -400,6 +400,58 @@ describe('AgentsUi su Chromium con la pagina finta', { skip }, () => {
       assert.equal(after.current, 'chat-b', 'dopo un errore la chat che era aperta torna aperta (non resta la schermata nuova chat)');
     });
 
+    it('newChatOptions legge ramo e modello senza scegliere nulla e riapre la chat di prima', async () => {
+      await reset(cfg({ branches: ['main', 'sviluppo'], branch: 'main', models: ['Auto', 'Composer 2.5', 'Claude Sonnet 5.5 High', 'Claude Opus 4.6 High'], model: 'Claude Sonnet 5.5 High' }));
+      const r = await ui.newChatOptions({ project: 'Progetto A' });
+      assert.deepEqual(r, { branch: { current: 'main', options: ['main', 'sviluppo'] }, model: { current: 'Claude Sonnet 5.5 High', options: ['Auto', 'Composer 2.5', 'Claude Sonnet 5.5 High', 'Claude Opus 4.6 High'] } });
+      const s = await state();
+      assert.deepEqual(s.picks, [], 'nessuna scelta fatta');
+      assert.equal(s.current, 'chat-b', 'la chat di prima torna aperta');
+    });
+
+    it('newChat con ramo e modello: li sceglie prima di scrivere e li passa alla chat creata; se sono gia\' quelli, non tocca nulla', async () => {
+      await reset(cfg({ branches: ['main', 'sviluppo'], branch: 'main' }));
+      const r = await ui.newChat({ project: 'Progetto B', text: 'ciao', branch: 'sviluppo', model: 'Claude Opus 4.6 High' });
+      assert.equal(r.composerId, 'new-1');
+      const s = await state();
+      // scelte per la chat nuova, poi i predefiniti di Cursor rimessi com'erano (Cursor ricorda l'ultima scelta)
+      assert.deepEqual(s.picks, [{ branch: 'sviluppo' }, { model: 'Claude Opus 4.6 High' }, { branch: 'main' }, { model: 'Claude Sonnet 5.5 High' }]);
+      assert.deepEqual(s.choices, [{ branch: 'sviluppo', model: 'Claude Opus 4.6 High' }], 'la chat parte con le scelte fatte');
+      assert.deepEqual([s.branch, s.model], ['main', 'Claude Sonnet 5.5 High'], 'predefiniti di prima ripristinati');
+      assert.equal(s.current, 'chat-b');
+      await reset(cfg({ branches: ['main', 'sviluppo'], branch: 'main' }));
+      await ui.newChat({ project: 'Progetto B', text: 'ciao', branch: 'main', model: 'Claude Sonnet 5.5 High' });
+      assert.deepEqual((await state()).picks, [], 'gia\' impostati: nessun clic');
+    });
+
+    it('ramo o modello inesistenti: errore, nessun invio, chat di prima riaperta', async () => {
+      await reset(cfg({ branches: ['main'] }));
+      await assert.rejects(ui.newChat({ project: 'Progetto B', text: 'x', branch: 'non-esiste' }), (e) => e.code === 'branch_not_found');
+      await assert.rejects(ui.newChat({ project: 'Progetto B', text: 'x', model: 'Modello Inventato' }), (e) => e.code === 'model_not_found');
+      const s = await state();
+      assert.deepEqual(s.newChats, []);
+      assert.deepEqual(s.picks, []);
+      assert.equal(s.current, 'chat-b');
+    });
+
+    it('errore dopo aver scelto ramo e modello: i predefiniti tornano com\'erano e nulla viene inviato', async () => {
+      await reset(cfg({ branches: ['main', 'sviluppo'], branch: 'main' }));
+      await assert.rejects(ui.newChat({ project: 'Progetto B', text: '', branch: 'sviluppo', model: 'Composer 2.5' }), (e) => e.code === 'send_disabled');
+      const s = await state();
+      assert.deepEqual(s.newChats, []);
+      assert.deepEqual([s.branch, s.model], ['main', 'Claude Sonnet 5.5 High']);
+      assert.equal(s.current, 'chat-b');
+    });
+
+    it('dryRun con scelte: le applica e le riporta, senza inviare', async () => {
+      await reset(cfg({ branches: ['main', 'sviluppo'], branch: 'main' }));
+      const r = await ui.newChat({ project: 'Progetto A', text: 'x', dryRun: true, branch: 'sviluppo', model: 'Composer 2.5' });
+      assert.deepEqual(r.chosen, { branch: 'sviluppo', model: 'Composer 2.5' });
+      const s = await state();
+      assert.deepEqual(s.newChats, []);
+      assert.deepEqual([s.branch, s.model], ['main', 'Claude Sonnet 5.5 High'], 'predefiniti ripristinati anche in prova');
+    });
+
     it('dryRun: arriva ai controlli e non invia', async () => {
       await reset(cfg());
       const r = await ui.newChat({ project: 'Progetto A', text: 'x', dryRun: true });

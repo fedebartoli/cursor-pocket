@@ -77,6 +77,8 @@ const ICONS = {
   image: 'image',
   pin: 'pin',
   pinOff: 'pin-off',
+  branch: 'git-branch',
+  cpu: 'cpu',
   archive: 'archive',
   archiveRestore: 'archive-restore',
   stop: 'square',

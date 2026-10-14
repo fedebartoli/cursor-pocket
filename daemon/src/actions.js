@@ -80,6 +80,12 @@ const UI_ERRORS = {
   closed: [503, 'actions_unavailable', 'La connessione con Cursor si e\' interrotta. Riprova.'],
   no_window: [503, 'actions_unavailable', 'La finestra Agents di Cursor non e\' aperta.'],
   timeout: [504, 'timeout', 'Cursor non ha risposto in tempo. L\'operazione potrebbe essere andata a buon fine: controlla sul Mac prima di riprovare.'],
+  no_branch_menu: [409, 'ui_changed', 'Cursor non mostra il menu dei rami: controlla sul Mac.'],
+  no_model_menu: [409, 'ui_changed', 'Cursor non mostra il menu del modello: controlla sul Mac.'],
+  branch_not_found: [409, 'branch_not_found', 'Quel ramo non \u00e8 pi\u00f9 nell\'elenco di Cursor: aggiorna le scelte.'],
+  model_not_found: [409, 'model_not_found', 'Quel modello non \u00e8 pi\u00f9 nell\'elenco di Cursor: aggiorna le scelte.'],
+  branch_failed: [409, 'branch_failed', 'Cursor non ha cambiato il ramo: controlla sul Mac.'],
+  model_failed: [409, 'model_failed', 'Cursor non ha cambiato il modello: controlla sul Mac.'],
   pin_failed: [409, 'pin_failed', 'Cursor non ha cambiato lo stato: controlla sul Mac.'],
   bad_pin: [400, 'bad_pin', 'Valore non valido'],
   row_not_found: [409, 'chat_not_in_sidebar', 'La chat non e\' visibile nella sidebar di Cursor: aprila sul Mac.'],
@@ -498,7 +504,19 @@ export class Actions extends EventEmitter {
   }
 
   /** Avvia una chat NUOVA (locale, "This Mac") su un progetto con il primo messaggio. */
-  async newChat({ sectionId, text, images } = {}) {
+  /** Ramo e modello attuali e possibili per la nuova chat di un progetto (sola lettura: Cursor apre i menu e li richiude). */
+  async newChatOptions(sectionId) {
+    if (typeof sectionId !== 'string' || !sectionId) throw new ActionError(400, 'bad_project', 'Scegli un progetto');
+    this.#requireReady();
+    const known = this.watcher.last?.chats.find((c) => c.sectionId === sectionId);
+    if (!known?.workspaceName) throw new ActionError(404, 'not_found', 'Progetto non trovato');
+    return this.#run('newchatopts', async () => ({ ok: true, ...(await this.ui.newChatOptions({ project: known.workspaceName })) }));
+  }
+
+  async newChat({ sectionId, text, images, branch, model } = {}) {
+    for (const [k, v] of [['branch', branch], ['model', model]]) {
+      if (v !== undefined && (typeof v !== 'string' || !v.trim() || v.length > 120 || /[\u0000-\u001f]/.test(v))) throw new ActionError(400, `bad_${k}`, k === 'branch' ? 'Ramo non valido' : 'Modello non valido');
+    }
     const ids = images === undefined ? [] : images;
     if (!Array.isArray(ids) || ids.length > UPLOAD_LIMITS.perMessage || !ids.every((x) => typeof x === 'string')) {
       throw new ActionError(400, 'bad_images', `Si possono allegare al massimo ${UPLOAD_LIMITS.perMessage} immagini`);
@@ -513,11 +531,11 @@ export class Actions extends EventEmitter {
     if (!known?.workspaceName) throw new ActionError(404, 'not_found', 'Progetto non trovato');
     const files = ids.length ? this.uploads?.paths(ids) : [];
     if (!files) throw new ActionError(409, 'image_expired', 'Un\'immagine non \u00e8 pi\u00f9 disponibile: allegala di nuovo.');
-    const slot = this.#dedupe('newchat', sectionId, crypto.createHash('sha1').update(clean + '\u0000' + ids.join(',')).digest('hex').slice(0, 16), 10_000);
+    const slot = this.#dedupe('newchat', sectionId, crypto.createHash('sha1').update(clean + '\u0000' + ids.join(',') + '\u0000' + (branch ?? '') + '\u0000' + (model ?? '')).digest('hex').slice(0, 16), 10_000);
     let ok = false;
     try {
       const res = await this.#run('newchat', async () => {
-        const r = await this.ui.newChat({ project: known.workspaceName, text: clean, ...(files.length ? { files } : {}) });
+        const r = await this.ui.newChat({ project: known.workspaceName, text: clean, ...(files.length ? { files } : {}), ...(branch ? { branch: branch.trim() } : {}), ...(model ? { model: model.trim() } : {}) });
         const seen = await this.#waitFor(() => {
           const f = this.db.chatFlags(r.composerId);
           return f && !f.draft && !f.archived ? true : null; // la "bozza" che Cursor crea prima dell'invio non conta

@@ -288,6 +288,11 @@ class FakeUi {
     this.pinned = args.pinned;
     return { pinned: args.pinned, changed: true };
   }
+  async newChatOptions(args) {
+    this.calls.push(['newChatOptions', args]);
+    if (this.fail) throw this.fail;
+    return { branch: { current: 'main', options: ['main', 'sviluppo'] }, model: { current: 'Auto', options: ['Auto', 'Composer 2.5'] } };
+  }
   async newChat(args) {
     this.calls.push(['newChat', args]);
     if (this.fail) throw this.fail;
@@ -898,6 +903,37 @@ test('immagini: caricamento controllato dal contenuto, messaggio con allegati, f
 });
 
 const NEW_ID = '33333333-3333-4333-8333-333333333333';
+
+test('nuova chat: opzioni (ramo, modello) lette da Cursor e scelte validate prima di toccare Cursor', async () => {
+  const { h, ui, cookie } = await setup({ withQuestion: false });
+  try {
+    const sectionId = h.app.watcher.last.chats[0].sectionId;
+    const project = h.app.watcher.last.chats[0].workspaceName;
+    const opts = await h.req({ path: `/api/projects/${sectionId}/newchat-options`, cookie });
+    assert.equal(opts.status, 200, opts.text);
+    assert.deepEqual(opts.json().branch, { current: 'main', options: ['main', 'sviluppo'] });
+    assert.deepEqual(ui.calls[0], ['newChatOptions', { project }]);
+    assert.equal((await h.req({ path: `/api/projects/${sectionId}/newchat-options` })).status, 401);
+    assert.equal((await h.req({ path: '/api/projects/sconosciuto/newchat-options', cookie })).status, 404);
+
+    const create = (body) => h.req({ method: 'POST', path: '/api/chats', cookie, body });
+    const before = ui.calls.length;
+    assert.equal((await create({ sectionId, text: 'x', branch: 5 })).json().error, 'bad_branch');
+    assert.equal((await create({ sectionId, text: 'x', model: '' })).json().error, 'bad_model');
+    assert.equal((await create({ sectionId, text: 'x', model: 'a'.repeat(200) })).json().error, 'bad_model');
+    assert.equal(ui.calls.length, before, 'scelte non valide: Cursor non viene toccato');
+
+    ui.onNewChat = () => {
+      h.fx.chat(NEW_ID, { name: 'Nuova', lastUpdatedAt: T0 - 100 });
+      return { composerId: NEW_ID };
+    };
+    const r = await create({ sectionId, text: 'ciao', branch: ' sviluppo ', model: 'Composer 2.5' });
+    assert.equal(r.status, 200, r.text);
+    assert.deepEqual(ui.calls.at(-1)[1], { project, text: 'ciao', branch: 'sviluppo', model: 'Composer 2.5' });
+  } finally {
+    await h.stop();
+  }
+});
 
 test('nuova chat via HTTP: progetto risolto dal daemon, controlli, file allegati, chat nuova confermata dal database', async () => {
   const { h, ui, cookie, post } = await setup({ withQuestion: false });

@@ -673,6 +673,17 @@ viewport, che su iOS 10+ impedisce lo zoom automatico al focus ma lascia lo zoom
   Fissa/Togli compare nel pannello di gestione della chat dopo aver letto lo stato una volta.
 - Prova dal vivo: stato iniziale non fissata, fissa, stato fissata, ripetere e' un no-op, togli, stato finale non fissata (chat di test ripristinata).
 
+### 10.4n Ramo e modello della nuova chat (15/10) [PROVATO DAL VIVO solo SENZA inviare; invio vero NON provato; PWA NON PROVATA su iPhone]
+- Schermata "nuova chat": 3 `.ui-select-trigger` (progetto, ramo, ambiente "This Mac"). Il menu del ramo e' `[role=listbox][aria-label="Select branch"]`
+  con righe `[role=option]` e `[data-branch-name]`. Il modello e' il pulsante senza aria-label nella barra del composer: il menu ha
+  Context/Effort/Model; passando su "Model" si apre il sottomenu (Auto, MAX Mode, modelli, Add Models).
+- Cursor RICORDA la scelta di ramo e modello come predefinito (verificato dal vivo): il daemon, dopo l'avvio, rimette ramo e modello com'erano.
+  Se la scelta o il ripristino falliscono la chat non parte e Cursor torna alla schermata di prima (provato con il mock).
+- API: `GET /api/projects/:sectionId/newchat-options` (apre e richiude i menu, non cambia nulla) e `POST /api/chats` con `branch`/`model` opzionali.
+  Nella PWA il blocco "Scegli ramo e modello" legge le liste solo a richiesta; "Come in Cursor" e' la scelta di partenza.
+- Provato dal vivo: lettura delle liste e scelta + ripristino del modello senza inviare messaggi. Nel progetto di prova esiste un solo ramo (master),
+  quindi la scelta del ramo e' provata solo col mock.
+
 ### 10.5 Da verificare dal vivo, con Cursor riavviato con la porta di debug [NON PROVATO]
 Ogni punto ha una diagnostica pronta: `cd daemon && npm run cdp -- status | inspect | tray` (stampa la struttura della
 pagina e mai i testi).

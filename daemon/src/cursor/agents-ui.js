@@ -64,6 +64,9 @@ export const SEL = Object.freeze({
   sectionHead: '[data-section-head]',
   newAgent: 'button[aria-label="New Agent"]',
   selectTrigger: '.ui-select-trigger',
+  // Menu dei rami (elenco con ricerca): ogni riga ha il nome in data-branch-name e aria-selected.
+  branchOption: '[role="option"][data-component="search-menu-row"]',
+  branchName: '[data-branch-name]',
   messageIdAttr: 'data-message-id',
 });
 
@@ -71,6 +74,9 @@ export const SEL = Object.freeze({
 // il selettore della modalita' automatica: l'espressione e' ancorata di proposito perche' NON lo catturi.
 const APPROVE_LABEL = '^(run|esegui)\\s*(\\u23ce|\\u21b5|enter)?$';
 const REJECT_LABEL = '^(skip|salta)$';
+// Voci del menu del modello che NON sono modelli.
+const NOT_A_MODEL = /^(context|effort|model|max mode|add models)\b/i;
+const escapeRe = (t) => String(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 // Voci del menu di una riga (inglese; italiano per le interfacce localizzate).
 const MENU = Object.freeze({
   rename: '^(rename|rinomina)$',
@@ -78,6 +84,7 @@ const MENU = Object.freeze({
   unpin: '^(unpin|rimuovi.*fissat.*|togli.*fissat.*)$',
   archive: '^(archive|archivia)$',
   unarchive: '^(unarchive|restore|ripristina|dearchivia)$',
+  modelSub: '^model\\b',
   archivedFilter: '^(archived|archiviat[eio])$',
 });
 
@@ -192,6 +199,23 @@ function pageKit(SEL, APPROVE_LABEL, REJECT_LABEL) {
     const heads = K.sectionHeads(name);
     return heads.length === 1 ? heads[0].querySelector(SEL.newAgent) : null;
   };
+  K.selectTriggers = () => [...document.querySelectorAll(SEL.selectTrigger)].filter(K.visible);
+  // Il pulsante del modello sta nella barra del compositore: e' l'unico con testo e senza aria-label.
+  K.modelButton = () => {
+    const c = K.composer();
+    let root = c;
+    for (let i = 0; i < 8 && root; i++) {
+      root = root.parentElement;
+      if (root && root.querySelectorAll('button').length >= 3) break;
+    }
+    if (!root) return null;
+    return [...root.querySelectorAll('button')].find((b) => !b.getAttribute('aria-label') && K.text(b) && !b.matches(SEL.selectTrigger) && K.visible(b)) || null;
+  };
+  K.branchOptions = () => [...document.querySelectorAll(SEL.branchOption)].filter(K.visible);
+  K.branchOptionName = (o) => {
+    const n = o.querySelector(SEL.branchName);
+    return n ? n.getAttribute('data-branch-name') || K.text(n) : K.text(o);
+  };
   K.fileInput = () => K.scope().querySelector(SEL.fileInput);
   K.previews = () => [...K.scope().querySelectorAll(SEL.imagePreview + ' img')];
   K.imageRemove = () => [...K.scope().querySelectorAll(SEL.imageRemove)].find(K.visible) || null;
@@ -248,6 +272,12 @@ function pageDo(a, K) {
         return K.imageRemove();
       case 'newAgent':
         return K.newAgent(a.name);
+      case 'branchTrigger':
+        return K.selectTriggers()[1] || null;
+      case 'branchOption':
+        return K.branchOptions().find((o) => K.branchOptionName(o) === a.name) || null;
+      case 'modelButton':
+        return K.modelButton();
       default:
         return null;
     }
@@ -328,6 +358,16 @@ function pageDo(a, K) {
       // Schermata "nuova chat": nessun pannello di conversazione, tre selettori (progetto, ramo, ambiente) e il compositore.
       const triggers = [...document.querySelectorAll(SEL.selectTrigger)].filter(K.visible).map((e) => K.text(e).trim());
       return { composer: !!K.composer(), triggers };
+    }
+    case 'overlayOpen':
+      return [...document.querySelectorAll('[role="menu"],[role="listbox"]')].some((e) => K.visible(e) && !e.closest(SEL.sidebarRow));
+    case 'branchState': {
+      const t = K.selectTriggers()[1];
+      return { current: t ? K.text(t) : null, options: K.branchOptions().map((o) => ({ name: K.branchOptionName(o), selected: o.getAttribute('aria-selected') === 'true' })) };
+    }
+    case 'modelState': {
+      const b = K.modelButton();
+      return { current: b ? K.text(b) : null, items: K.menuItems().map((m) => K.text(m)) };
     }
     case 'attachState':
       return { input: !!K.fileInput(), previews: K.previews().length };
@@ -1072,38 +1112,169 @@ export class AgentsUi {
     });
   }
 
+  async #closeMenus(ctx) {
+    for (let i = 0; i < 4; i++) {
+      if (!(await ctx.page({ op: 'overlayOpen' }).catch(() => false))) return;
+      await ctx.s.pressKey(KEYS.escape).catch(() => {});
+      await this.sleep(250);
+    }
+  }
+
+  /** Apre il menu dei rami e ne legge le voci (il menu resta aperto). */
+  async #readBranches(ctx) {
+    await ctx.clickTarget({ target: 'branchTrigger' });
+    const st = await waitFor(async () => {
+      const x = await ctx.page({ op: 'branchState' });
+      return x.options.length ? x : null;
+    }, { timeoutMs: 2500, sleep: this.sleep });
+    if (!st) {
+      await this.#closeMenus(ctx);
+      throw new UiError('no_branch_menu', 'menu dei rami non trovato in Cursor');
+    }
+    return st;
+  }
+
+  async #pickBranch(ctx, name) {
+    const st = await this.#readBranches(ctx);
+    if (!st.options.some((o) => o.name === name)) {
+      await this.#closeMenus(ctx);
+      throw new UiError('branch_not_found', 'ramo non presente nell\'elenco di Cursor');
+    }
+    await ctx.clickTarget({ target: 'branchOption', name });
+    await this.sleep(300);
+    await this.#closeMenus(ctx);
+    const now = await waitFor(async () => {
+      const x = await ctx.page({ op: 'branchState' });
+      return norm(x.current ?? '') === norm(name) ? x : null;
+    }, { timeoutMs: 2500, sleep: this.sleep });
+    if (!now) throw new UiError('branch_failed', 'Cursor non ha cambiato il ramo');
+  }
+
+  /** Apre il menu del modello (Context / Effort / Model) e il sottomenu "Model": ritorna il modello attuale e le voci (il menu resta aperto). */
+  async #readModels(ctx) {
+    await ctx.clickTarget({ target: 'modelButton' });
+    const first = await waitFor(async () => {
+      const m = await ctx.locate({ target: 'menuitem', label: MENU.modelSub });
+      return m.found ? m : null;
+    }, { timeoutMs: 2500, sleep: this.sleep });
+    if (!first) {
+      await this.#closeMenus(ctx);
+      throw new UiError('no_model_menu', 'menu del modello non trovato in Cursor');
+    }
+    await ctx.hover({ target: 'menuitem', label: MENU.modelSub });
+    const st = await waitFor(async () => {
+      const x = await ctx.page({ op: 'modelState' });
+      const items = x.items.filter((t) => t && !NOT_A_MODEL.test(t));
+      return items.length ? { current: x.current, items } : null;
+    }, { timeoutMs: 2500, sleep: this.sleep });
+    if (!st) {
+      await this.#closeMenus(ctx);
+      throw new UiError('no_model_menu', 'elenco dei modelli non trovato in Cursor');
+    }
+    return st;
+  }
+
+  async #pickModel(ctx, label) {
+    const st = await this.#readModels(ctx);
+    if (!st.items.includes(label)) {
+      await this.#closeMenus(ctx);
+      throw new UiError('model_not_found', 'modello non presente nell\'elenco di Cursor');
+    }
+    await ctx.clickTarget({ target: 'menuitem', label: `^${escapeRe(label)}$` });
+    await this.sleep(300);
+    await this.#closeMenus(ctx);
+    const now = await waitFor(async () => {
+      const x = await ctx.page({ op: 'modelState' });
+      return norm(x.current ?? '') === norm(label) ? x : null;
+    }, { timeoutMs: 2500, sleep: this.sleep });
+    if (!now) throw new UiError('model_failed', 'Cursor non ha cambiato il modello');
+  }
+
   /**
-   * Apre una chat NUOVA sul progetto `project` (pulsante "New Agent" del gruppo nella sidebar), scrive il primo messaggio e lo invia.
-   * Si controlla che il progetto sia quello giusto e che l'ambiente sia "This Mac" (locale): mai chat nel cloud o in un worktree.
-   * Ritorna l'id della chat creata (la riga nuova comparsa nella sidebar).
+   * Applica ramo e/o modello richiesti sulla schermata "nuova chat" (solo se diversi da quelli attuali).
+   * Ritorna i valori di prima e quelli finali: Cursor ricorda l'ultima scelta come predefinita, quindi chi chiama deve rimettere `before`.
    */
-  async newChat({ project, text, files = [], dryRun = false }) {
+  async #applyChoices(ctx, { branch, model }) {
+    const read = async () => ({ branch: (await ctx.page({ op: 'branchState' })).current, model: (await ctx.page({ op: 'modelState' })).current });
+    const before = await read();
+    if (branch && norm(branch) !== norm(before.branch ?? '')) await this.#pickBranch(ctx, branch);
+    if (model && norm(model) !== norm(before.model ?? '')) await this.#pickModel(ctx, model);
+    return { before, after: await read() };
+  }
+
+  /**
+   * Legge da Cursor ramo e modello attuali e le scelte possibili della nuova chat del progetto. SOLA LETTURA: apre i menu e li chiude
+   * senza scegliere nulla, poi riapre la chat che era selezionata.
+   */
+  async newChatOptions({ project }) {
     if (typeof project !== 'string' || !project.trim()) throw new UiError('bad_project', 'progetto non valido');
     return this.withSession(async (ctx) => {
-      const previous = await ctx.page({ op: 'selectedKey' }).catch(() => null);
-      const before = new Set(await ctx.page({ op: 'rowKeys' }));
+      const st = {};
+      try {
+        await this.#openNewChat(ctx, project, st);
+        const b = await this.#readBranches(ctx);
+        await this.#closeMenus(ctx);
+        const m = await this.#readModels(ctx);
+        await this.#closeMenus(ctx);
+        await this.#restore(ctx, st.previous, '');
+        return { branch: { current: b.current, options: b.options.map((o) => o.name) }, model: { current: m.current, options: m.items } };
+      } catch (e) {
+        await this.#closeMenus(ctx).catch(() => {});
+        await this.#restore(ctx, st.previous, '').catch(() => {});
+        throw e;
+      }
+    });
+  }
+
+  /**
+   * Apre la schermata "nuova chat" del progetto (pulsante "New Agent" del gruppo) e controlla progetto, ambiente locale e bozza vuota.
+   * `st` riceve la selezione di prima e le righe di prima: il chiamante, in caso di errore, la ripristina.
+   */
+  async #openNewChat(ctx, project, st) {
+      st.previous = await ctx.page({ op: 'selectedKey' }).catch(() => null);
+      st.before = new Set(await ctx.page({ op: 'rowKeys' }));
       const count = await ctx.page({ op: 'sectionCount', name: project });
       if (count === 0) throw new UiError('project_not_found', 'progetto non trovato nella sidebar di Cursor');
       if (count > 1) throw new UiError('project_ambiguous', 'piu\' progetti con lo stesso nome nella sidebar');
       await ctx.hover({ target: 'newAgent', name: project });
       await ctx.clickTarget({ target: 'newAgent', name: project });
-      // Qualsiasi errore da qui in poi lascia Cursor sulla schermata della nuova chat: si riapre la chat che era selezionata.
+    // Si attende che la schermata mostri DAVVERO il progetto richiesto (se prima c'era gia' una schermata "nuova chat",
+    // il compositore c'e' gia' e il progetto cambia solo dopo il clic).
+    let last = null;
+    const screen = await waitFor(async () => {
+      const st = await ctx.page({ op: 'newChatState' });
+      last = st;
+      return st.composer && st.triggers.length >= 3 && norm(st.triggers[0]) === norm(project) ? st : null;
+    }, { timeoutMs: 4000, sleep: this.sleep });
+    if (!screen) {
+      if (last?.composer && last.triggers.length >= 3) throw new UiError('wrong_project', 'Cursor ha scelto un altro progetto');
+      throw new UiError('no_new_chat', 'la schermata della nuova chat non e\' comparsa');
+    }
+    if (norm(screen.triggers[screen.triggers.length - 1]) !== 'thismac') throw new UiError('not_local', 'la nuova chat non e\' locale (This Mac)');
+    const info = await ctx.page({ op: 'composerInfo' });
+    if (!info.composer?.empty || info.images > 0) throw new UiError('draft_not_empty', 'nel campo di scrittura c\'e\' gia\' una bozza');
+    return screen;
+  }
+
+  /**
+   * Apre una chat NUOVA sul progetto `project` (pulsante "New Agent" del gruppo nella sidebar), scrive il primo messaggio e lo invia.
+   * Si controlla che il progetto sia quello giusto e che l'ambiente sia "This Mac" (locale): mai chat nel cloud o in un worktree.
+   * Ritorna l'id della chat creata (la riga nuova comparsa nella sidebar).
+   */
+  async newChat({ project, text, files = [], dryRun = false, branch, model }) {
+    if (typeof project !== 'string' || !project.trim()) throw new UiError('bad_project', 'progetto non valido');
+    return this.withSession(async (ctx) => {
+      const st = {};
+      // Qualsiasi errore lascia Cursor sulla schermata della nuova chat: si riapre la chat che era selezionata.
       try {
-        // Si attende che la schermata mostri DAVVERO il progetto richiesto (se prima c'era gia' una schermata "nuova chat",
-        // il compositore c'e' gia' e il progetto cambia solo dopo il clic).
-        let last = null;
-        const screen = await waitFor(async () => {
-          const st = await ctx.page({ op: 'newChatState' });
-          last = st;
-          return st.composer && st.triggers.length >= 3 && norm(st.triggers[0]) === norm(project) ? st : null;
-        }, { timeoutMs: 4000, sleep: this.sleep });
-        if (!screen) {
-          if (last?.composer && last.triggers.length >= 3) throw new UiError('wrong_project', 'Cursor ha scelto un altro progetto');
-          throw new UiError('no_new_chat', 'la schermata della nuova chat non e\' comparsa');
+        const screen = await this.#openNewChat(ctx, project, st);
+        const { previous, before } = st;
+        let chosen = null;
+        if (branch || model) {
+          const r = await this.#applyChoices(ctx, { branch, model });
+          chosen = r.after;
+          st.revert = r.before; // il predefinito di Cursor cambia con la scelta: si rimette com'era alla fine
         }
-        if (norm(screen.triggers[screen.triggers.length - 1]) !== 'thismac') throw new UiError('not_local', 'la nuova chat non e\' locale (This Mac)');
-        const info = await ctx.page({ op: 'composerInfo' });
-        if (!info.composer?.empty || info.images > 0) throw new UiError('draft_not_empty', 'nel campo di scrittura c\'e\' gia\' una bozza');
         if (dryRun) {
           // Solo per prove: arriva fin qui (schermata, progetto, ambiente, bozza vuota), allega e toglie le immagini, non invia.
           let n = null;
@@ -1112,8 +1283,9 @@ export class AgentsUi {
             n = (await ctx.page({ op: 'attachState' })).previews;
             await ctx.clearImages();
           }
+          if (st.revert) await this.#applyChoices(ctx, { branch: st.revert.branch, model: st.revert.model }).catch(() => {});
           await this.#restore(ctx, previous, '');
-          return { dryRun: true, project: screen.triggers[0], env: screen.triggers[screen.triggers.length - 1], attached: n };
+          return { dryRun: true, project: screen.triggers[0], env: screen.triggers[screen.triggers.length - 1], attached: n, chosen };
         }
 
         let attached = false;
@@ -1159,12 +1331,23 @@ export class AgentsUi {
           return fresh.length === 1 && Date.now() - since >= 1200 ? fresh[0] : null;
         }, { timeoutMs: 15_000, intervalMs: 250, sleep: this.sleep });
         if (!created) throw new UiError('send_failed', 'non vedo la chat nuova in Cursor');
+        if (st.revert) {
+          // Si riapre una schermata "nuova chat" solo per rimettere ramo e modello predefiniti come erano.
+          try {
+            await this.#openNewChat(ctx, project, {});
+            await this.#applyChoices(ctx, { branch: st.revert.branch, model: st.revert.model });
+          } catch {
+            // best-effort: la chat e' gia' partita, non si trasforma in errore
+          }
+        }
         await this.#restore(ctx, previous, created.replace(/^row:/, ''));
         return { composerId: created.replace(/^row:/, '') };
       } catch (e) {
-        await this.#restore(ctx, previous, '').catch(() => {});
+        if (st.revert) await this.#applyChoices(ctx, { branch: st.revert.branch, model: st.revert.model }).catch(() => {});
+        await this.#restore(ctx, st.previous, '').catch(() => {});
         throw e;
       }
     });
   }
 }
+

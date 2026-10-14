@@ -19,6 +19,10 @@ export function mountNewChat(root) {
   let draft = '';
   let sectionId = lastSection;
   let shown = null; // cosa c'e' in formHost: 'form' | 'noactions' | 'noprojects'
+  let opts = null; // scelte lette da Cursor per il progetto: { branch: { current, options }, model: { current, options } }
+  let optsFor = null; // progetto a cui si riferiscono
+  let optsLoading = false;
+  const pick = { branch: null, model: null }; // null = come e' in Cursor
   const host = h('div.region');
   const formHost = h('div.region');
   replace(root, h('div', { class: 'screen' }, host, formHost));
@@ -31,11 +35,13 @@ export function mountNewChat(root) {
   // Elenco a scelta singola (non un <select>: WebKit ne inietta lo stile e la CSP rigorosa dell'app lo segnala).
   const picker = h('div', { class: 'project-list', role: 'radiogroup', 'aria-label': 'Progetto', id: 'newchat-project' });
   const noteEl = h('p', { class: 'hint', role: 'status', hidden: true });
+  const optsHost = h('div', { class: 'newchat-opts' });
   const form = h(
     'form',
     { class: 'panel newchat', novalidate: true },
     h('div', { class: 'newchat-label' }, 'Progetto'),
     picker,
+    optsHost,
     h('label', { class: 'newchat-label', for: 'newchat-text' }, 'Primo messaggio'),
     area,
     files.strip,
@@ -62,7 +68,90 @@ export function mountNewChat(root) {
     area.disabled = locked;
     for (const b of picker.children) b.disabled = locked;
     files.setLocked(locked);
+    for (const b of optsHost.querySelectorAll('button')) b.disabled = locked || optsLoading;
     startBtn.disabled = locked || files.uploading() || !sectionId || (area.value.trim().length === 0 && files.readyIds().length === 0);
+  }
+
+
+  // Ramo e modello: si leggono da Cursor solo a richiesta (apre e richiude i menu sul Mac). Se non si sceglie nulla, vale cio' che c'e' in Cursor.
+  function choiceGroup(label, key, current, options, iconName) {
+    const rows = [{ value: null, text: `Come in Cursor (${current ?? '?'})` }, ...options.filter((o) => o !== current).map((o) => ({ value: o, text: o })), ...(options.includes(current) ? [{ value: current, text: `${current} (attuale)` }] : [])];
+    return h(
+      'div',
+      { class: 'choice' },
+      h('div', { class: 'newchat-label' }, label),
+      h(
+        'div',
+        { class: 'project-list', role: 'radiogroup', 'aria-label': label },
+        rows.map((r) =>
+          h(
+            'button',
+            {
+              class: 'project-item',
+              type: 'button',
+              role: 'radio',
+              'aria-checked': String(pick[key] === r.value),
+              disabled: busy,
+              onClick: () => {
+                pick[key] = r.value;
+                drawOpts();
+              },
+            },
+            icon(iconName, { size: 18 }),
+            h('span', { class: 'project-name' }, r.text),
+            icon('check', { size: 18 }),
+          ),
+        ),
+      ),
+    );
+  }
+
+  function drawOpts() {
+    if (!opts) {
+      optsHost.replaceChildren(
+        h(
+          'button',
+          { class: 'btn', type: 'button', disabled: busy || optsLoading || !sectionId, onClick: loadOpts },
+          icon(optsLoading ? 'refresh' : 'cpu', { size: 18, className: optsLoading ? 'spin' : '' }),
+          optsLoading ? 'Leggo da Cursor\u2026' : 'Scegli ramo e modello',
+        ),
+      );
+      return;
+    }
+    optsHost.replaceChildren(
+      choiceGroup('Ramo', 'branch', opts.branch.current, opts.branch.options, 'branch'),
+      choiceGroup('Modello', 'model', opts.model.current, opts.model.options, 'cpu'),
+      h('p', { class: 'hint' }, 'Cursor ricorda l\u2019ultima scelta: dopo l\u2019avvio il daemon rimette ramo e modello come erano.'),
+    );
+  }
+
+  async function loadOpts() {
+    if (optsLoading || !sectionId) return;
+    optsLoading = true;
+    setNote(null);
+    drawOpts();
+    const forSection = sectionId;
+    try {
+      const res = await api.get(`/api/projects/${encodeURIComponent(forSection)}/newchat-options`);
+      if (!alive || forSection !== sectionId) return;
+      opts = { branch: res.branch, model: res.model };
+      optsFor = forSection;
+      pick.branch = null;
+      pick.model = null;
+    } catch (err) {
+      setNote(describeActionError(err), true);
+    } finally {
+      optsLoading = false;
+      if (alive) drawOpts();
+    }
+  }
+
+  function resetOpts() {
+    opts = null;
+    optsFor = null;
+    pick.branch = null;
+    pick.model = null;
+    drawOpts();
   }
 
   function drawPicker(workspaces) {
@@ -77,6 +166,7 @@ export function mountNewChat(root) {
             'aria-checked': String(w.id === sectionId),
             disabled: busy,
             onClick: () => {
+              if (sectionId !== w.id) resetOpts();
               sectionId = w.id;
               lastSection = w.id;
               for (const el of picker.children) el.setAttribute('aria-checked', String(el.dataset.id === w.id));
@@ -96,7 +186,10 @@ export function mountNewChat(root) {
     const sig = workspaces.map((w) => `${w.id}:${w.name}`).join('|');
     if (picker.dataset.sig === sig) return;
     picker.dataset.sig = sig;
-    if (!workspaces.some((w) => w.id === sectionId)) sectionId = workspaces[0]?.id ?? null;
+    if (!workspaces.some((w) => w.id === sectionId)) {
+      sectionId = workspaces[0]?.id ?? null;
+      resetOpts();
+    }
     drawPicker(workspaces);
   }
 
@@ -119,7 +212,13 @@ export function mountNewChat(root) {
     setNote('Avvio la chat in Cursor\u2026', false);
     syncSend();
     try {
-      const res = await api.post('/api/chats', images.length ? { sectionId, text, images } : { sectionId, text });
+      const body = { sectionId, text };
+      if (images.length) body.images = images;
+      if (opts && optsFor === sectionId) {
+        if (pick.branch) body.branch = pick.branch;
+        if (pick.model) body.model = pick.model;
+      }
+      const res = await api.post('/api/chats', body);
       files.clearLocal();
       draft = '';
       area.value = '';
@@ -136,6 +235,7 @@ export function mountNewChat(root) {
   });
 
   area.value = draft;
+  drawOpts();
 
   function render() {
     if (!alive) return;

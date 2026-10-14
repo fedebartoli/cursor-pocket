@@ -173,7 +173,7 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
     // --- nuova chat (locale) su un progetto ---
     if (path === '/api/chats' && method === 'POST') {
       const body = await readJson(req, MAX_ACTION_BODY_BYTES);
-      return sendJson(res, 200, await actions.newChat({ sectionId: body.sectionId, text: body.text, images: body.images }), headers);
+      return sendJson(res, 200, await actions.newChat({ sectionId: body.sectionId, text: body.text, images: body.images, branch: body.branch, model: body.model }), headers);
     }
 
     // --- chat archiviate ---
@@ -261,6 +261,10 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
       }
       throw new HttpError(405, 'method_not_allowed', 'Metodo non consentito');
     }
+
+    // Scelte possibili per la nuova chat di un progetto (ramo, modello), lette da Cursor.
+    const nco = /^\/api\/projects\/([\w-]{1,80})\/newchat-options$/.exec(path);
+    if (nco && method === 'GET') return sendJson(res, 200, await actions.newChatOptions(nco[1]), headers);
 
     // --- preferenze di notifica ---
     const wsm = /^\/api\/workspaces\/([\w-]{1,80})\/prefs$/.exec(path);

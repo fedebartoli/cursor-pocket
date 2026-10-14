@@ -590,6 +590,12 @@ try {
   check('nuova chat: elenco dei progetti, campo per il messaggio, "Avvia" disattivato a campo vuoto', (await page.locator('#newchat-project [role=radio]').count()) === 3 && (await page.locator('.newchat button[type=submit]').isDisabled()));
   await page.locator('#newchat-project [role=radio]', { hasText: 'sito-vetrina' }).click();
   check('nuova chat: il progetto toccato risulta scelto (uno solo)', (await page.locator('#newchat-project [aria-checked=true]').count()) === 1 && (await page.locator('#newchat-project [aria-checked=true]').innerText()).includes('sito-vetrina'));
+  await page.locator('.newchat button', { hasText: 'Scegli ramo e modello' }).click();
+  await page.waitForSelector('[role=radiogroup][aria-label="Ramo"]', { timeout: 8000 });
+  check('nuova chat: ramo e modello letti da Cursor (con "Come in Cursor" gia\' scelto e icone SVG)', (await page.locator('[aria-label="Ramo"] [role=radio]').count()) === 4 && (await page.locator('[aria-label="Modello"] [role=radio]').count()) === 5 && (await page.locator('[aria-label="Ramo"] [aria-checked=true]').innerText()).includes('Come in Cursor') && (await page.locator('[aria-label="Ramo"] [role=radio] svg').count()) >= 6);
+  await page.locator('[aria-label="Ramo"] [role=radio]', { hasText: 'sviluppo' }).click();
+  await page.locator('[aria-label="Modello"] [role=radio]', { hasText: 'Composer 2.5' }).click();
+  check('nuova chat: scegliendo ramo e modello risulta scelta una sola voce per gruppo', (await page.locator('[aria-label="Ramo"] [aria-checked=true]').count()) === 1 && (await page.locator('[aria-label="Ramo"] [aria-checked=true]').innerText()).includes('sviluppo') && (await page.locator('[aria-label="Modello"] [aria-checked=true]').innerText()).includes('Composer 2.5'));
   await page.locator('#newchat-text').fill('Aggiungi una pagina contatti');
   await page.locator('input[type=file]').setInputFiles([{ name: 'a.png', mimeType: 'image/png', buffer: Buffer.from(PNG_B64, 'base64') }]);
   await page.waitForFunction(() => document.querySelectorAll('.attach-item').length === 1 && !document.querySelector('.attach-item.loading'), null, { timeout: 8000 });
@@ -598,7 +604,7 @@ try {
   await page.locator('.newchat button[type=submit]').click();
   await page.waitForFunction(() => /^#\/chat\/00000000-0000-4000-8000-0000000001\d\d$/.test(location.hash), null, { timeout: 15000 });
   await page.waitForSelector('.chat-name');
-  check('nuova chat: dopo l\'avvio si apre la pagina della chat creata (nel progetto scelto)', (await page.locator('.chat-name').innerText()).startsWith('Aggiungi una pagina') && (await page.locator('.appbar-title').innerText()) === 'sito-vetrina');
+  check('nuova chat: dopo l\'avvio si apre la pagina della chat creata (nel progetto scelto)', (await page.locator('.chat-name').innerText()).startsWith('Aggiungi una pagina') && (await page.locator('.chat-name').innerText()).includes('[sviluppo|Composer 2.5]') && (await page.locator('.appbar-title').innerText()) === 'sito-vetrina');
 
   // --- Mac sveglio: interruttore in Impostazioni (con una chat in corso diventa attivo) ---
   await page.goto(`${BASE}/#/impostazioni`);

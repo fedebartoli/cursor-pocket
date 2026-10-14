@@ -280,13 +280,13 @@ const demoUi = {
     console.log('[demo] agente fermato, chat', n);
     return { clicked: true, settled: true };
   },
-  async newChat({ project, text }) {
+  async newChat({ project, text, branch, model }) {
     const where = Object.keys(WS).find((k) => WS[k].path.endsWith(`/${project}`));
     if (!where) throw Object.assign(new Error('demo'), { code: 'project_not_found' });
     await new Promise((r) => setTimeout(r, 600));
     newChats += 1;
     const n = 100 + newChats;
-    chat(n, (text || 'Chat con immagini').slice(0, 40), where, 0, { unfinishedRunAt: Date.now() });
+    chat(n, (text || 'Chat con immagini').slice(0, 40) + (branch || model ? ` [${branch || ''}|${model || ''}]` : ''), where, 0, { unfinishedRunAt: Date.now() });
     talk(n, 0, null);
     return { composerId: id(n) };
   },
@@ -304,6 +304,10 @@ const demoUi = {
     await new Promise((r) => setTimeout(r, 400));
     fx.chat(composerId, { archived: true });
     return { clicked: true };
+  },
+  async newChatOptions() {
+    await new Promise((r) => setTimeout(r, 400));
+    return { branch: { current: 'main', options: ['main', 'sviluppo', 'fix/login'] }, model: { current: 'Claude Sonnet 5.5 High', options: ['Auto', 'Composer 2.5', 'Claude Sonnet 5.5 High', 'Claude Opus 4.6 High'] } };
   },
   async pinState({ composerId }) {
     if (!chatSpecs.get(numOf(composerId))) throw Object.assign(new Error('demo'), { code: 'row_not_found' });
