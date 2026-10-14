@@ -96,6 +96,8 @@ click with Cursor in the background, interface from the PWA on iPhone.
 - [x] Publication hardening (Oct 15): file and history scan (no personal data), author email rewritten with GitHub noreply (backup in `~/.cursor-pocket-backup/`), `SECURITY.md`, CI, `docs/IPHONE-CHECKLIST.md`.
 - [ ] Handling Cursor updates (selectors): discovered only by trying after each update.
 - [x] README with screenshots, MIT license, installation guide, security warnings.
+- [x] Code, comments, tests and docs in English; app and push notifications in 8 languages (en, it, es, fr, de, pt, ja, zh), catalogs
+  checked by tests. [ ] Native-speaker review of es/fr/de/pt/ja/zh (machine-generated).
 - [ ] Create GitHub repository (user chose to wait).
 - [x] No personal data in examples; Cursor database opened read-only only (test).
 

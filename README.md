@@ -4,7 +4,7 @@ Follow and drive the **local** chats of Cursor's Agents Window from your iPhone.
 installable web app (PWA). No dependencies, no build step, macOS only.
 
 > Unofficial project, not affiliated with Anysphere. It relies on Cursor internals (a local SQLite database and the Agents Window UI)
-> that can change without notice. Tested on Cursor 3.24.x. The app's interface is currently in Italian.
+> that can change without notice. Tested on Cursor 3.24.x.
 
 <p>
 <img src="docs/screenshots/01-home.png" width="220" alt="List of chats that need attention">
@@ -30,6 +30,15 @@ With Cursor started with a local debug port (`tools/cursor-cdp.sh`):
 - Start a new chat on a project, optionally choosing branch and model.
 - Rename, pin and archive/restore chats.
 - Keep the Mac awake while an agent works (optionally with the lid closed, through a narrow sudo rule).
+
+## Languages
+
+The app speaks English, Italian, Spanish, French, German, Portuguese, Japanese and Chinese (Simplified). It follows the phone's
+language and can be forced in Settings. Push notifications are composed by the daemon in the language of each device.
+English and Italian were written by hand; the other six translations were machine-generated and are waiting for review by native
+speakers: pull requests that fix wording are very welcome. To add a language, copy `pwa/js/i18n/locales/en.js`, translate the
+values, add it to `LANGUAGES` in `pwa/js/i18n/index.js` and `daemon/src/i18n.js`, and to `daemon/src/i18n-messages.js`; `npm test` checks that every key and placeholder
+exists in each catalog.
 
 ## How it works
 
@@ -77,7 +86,7 @@ the phone is covered only by tests and by the reject path, which shares the same
 features (tab bar, stop, new chat, attachments, rename/pin/archive), push on a locked screen, notification tap, badge, long-term
 stability. See [docs/IPHONE-CHECKLIST.md](docs/IPHONE-CHECKLIST.md) and [docs/ROADMAP.md](docs/ROADMAP.md).
 
-Tests: `cd daemon && npm test` (254 tests). Optional browser checks: `tools/ui-check.mjs` (about 140 checks, WebKit and Chromium).
+Tests: `cd daemon && npm test` (261 tests). Optional browser checks: `tools/ui-check.mjs` (about 160 checks, WebKit and Chromium, including a check of every language).
 
 ## Repository layout
 
