@@ -25,6 +25,7 @@ const ICONS = {
   info: 'info',
   chevronRight: 'chevron-right',
   chevronDown: 'chevron-down',
+  chevronUp: 'chevron-up',
   back: 'arrow-left',
   folder: 'folder',
   folderOpen: 'folder-open',

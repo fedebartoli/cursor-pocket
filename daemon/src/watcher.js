@@ -20,7 +20,7 @@ import { EventEmitter } from 'node:events';
 import { buildChat, classifyAttention, headerSignature, isPendingQuestion, isPendingReview, isRunning, isVisibleLocalChat } from './cursor/model.js';
 import { normalizeQuestionParams } from './cursor/questions.js';
 import { errorFields } from './log.js';
-import { activityOf, toolActivity } from './state/present.js';
+import { activityOf, toolActivity, toolStateOf } from './state/present.js';
 import { SHELL_TOOLS } from './cursor/model.js';
 
 const SETTINGS_TTL_MS = 10_000;
@@ -333,6 +333,28 @@ export class Watcher extends EventEmitter {
     this.#setStatus({ ok: true, lastScanAt: now, lastError: null, chats: chats.length });
     this.emit('snapshot', this.#last);
     for (const ev of events) this.emit('event', ev);
+  }
+
+  /**
+   * Una pagina della conversazione per la PWA (sola lettura). Messaggi di utente e assistente con il testo; i tool come
+   * semplici righe (tipo di azione e stato, mai comandi ne' percorsi); i bubble senza testo ne' tool si saltano.
+   * @returns {{ items: object[], from: number, total: number, hasMore: boolean } | null}
+   */
+  history(id, { before = null, limit = 30 } = {}) {
+    if (!this.#last?.chats.some((c) => c.id === id) || !this.#db.isOpen) return null;
+    const page = this.#db.conversationPage(id, { before, limit });
+    if (!page) return null;
+    const now = this.#now();
+    const items = [];
+    for (const b of page.items) {
+      if (b.tool) {
+        const { label, category } = toolActivity(b.tool.name);
+        items.push({ id: b.id, index: b.index, at: b.at, role: 'tool', label, category, state: toolStateOf(b.tool.status, b.at, now) });
+      } else if (b.text) {
+        items.push({ id: b.id, index: b.index, at: b.at, role: b.type === 1 ? 'user' : 'assistant', text: b.text, truncated: b.truncated });
+      }
+    }
+    return { items, from: page.from, total: page.total, hasMore: page.from > 0 };
   }
 
   /** Dettagli on-demand di una chat: ultimo messaggio dell'assistente e domanda (se c'e'). */

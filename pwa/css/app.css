@@ -568,3 +568,16 @@ button.section-head { cursor: pointer; }
 .send.stop svg { fill: currentColor; }
 .send.stop.armed { background: var(--danger); color: var(--on-danger); }
 .send.stop:disabled { opacity: 0.6; }
+
+/* Conversazione intera (sola lettura) */
+.hist-list { display: grid; gap: 10px; padding: 12px 16px 24px; }
+.hist-older { margin: 12px 16px 0; width: calc(100% - 32px); }
+.hist-msg { padding: 12px 14px; border-radius: var(--r-box); background: var(--surface); }
+.hist-msg.user { background: var(--surface-2); }
+.hist-meta { display: flex; align-items: center; gap: 6px; font-size: 13px; font-weight: 600; color: var(--text-2); }
+.hist-meta .hint { margin-left: auto; font-weight: 400; }
+.hist-msg .message { margin-top: 6px; }
+.hist-tool { display: flex; align-items: center; gap: 8px; padding: 0 4px; font-size: 13px; color: var(--text-2); }
+.hist-tool-mark { display: inline-flex; flex: none; }
+.hist-tool.running .hist-tool-mark { color: var(--accent); }
+.hist-tool.error .hist-tool-mark { color: var(--danger); }

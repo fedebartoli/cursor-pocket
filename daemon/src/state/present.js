@@ -93,6 +93,9 @@ function toolState(status) {
 const STALE_RUNNING_MS = 15 * 60_000;
 const staleRunning = (state, at, now) => (state === 'running' && at && now - at > STALE_RUNNING_MS ? '' : state);
 
+/** Stato di un tool (done | running | error | stopped | '') tenendo conto dei residui vecchi. */
+export const toolStateOf = (status, at, now) => staleRunning(toolState(status), at, now);
+
 const firstLine = (t, n) => {
   const line = String(t ?? '').split('\n').find((l) => l.trim()) ?? '';
   const s = line.trim().replace(/\s+/g, ' ');

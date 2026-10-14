@@ -117,9 +117,10 @@ export function mountChat(root, id) {
   const panelHost = h('div.region');
   const activityHost = h('div.region');
   const messageHost = h('div.region');
+  const linkHost = h('div.region');
   const composer = createComposer({ chatId: id, onSend: sendMessage, onStop: stopAgent });
   // Il distanziatore spinge il compositore in fondo quando il contenuto e' corto (e garantisce un minimo di respiro).
-  replace(root, h('div', { class: 'screen chat-screen' }, topHost, panelHost, activityHost, messageHost, h('div', { class: 'chat-spacer', 'aria-hidden': 'true' }), composer.el));
+  replace(root, h('div', { class: 'screen chat-screen' }, topHost, panelHost, activityHost, messageHost, linkHost, h('div', { class: 'chat-spacer', 'aria-hidden': 'true' }), composer.el));
 
   let loading = false;
   async function load() {
@@ -545,6 +546,7 @@ export function mountChat(root, id) {
     const actionsOk = lv.payload?.status?.actions === 'ok' && !lv.offline;
     const mode = activityMode(card);
     const changed = [renderTop(lv, card), renderPanel(lv, card, actionsOk, mode), renderActivity(card, mode), renderMessage(card)].some(Boolean);
+    commit(linkHost, card ? h('a', { class: 'row help-link', href: `#/chat/${enc}/storia` }, icon('messages', { size: 20 }), h('div.row-main', null, h('div.row-title', null, 'Conversazione intera')), icon('chevronRight', { size: 18 })) : null);
     renderComposer(lv, card);
     if (changed) window.scrollTo(0, y);
   }

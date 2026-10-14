@@ -113,6 +113,20 @@ chat(7, 'Aggiorna le dipendenze', 'negozio', 60 * 24 * 4);
 talk(7, 60 * 24 * 4, 'Aggiornate le librerie minori; restano due major da valutare.');
 chat(8, 'Documentazione delle API', 'negozio', 60 * 24 * 9);
 talk(8, 60 * 24 * 9, 'Ho generato la documentazione a partire dagli schemi.');
+{
+  // Conversazione lunga (oltre una pagina) per provare "Messaggi precedenti".
+  const t0 = ago(60 * 24 * 9);
+  const long = [];
+  for (let i = 0; i < 44; i++) {
+    const at = t0 - (44 - i) * 60_000;
+    if (i % 4 === 2) long.push({ id: `h${i}`, type: 2, createdAt: at, tool: { name: 'read_file_v2', status: 'completed', toolCallId: `tc-h${i}`, params: { path: '/demo/schema.json' } } });
+    else if (i % 2 === 0) long.push({ id: `h${i}`, type: 1, createdAt: at, text: `Domanda numero ${i / 2 + 1} sulla documentazione.` });
+    else long.push({ id: `h${i}`, type: 2, createdAt: at, text: `Risposta numero ${(i - 1) / 2 + 1}.\n\n- primo punto\n- secondo punto` });
+  }
+  long.push({ id: 'h-last', type: 2, createdAt: t0, text: 'Ho generato la documentazione a partire dagli schemi.' });
+  bubblesOf.set(8, long);
+  fx.conversation(id(8), long);
+}
 
 // App mobile
 chat(9, 'Tema scuro nelle impostazioni', 'app', 25, { hasUnreadMessages: true });

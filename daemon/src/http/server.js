@@ -146,7 +146,7 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
     }
 
     // --- chat ---
-    const m = /^\/api\/chats\/([^/]+)(?:\/(ignore|answer|message|skip|approval|stop|prefs))?$/.exec(path);
+    const m = /^\/api\/chats\/([^/]+)(?:\/(ignore|answer|message|skip|approval|stop|prefs|history))?$/.exec(path);
     if (m) {
       const id = m[1];
       const action = m[2];
@@ -159,6 +159,18 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
         watcher.boost(id, 15_000); // si sta guardando questa chat: la si rilegge spesso finche' la pagina e' aperta
         const extra = watcher.detail(id) ?? { lastMessage: null, question: null, activity: [], approval: null };
         return sendJson(res, 200, { chat: card ?? null, lastMessage: extra.lastMessage, question: extra.question, activity: extra.activity ?? [], approval: extra.approval ?? null }, headers);
+      }
+      // Conversazione intera, a pagine dal fondo: `?before=<indice>&limit=<n>`. Sola lettura, solo per indice (mai per intero).
+      if (action === 'history' && method === 'GET') {
+        const num = (k, dflt, max) => {
+          const raw = req.searchParams?.get(k);
+          if (raw === null || raw === undefined || raw === '') return dflt;
+          if (!/^\d{1,7}$/.test(raw)) throw new HttpError(400, 'bad_query', 'Parametro non valido');
+          return Math.min(Number(raw), max);
+        };
+        const page = watcher.history(id, { before: num('before', null, 10_000_000), limit: Math.max(1, num('limit', 30, 60)) });
+        if (!page) throw new HttpError(503, 'unavailable', 'La conversazione non e\' leggibile adesso');
+        return sendJson(res, 200, page, headers);
       }
       if (action === 'ignore' && (method === 'POST' || method === 'DELETE')) {
         const body = await readJson(req);
@@ -278,6 +290,7 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
           return sendText(res, 403, 'Accesso negato', headers);
         }
       }
+      req.searchParams = new URLSearchParams(u.search);
       if (u.pathname.startsWith('/api/')) return await api(req, res, u.pathname, headers, secure);
       if (req.method !== 'GET' && req.method !== 'HEAD') return sendText(res, 405, 'Metodo non consentito', headers);
       return serveStatic({ root: config.pwaDir, req, res, urlPath: u.pathname, headers });

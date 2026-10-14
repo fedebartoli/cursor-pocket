@@ -7,6 +7,7 @@ import { resyncPush } from './push.js';
 import { initViewport } from './viewport.js';
 import { mountChat } from './views/chat.js';
 import { mountHelp } from './views/help.js';
+import { mountHistory } from './views/history.js';
 import { mountHome } from './views/home.js';
 import { mountLogin, mountUnreachable } from './views/login.js';
 import { mountSettings } from './views/settings.js';
@@ -37,7 +38,7 @@ const tabbar = h('nav', { class: 'tabbar', 'aria-label': 'Navigazione principale
 document.body.append(tabbar);
 
 function updateTabbar(routeName) {
-  const visible = mode === 'app' && routeName !== 'chat';
+  const visible = mode === 'app' && routeName !== 'chat' && routeName !== 'history';
   tabbar.hidden = !visible;
   document.body.classList.toggle('has-tabbar', visible);
   const active = routeName === 'help' ? 'settings' : routeName; // "Come funziona" sta sotto Impostazioni
@@ -64,6 +65,15 @@ function parseRoute() {
       // identificativo malformato: si torna all'elenco
     }
   }
+  const hist = /^#\/chat\/([^/?]+)\/storia$/.exec(hash);
+  if (hist) {
+    try {
+      const id = decodeURIComponent(hist[1]);
+      if (id) return { name: 'history', id, key: `history:${id}` };
+    } catch {
+      // identificativo malformato: si torna all'elenco
+    }
+  }
   if (hash === '#/impostazioni') return { name: 'settings', key: 'settings' };
   if (hash === '#/come-funziona') return { name: 'help', key: 'help' };
   if (hash === '#/chat') return { name: 'chats', key: 'chats' };
@@ -80,6 +90,7 @@ function mountRoute() {
   currentKey = route.key;
   updateTabbar(route.name);
   if (route.name === 'chat') view = mountChat(root, route.id);
+  else if (route.name === 'history') view = mountHistory(root, route.id);
   else if (route.name === 'settings') view = mountSettings(root, { onLoggedOut: showLogin });
   else if (route.name === 'help') view = mountHelp(root);
   else view = mountHome(root, route.name === 'home' ? 'attention' : route.name);

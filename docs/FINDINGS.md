@@ -593,6 +593,14 @@ viewport, che su iOS 10+ impedisce lo zoom automatico al focus ma lascia lo zoom
   pagina aperta con il numero di chat che richiedono attenzione). Limite iOS: con l'app chiusa il numero cambia solo quando arriva
   una notifica (non esistono push silenziose): se risolvi una domanda sul Mac, il numero si aggiorna alla notifica successiva.
 
+### 10.4h Conversazione intera, a pagine (15/10) [OK in test, NON PROVATO su iPhone]
+- `GET /api/chats/:id/history?before=<indice>&limit=<n>` (limite 60, default 30): i bubble che precedono l'indice, in ordine
+  cronologico, letti SOLO per indice dalla lista `fullConversationHeadersOnly` (mai l'intera conversazione, mai una scansione). Utente
+  e assistente con il testo (tagliato a 6000 caratteri, con `truncated`); i tool come righe (tipo di azione e stato, mai comandi ne'
+  percorsi); i bubble vuoti si saltano. Sola lettura: nessuna azione verso Cursor. Il contenuto non finisce mai nei log.
+- PWA: `#/chat/<id>/storia` (link "Conversazione intera" nella pagina della chat): parte dal fondo, "Messaggi precedenti" carica
+  la pagina prima mantenendo il punto di lettura. Testo dell'agente in Markdown sicuro (nessun link attivo).
+
 ### 10.5 Da verificare dal vivo, con Cursor riavviato con la porta di debug [NON PROVATO]
 Ogni punto ha una diagnostica pronta: `cd daemon && npm run cdp -- status | inspect | tray` (stampa la struttura della
 pagina e mai i testi).

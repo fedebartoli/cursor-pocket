@@ -4,7 +4,7 @@ import { h } from './dom.js';
 import { timeAgo } from './format.js';
 import { icon } from './icons.js';
 
-const CATEGORY_ICON = {
+export const CATEGORY_ICON = {
   read: 'fileText',
   edit: 'pencil',
   delete: 'trash',

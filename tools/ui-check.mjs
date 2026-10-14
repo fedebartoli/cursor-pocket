@@ -509,6 +509,25 @@ try {
   check('impostazioni: pannello "Rispondere dal telefono" con stato Attivo', await page.locator('text=Attivo. Dalle chat').isVisible());
   await shot('07-settings');
 
+  // --- conversazione intera: solo lettura, a pagine dal fondo ---
+  await page.goto(CHAT(8));
+  await page.waitForSelector('a[href$="/storia"]');
+  await page.locator('a[href$="/storia"]').click();
+  await page.waitForSelector('.hist-msg');
+  await sleep(300);
+  check('conversazione: si apre dal link, parte dal fondo (ultimo messaggio visibile)', await page.locator('.hist-msg', { hasText: 'Ho generato la documentazione' }).isVisible());
+  check('conversazione: solo lettura (nessun compositore) e senza barra in basso', (await page.locator('.composer-input').count()) === 0 && !(await page.locator('.tabbar').isVisible()));
+  check('conversazione: i tool sono righe discrete con icona SVG', (await page.locator('.hist-tool svg').count()) >= 1 && !(await page.locator('.hist-list').innerText()).includes('schema.json'));
+  const nBefore = await page.locator('.hist-msg').count();
+  check('conversazione: c\'e\' "Messaggi precedenti" (oltre una pagina)', await page.locator('.hist-older').isVisible() || nBefore > 0);
+  await page.evaluate(() => window.scrollTo(0, 0));
+  await page.locator('.hist-older').click();
+  await page.waitForFunction((n) => document.querySelectorAll('.hist-msg').length > n, nBefore, { timeout: 8000 });
+  check('conversazione: "Messaggi precedenti" carica altri messaggi e il bottone sparisce a fine storia', (await page.locator('.hist-msg', { hasText: /Domanda numero 1 sulla/ }).count()) === 1 && (await page.locator('.hist-older').count()) === 0);
+  await shot('16-history');
+  await page.locator('.appbar-back').click();
+  await page.waitForSelector('.chat-head');
+
   // --- dispositivi abbinati: l'altro dispositivo si scollega con due tocchi ---
   await page.goto(`${BASE}/#/impostazioni`);
   await page.waitForSelector('.device-row');

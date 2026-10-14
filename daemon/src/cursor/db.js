@@ -98,6 +98,12 @@ export class CursorDb {
            FROM cursorDiskKV AS c, json_each(c.value, '$.fullConversationHeadersOnly') AS j
           WHERE c.key = ? AND j.key >= ?`,
       ),
+      bubbleIdsRange: db.prepare(
+        `SELECT json_extract(j.value, '$.bubbleId') AS bubbleId, json_extract(j.value, '$.type') AS type
+           FROM cursorDiskKV AS c, json_each(c.value, '$.fullConversationHeadersOnly') AS j
+          WHERE c.key = ? AND j.key >= ? AND j.key < ?
+          ORDER BY j.key`,
+      ),
       item: db.prepare('SELECT value FROM ItemTable WHERE key = ?'),
     };
   }
@@ -255,6 +261,40 @@ export class CursorDb {
       });
     }
     return out;
+  }
+
+  /**
+   * Una pagina della conversazione (sola lettura), dal fondo verso l'inizio: i `limit` bubble che precedono l'indice `before`
+   * (default: la fine), in ordine cronologico. Ogni elemento: indice, tipo, ora, tool (nome e stato) e testo (tagliato a `maxChars`).
+   * Si interroga solo per indice: non si legge mai l'intera conversazione.
+   * @returns {{ total: number, from: number, items: object[] } | null}
+   */
+  conversationPage(composerId, { before = null, limit = 30, maxChars = 6000 } = {}) {
+    const st = this.#need();
+    const tail = st.tail.get(`composerData:${composerId}`);
+    if (!tail) return null;
+    const total = tail.bubbleCount ?? 0;
+    const end = Math.max(0, Math.min(total, Number.isInteger(before) ? before : total));
+    const from = Math.max(0, end - limit);
+    const items = [];
+    if (end > from) {
+      const ids = st.bubbleIdsRange.all(`composerData:${composerId}`, from, end);
+      ids.forEach(({ bubbleId, type }, i) => {
+        const r = st.brief.get(maxChars + 1, `bubbleId:${composerId}:${bubbleId}`);
+        if (!r) return;
+        const text = String(r.text ?? '').trim();
+        items.push({
+          id: bubbleId,
+          index: from + i,
+          type: r.type ?? type ?? null,
+          at: toMs(r.createdAt),
+          tool: r.toolName ? { name: r.toolName, status: r.toolStatus ?? null } : null,
+          text: text.slice(0, maxChars),
+          truncated: text.length > maxChars,
+        });
+      });
+    }
+    return { total, from, items };
   }
 
   /** Impostazioni della sidebar dell'Agents Window (ordine dei gruppi, raggruppamento). */

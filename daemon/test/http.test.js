@@ -520,3 +520,52 @@ test('dispositivi abbinati: elenco senza segreti, scollegare un altro dispositiv
     await h.stop();
   }
 });
+
+test('conversazione: pagine dal fondo, tool come righe senza parametri, testo tagliato, parametri validati, nessun contenuto nei log', async () => {
+  const h = await startHarness();
+  try {
+    const cookie = await h.pair();
+    const ID = '11111111-1111-4111-8111-111111111111';
+    h.fx.chat(ID, { name: 'Lunga', lastUpdatedAt: T0 - 1000 });
+    const bubbles = [];
+    for (let i = 0; i < 70; i++) {
+      if (i % 5 === 3) bubbles.push({ id: `b${i}`, type: 2, createdAt: T0 - 100_000 + i * 1000, tool: { name: 'run_terminal_command_v2', status: 'completed', toolCallId: `t${i}`, params: { command: 'rm -rf SEGRETO' } } });
+      else if (i % 5 === 4) bubbles.push({ id: `b${i}`, type: 2, createdAt: T0 - 100_000 + i * 1000, text: '' });
+      else bubbles.push({ id: `b${i}`, type: i % 2 === 0 ? 1 : 2, createdAt: T0 - 100_000 + i * 1000, text: `testo ${i}${i === 67 ? ' ' + 'x'.repeat(7000) : ''}` });
+    }
+    h.fx.conversation(ID, bubbles);
+    h.tick();
+    const get = (q = '') => h.req({ path: `/api/chats/${ID}/history${q}`, cookie });
+
+    const first = await get('?limit=20');
+    assert.equal(first.status, 200, first.text);
+    const p1 = first.json();
+    assert.equal(p1.total, 70);
+    assert.equal(p1.from, 50);
+    assert.equal(p1.hasMore, true);
+    assert.ok(p1.items.every((i) => i.index >= 50 && i.index < 70));
+    assert.ok(p1.items.every((i, k, a) => k === 0 || a[k - 1].index < i.index), 'ordine cronologico');
+    assert.ok(!p1.items.some((i) => i.role !== 'tool' && !i.text), 'bubble vuoti saltati');
+    const tool = p1.items.find((i) => i.role === 'tool');
+    assert.equal(tool.label, 'Esegue un comando');
+    assert.ok(!JSON.stringify(p1).includes('SEGRETO'), 'nessun comando');
+    const last = p1.items.find((i) => i.index === 67);
+    assert.equal(last.text.length, 6000);
+    assert.equal(last.truncated, true);
+    assert.equal(last.role, 'assistant');
+
+    const second = (await get('?before=50&limit=60')).json();
+    assert.equal(second.from, 0);
+    assert.equal(second.hasMore, false);
+    assert.ok(second.items.every((i) => i.index < 50));
+    assert.equal((await get('?before=0')).json().items.length, 0);
+
+    assert.equal((await get('?before=abc')).status, 400);
+    assert.equal((await get('?limit=-1')).status, 400);
+    assert.equal((await h.req({ path: '/api/chats/22222222-2222-4222-8222-222222222222/history', cookie })).status, 404);
+    assert.equal((await h.req({ path: `/api/chats/${ID}/history` })).status, 401);
+    assert.equal((await h.req({ method: 'POST', path: `/api/chats/${ID}/history`, cookie, body: {} })).status, 405);
+  } finally {
+    await h.stop();
+  }
+});
