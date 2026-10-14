@@ -84,7 +84,10 @@ tailnet (non su Internet).
    `dig +short <nome> @8.8.8.8` mostra indirizzi pubblici che sulla 443 chiudono la connessione. Sul telefono il sintomo
    osservato e' stato: PWA ferma sullo scheletro e anche Safari che non carica l'indirizzo (la causa lato iPhone e' dedotta
    da questo, non provata dentro l'iPhone). Controllo: `tailscale serve status --json` e cerca `AllowFunnel`. Rimedio:
-   spegnere il Funnel (`tailscale funnel --https=<porta> off`). Dalla versione con timeout l'app mostra "Daemon non
+   spegnere il Funnel (`tailscale funnel --https=<porta> off`): NON basta, il record DNS pubblico resta registrato (verificato
+   anche sul DNS autorevole) e il telefono continuava a non caricare. Ha funzionato dare al Mac un nuovo nome
+   (`tailscale set --hostname=<nuovo>`, poi `tailscale serve reset` e `tailscale serve --bg 8787`): il nuovo nome non ha
+   indirizzo pubblico, ma cambia l'indirizzo della PWA (reinstallare e abbinare di nuovo). Dalla versione con timeout l'app mostra "Daemon non
    raggiungibile" dopo 10 secondi invece di restare ferma.
 5. Facoltativo ma consigliato: `CP_ALLOWED_TS_LOGINS=tuo@account npm start` accetta solo richieste che portano
    quell'identita' Tailscale (intestazione aggiunta da `serve`; blocca anche un eventuale Funnel, che non la porta).
