@@ -156,11 +156,13 @@ try {
   check('ricerca: cancellando tornano tutte le chat', (await page.locator('.row').count()) === allRows);
   await shot('11-chat-tab');
   const vh = page.viewportSize().height;
-  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await page.evaluate(() => { const a = document.getElementById('app'); a.scrollTop = a.scrollHeight; });
   await sleep(250);
   const tb2 = await page.locator('.tabbar').boundingBox();
   check('barra in basso: dopo lo scorrimento resta incollata al fondo', tb2 && Math.abs(tb2.y + tb2.height - vh) <= 1, JSON.stringify(tb2));
-  await page.evaluate(() => window.scrollTo(0, 0));
+  const sc = await page.evaluate(() => ({ app: document.getElementById('app').scrollTop, doc: Math.round(window.scrollY), over: document.documentElement.scrollHeight - window.innerHeight }));
+  check('barra in basso: scorre solo il contenuto, il documento resta fermo', sc.app > 0 && sc.doc === 0 && sc.over <= 1, JSON.stringify(sc));
+  await page.evaluate(() => { document.getElementById('app').scrollTop = 0; });
 
   // cuore: dalla pagina della chat; compare in Preferite e si toglie da li'
   await page.goto(CHAT(2));
@@ -397,7 +399,7 @@ try {
     const cdp = await ctx.newCDPSession(page);
     let stateReqs = 0;
     page.on('request', (r) => { if (r.url().endsWith('/api/state')) stateReqs += 1; });
-    await page.evaluate(() => window.scrollTo(0, 0));
+    await page.evaluate(() => { document.getElementById('app').scrollTop = 0; });
     const t0 = stateReqs;
     await cdp.send('Input.dispatchTouchEvent', { type: 'touchStart', touchPoints: [{ x: 200, y: 200 }] });
     for (let y = 215; y <= 335; y += 20) await cdp.send('Input.dispatchTouchEvent', { type: 'touchMove', touchPoints: [{ x: 200, y }] });

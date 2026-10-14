@@ -145,6 +145,19 @@ h1, h2, h3, p { margin: 0; }
 .tab-badge { position: absolute; top: -5px; left: 55%; min-width: 18px; padding: 0 5px; border-radius: var(--r-pill); background: var(--danger); color: var(--on-danger); font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
 .tab-badge[hidden] { display: none; }
 body.has-tabbar .app { padding-bottom: calc(var(--tabbar-h) + 24px + env(safe-area-inset-bottom)); }
+/* Con la barra in basso scorre solo #app: il documento e' fermo, quindi il rimbalzo di iOS non puo' spostare la barra. */
+body.has-tabbar { position: fixed; inset: 0; overflow: hidden; }
+body.has-tabbar .app {
+  height: 100%;
+  max-width: none;
+  margin: 0;
+  overflow-x: hidden;
+  overflow-y: auto;
+  -webkit-overflow-scrolling: touch;
+  overscroll-behavior: contain;
+  padding-left: max(env(safe-area-inset-left), calc((100% - 640px) / 2));
+  padding-right: max(env(safe-area-inset-right), calc((100% - 640px) / 2));
+}
 
 /* ---------- sezioni e liste ---------- */
 .section-head {

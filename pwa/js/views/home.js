@@ -8,6 +8,7 @@ import { commit, h, replace } from '../dom.js';
 import { icon } from '../icons.js';
 import { getLive, refresh } from '../live.js';
 import { environment } from '../push.js';
+import { scrollToY, scrollTop } from '../scroll.js';
 
 const PREFS_KEY = 'cp.home.v1';
 const PREVIEW = 5; // chat mostrate per workspace prima di "Mostra altre"
@@ -192,7 +193,7 @@ export function mountHome(root, mode = 'attention') {
     ptr.style.setProperty('--ptr-r', `${p * 4}deg`);
   };
   const onTouchStart = (e) => {
-    if (e.touches.length !== 1 || window.scrollY > 0 || refreshing) {
+    if (e.touches.length !== 1 || scrollTop() > 0 || refreshing) {
       ptrY = null;
       return;
     }
@@ -205,7 +206,7 @@ export function mountHome(root, mode = 'attention') {
     const dy = e.touches[0].clientY - ptrY;
     const adx = Math.abs(e.touches[0].clientX - ptrX);
     if (!pulling) {
-      if (dy > 10 && dy > adx * 1.5 && window.scrollY <= 0) pulling = true;
+      if (dy > 10 && dy > adx * 1.5 && scrollTop() <= 0) pulling = true;
       else if (dy < -6 || adx > 24) ptrY = null;
       if (!pulling) return;
     }
@@ -361,7 +362,7 @@ export function mountHome(root, mode = 'attention') {
       pendingRender = true;
       return;
     }
-    const y = window.scrollY;
+    const y = scrollTop();
     const lv = getLive();
     const state = lv.payload?.state ?? null;
     const status = lv.payload?.status ?? null;
@@ -403,7 +404,7 @@ export function mountHome(root, mode = 'attention') {
 
     const headChanged = commit(headHost, top);
     const bodyChanged = commit(bodyHost, body);
-    if (headChanged || bodyChanged) window.scrollTo(0, y);
+    if (headChanged || bodyChanged) scrollToY(y);
   }
 
   render();

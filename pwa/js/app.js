@@ -4,6 +4,7 @@ import { forgetCommit, h } from './dom.js';
 import { icon } from './icons.js';
 import { getLive, startLive, stopLive, subscribe } from './live.js';
 import { resyncPush } from './push.js';
+import { scrollToY, scrollTop } from './scroll.js';
 import { initViewport } from './viewport.js';
 import { mountChat } from './views/chat.js';
 import { mountHelp } from './views/help.js';
@@ -87,7 +88,7 @@ function parseRoute() {
 
 function mountRoute() {
   if (mode !== 'app') return;
-  scrollMemory.set(currentKey, window.scrollY);
+  scrollMemory.set(currentKey, scrollTop());
   view?.destroy?.();
   forgetCommit(root); // la nuova vista deve sempre sostituire il contenuto, anche se identico al precedente
   const route = parseRoute();
@@ -102,7 +103,7 @@ function mountRoute() {
   else view = mountHome(root, route.name === 'home' ? 'attention' : route.name);
   // Si ripristina la posizione degli elenchi; le altre schermate partono dall'alto.
   const isList = ['home', 'chats', 'favorites'].includes(route.name);
-  window.scrollTo(0, isList ? (scrollMemory.get(route.key) ?? 0) : 0);
+  scrollToY(isList ? (scrollMemory.get(route.key) ?? 0) : 0);
   // Accessibilita': dopo un cambio di schermata il lettore vocale parte dal titolo della nuova schermata.
   if (navigated) {
     root.querySelector('.appbar-title')?.focus({ preventScroll: true });

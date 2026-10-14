@@ -684,6 +684,12 @@ viewport, che su iOS 10+ impedisce lo zoom automatico al focus ma lascia lo zoom
 - Provato dal vivo: lettura delle liste e scelta + ripristino del modello senza inviare messaggi. Nel progetto di prova esiste un solo ramo (master),
   quindi la scelta del ramo e' provata solo col mock.
 
+### 10.4o Barra in basso ferma (15/10) [PROVATO nei test WebKit/Chromium; su iPhone vero NON PROVATO]
+- Segnalazione: la barra si muoveva ancora ogni tanto (rimbalzo di fine corsa su iOS: il visual viewport si sposta rispetto al layout).
+- Soluzione strutturale: nelle schermate con la barra (elenchi, impostazioni, aiuto, archivio) il `body` e' fisso e scorre solo `#app`
+  (`pwa/js/scroll.js` sceglie il contenitore giusto); il documento non scorre mai, quindi non c'e' rimbalzo che possa spostare la barra.
+  Nelle chat (compositore e tastiera) scorre ancora la finestra. Resta il riallineamento `--vv-shift` come rete di sicurezza.
+
 ### 10.5 Da verificare dal vivo, con Cursor riavviato con la porta di debug [NON PROVATO]
 Ogni punto ha una diagnostica pronta: `cd daemon && npm run cdp -- status | inspect | tray` (stampa la struttura della
 pagina e mai i testi).
