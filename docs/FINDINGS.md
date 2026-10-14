@@ -585,6 +585,14 @@ viewport, che su iOS 10+ impedisce lo zoom automatico al focus ma lascia lo zoom
 - PWA: nel compositore, a campo vuoto e agente al lavoro, il pulsante di invio diventa "Ferma" (quadrato); serve un secondo tocco
   entro 4 s (diventa rosso). Scrivendo del testo torna "Invia". Da provare dal vivo: etichetta e posizione del pulsante in Cursor 3.x.
 
+### 10.4g Dispositivi abbinati e badge (15/10) [OK in test, NON PROVATO su iPhone]
+- Impostazioni > Dispositivi abbinati (compare solo con almeno due dispositivi): `GET /api/devices` (id = hash dell'hash del
+  token, etichetta, ultimo accesso, notifiche attive; mai token ne' hash) e `POST /api/devices/:id/revoke` (rimuove la sessione e
+  le sue sottoscrizioni push; il dispositivo corrente non si scollega da qui: per quello c'e' "Esci"). Due tocchi.
+- Badge sull'icona: gia' presente dalla Fase 1 (`setAppBadge` dal service worker con il valore `badge` della notifica push, e dalla
+  pagina aperta con il numero di chat che richiedono attenzione). Limite iOS: con l'app chiusa il numero cambia solo quando arriva
+  una notifica (non esistono push silenziose): se risolvi una domanda sul Mac, il numero si aggiorna alla notifica successiva.
+
 ### 10.5 Da verificare dal vivo, con Cursor riavviato con la porta di debug [NON PROVATO]
 Ogni punto ha una diagnostica pronta: `cd daemon && npm run cdp -- status | inspect | tray` (stampa la struttura della
 pagina e mai i testi).

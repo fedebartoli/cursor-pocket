@@ -483,3 +483,40 @@ test('orari senza notifiche: dentro la fascia niente push, fuori si; validazione
     await h2.stop();
   }
 });
+
+test('dispositivi abbinati: elenco senza segreti, scollegare un altro dispositivo (non il corrente), sessione e notifiche rimosse', async () => {
+  const h = await startHarness();
+  try {
+    const mine = await h.pair();
+    const { code } = h.app.auth.createPairingCode();
+    const other = await h.req({ method: 'POST', path: '/api/pair', body: { code, label: 'iPad' } });
+    const otherCookie = other.headers['set-cookie'][0].split(';')[0];
+
+    const list = (await h.req({ path: '/api/devices', cookie: mine })).json().devices;
+    assert.equal(list.length, 2);
+    assert.equal(list.filter((d) => d.current).length, 1);
+    const ipad = list.find((d) => d.label === 'iPad');
+    assert.ok(ipad && ipad.current === false && /^[0-9a-f]{16}$/.test(ipad.id));
+    const raw = JSON.stringify(list);
+    assert.ok(!raw.includes(otherCookie.split('=')[1]), 'il token non esce mai');
+    assert.ok(!/tokenHash|token_hash/.test(raw));
+
+    // senza sessione: 401
+    assert.equal((await h.req({ path: '/api/devices' })).status, 401);
+    // il dispositivo corrente non si scollega da qui
+    const cur = list.find((d) => d.current);
+    const r1 = await h.req({ method: 'POST', path: `/api/devices/${cur.id}/revoke`, cookie: mine, body: {} });
+    assert.equal(r1.status, 409);
+    assert.equal(r1.json().error, 'current_device');
+    assert.equal((await h.req({ method: 'POST', path: '/api/devices/0000000000000000/revoke', cookie: mine, body: {} })).status, 404);
+
+    // l'altro dispositivo funziona, poi viene scollegato
+    assert.equal((await h.req({ path: '/api/state', cookie: otherCookie })).status, 200);
+    const r2 = await h.req({ method: 'POST', path: `/api/devices/${ipad.id}/revoke`, cookie: mine, body: {} });
+    assert.equal(r2.status, 200);
+    assert.equal((await h.req({ path: '/api/state', cookie: otherCookie })).status, 401);
+    assert.equal((await h.req({ path: '/api/devices', cookie: mine })).json().devices.length, 1);
+  } finally {
+    await h.stop();
+  }
+});

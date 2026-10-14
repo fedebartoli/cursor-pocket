@@ -32,6 +32,8 @@ export function parseCookies(header) {
   return out;
 }
 
+const deviceId = (tokenHash) => sha256Hex(`device:${tokenHash}`).slice(0, 16);
+
 export function sessionCookie(token, { secure }) {
   const maxAge = Math.floor(SESSION_IDLE_MS / 1000);
   return `${COOKIE_NAME}=${token}; Path=/; HttpOnly; SameSite=Strict; Max-Age=${maxAge}${secure ? '; Secure' : ''}`;
@@ -104,6 +106,34 @@ export class Auth {
     }
     if (now - s.lastSeenAt > TOUCH_EVERY_MS) this.#store.touchSession(tokenHash, now);
     return { tokenHash, token };
+  }
+
+  /**
+   * Dispositivi abbinati, senza segreti: l'identificativo e' un hash dell'hash del token (non permette di autenticarsi).
+   * @returns {{id: string, label: string|null, createdAt: number, lastSeenAt: number, current: boolean, notifications: boolean}[]}
+   */
+  devices(currentTokenHash) {
+    const withPush = new Set(this.#store.listSubscriptions().map((x) => x.sessionHash));
+    return this.#store
+      .listSessions()
+      .map((x) => ({
+        id: deviceId(x.tokenHash),
+        label: x.label,
+        createdAt: x.createdAt,
+        lastSeenAt: x.lastSeenAt,
+        current: x.tokenHash === currentTokenHash,
+        notifications: withPush.has(x.tokenHash),
+      }))
+      .sort((a, b) => b.lastSeenAt - a.lastSeenAt);
+  }
+
+  /** Scollega un altro dispositivo (mai quello corrente: per quello c'e' l'uscita normale). @returns 'ok' | 'current' | 'unknown' */
+  revokeDevice(id, currentTokenHash) {
+    const target = this.#store.listSessions().find((x) => deviceId(x.tokenHash) === id);
+    if (!target) return 'unknown';
+    if (target.tokenHash === currentTokenHash) return 'current';
+    this.logout(target.tokenHash);
+    return 'ok';
   }
 
   /** Termina la sessione e le sue sottoscrizioni push. */

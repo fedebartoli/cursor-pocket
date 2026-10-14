@@ -292,6 +292,8 @@ const app = createApp({
   },
 });
 await app.start();
+// Un secondo dispositivo gia' abbinato, per mostrare l'elenco in Impostazioni.
+app.auth.pair(app.auth.createPairingCode().code, { label: 'iPad' });
 const { code } = app.auth.createPairingCode();
 console.log(`Demo attiva: http://127.0.0.1:${port}/`);
 console.log(`Codice di abbinamento (15 min): ${code}`);

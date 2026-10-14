@@ -132,6 +132,19 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
       return sendJson(res, 200, { ok: true }, { ...headers, 'Set-Cookie': clearedCookie(cookieOpts) });
     }
 
+    // --- dispositivi abbinati ---
+    if (path === '/api/devices' && method === 'GET') {
+      return sendJson(res, 200, { devices: auth.devices(session.tokenHash) }, headers);
+    }
+    const dv = /^\/api\/devices\/([0-9a-f]{16})\/revoke$/.exec(path);
+    if (dv && method === 'POST') {
+      const r = auth.revokeDevice(dv[1], session.tokenHash);
+      if (r === 'unknown') throw new HttpError(404, 'not_found', 'Dispositivo non trovato');
+      if (r === 'current') throw new HttpError(409, 'current_device', 'Questo e\' il dispositivo che stai usando: per scollegarlo usa "Esci da questo dispositivo".');
+      logger.info('device_revoked');
+      return sendJson(res, 200, { ok: true }, headers);
+    }
+
     // --- chat ---
     const m = /^\/api\/chats\/([^/]+)(?:\/(ignore|answer|message|skip|approval|stop|prefs))?$/.exec(path);
     if (m) {

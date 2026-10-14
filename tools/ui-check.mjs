@@ -509,6 +509,18 @@ try {
   check('impostazioni: pannello "Rispondere dal telefono" con stato Attivo', await page.locator('text=Attivo. Dalle chat').isVisible());
   await shot('07-settings');
 
+  // --- dispositivi abbinati: l'altro dispositivo si scollega con due tocchi ---
+  await page.goto(`${BASE}/#/impostazioni`);
+  await page.waitForSelector('.device-row');
+  check('dispositivi: elenco con questo dispositivo e un altro (iPad)', (await page.locator('.device-row').count()) === 2 && (await page.locator('.device-row', { hasText: 'Questo dispositivo' }).count()) === 1 && (await page.locator('.device-row', { hasText: 'iPad' }).count()) === 1);
+  check('dispositivi: il dispositivo corrente non ha "Scollega"', (await page.locator('.device-row', { hasText: 'Questo dispositivo' }).locator('button').count()) === 0);
+  await shot('15-devices');
+  await page.locator('.device-row', { hasText: 'iPad' }).locator('button').click();
+  check('dispositivi: il primo tocco chiede conferma', (await page.locator('.device-row', { hasText: 'iPad' }).locator('button').innerText()).includes('Tocca ancora'));
+  await page.locator('.device-row', { hasText: 'iPad' }).locator('button').click();
+  await page.waitForFunction(() => !document.querySelector('.device-row'), null, { timeout: 8000 });
+  check('dispositivi: dopo il secondo tocco l\'iPad sparisce (e con un solo dispositivo il pannello non c\'e\')', (await page.locator('.device-row').count()) === 0);
+
   // --- ferma l'agente: il pulsante di invio diventa "Ferma" a campo vuoto, serve un secondo tocco ---
   await page.goto(CHAT(2));
   await page.waitForSelector('.composer-input');

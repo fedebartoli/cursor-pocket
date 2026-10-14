@@ -13,6 +13,9 @@ export function mountSettings(root, { onLoggedOut }) {
   let busy = null; // 'enable' | 'disable' | 'test' | 'logout'
   let note = null; // { error: boolean, text }
   let quiet = null; // { enabled, from, to }
+  let devices = null; // [{ id, label, createdAt, lastSeenAt, current, notifications }]
+  let armedDevice = null; // id del dispositivo in attesa del secondo tocco
+  let deviceTimer = null;
   let armedLogout = false;
   let armTimer = null;
   let alive = true;
@@ -44,6 +47,59 @@ export function mountSettings(root, { onLoggedOut }) {
       render();
     })
     .catch(() => {});
+
+  const loadDevices = () =>
+    api
+      .get('/api/devices')
+      .then((d) => {
+        if (!alive) return;
+        devices = d.devices;
+        render();
+      })
+      .catch(() => {});
+  loadDevices();
+
+  function revokeDevice(d) {
+    if (armedDevice !== d.id) {
+      armedDevice = d.id;
+      clearTimeout(deviceTimer);
+      deviceTimer = setTimeout(() => {
+        armedDevice = null;
+        render();
+      }, 4000);
+      render();
+      return;
+    }
+    clearTimeout(deviceTimer);
+    armedDevice = null;
+    run(
+      `device:${d.id}`,
+      async () => {
+        await api.post(`/api/devices/${d.id}/revoke`, {});
+        devices = devices.filter((x) => x.id !== d.id);
+        note = { error: false, text: 'Dispositivo scollegato.' };
+      },
+      () => 'Non sono riuscito a scollegare il dispositivo.',
+    );
+  }
+
+  function devicesPanel() {
+    if (!devices || devices.length < 2) return null; // con un solo dispositivo (questo) il pannello non serve
+    const rows = devices.map((d) => {
+      const meta = d.current ? 'Questo dispositivo' : `Ultimo accesso ${timeAgo(d.lastSeenAt)}`;
+      const armed = armedDevice === d.id;
+      return h(
+        'div.device-row',
+        null,
+        icon('phone', { size: 20 }),
+        h('div.device-main', null, h('div.device-name', null, d.label || 'Dispositivo'), h('div.device-meta', null, meta, d.notifications ? ' \u00b7 notifiche attive' : '')),
+        d.current
+          ? null
+          : h('button', { class: `btn small${armed ? ' armed' : ''}`, type: 'button', disabled: busy !== null, onClick: () => revokeDevice(d) }, armed ? 'Tocca ancora' : 'Scollega'),
+      );
+    });
+    return h('section.panel', null, h('div.panel-title', null, icon('phone', { size: 20 }), h('span.grow', null, 'Dispositivi abbinati')), ...rows);
+  }
 
   async function saveQuiet(patch) {
     const next = { ...quiet, ...patch };
@@ -253,7 +309,7 @@ export function mountSettings(root, { onLoggedOut }) {
     if (!alive) return;
     const out = [appbar({ title: 'Impostazioni' })];
     if (getLive().offline) out.push(banner({ text: 'Daemon non raggiungibile' }));
-    out.push(notificationsPanel(), quietPanel(), mutedPanel(), actionsPanel(), daemonPanel());
+    out.push(notificationsPanel(), quietPanel(), mutedPanel(), actionsPanel(), daemonPanel(), devicesPanel());
     out.push(h('a', { class: 'row help-link', href: '#/come-funziona' }, icon('info', { size: 20 }), h('div.row-main', null, h('div.row-title', null, 'Come funziona')), icon('chevronRight', { size: 18 })));
     out.push(
       h(
@@ -304,6 +360,7 @@ export function mountSettings(root, { onLoggedOut }) {
     destroy() {
       alive = false;
       clearTimeout(armTimer);
+      clearTimeout(deviceTimer);
       clearInterval(diagTimer);
     },
   };

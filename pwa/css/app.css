@@ -364,6 +364,12 @@ button.section-head { cursor: pointer; }
 .switch-knob { position: absolute; top: 2px; left: 2px; width: 27px; height: 27px; border-radius: 50%; background: #fff; transition: transform 0.15s; }
 .switch.on .switch-knob { transform: translateX(20px); }
 .time-pair { display: flex; gap: 16px; flex-wrap: wrap; padding-top: 6px; }
+.device-row { display: flex; align-items: center; gap: 12px; min-height: var(--tap); padding: 8px 0; }
+.device-row + .device-row { border-top: 1px solid var(--line); }
+.device-main { flex: 1; min-width: 0; }
+.device-name { font-weight: 600; }
+.device-meta { color: var(--text-2); font-size: 13px; }
+.btn.small { min-height: 36px; padding: 0 12px; font-size: 14px; flex: none; }
 .time-field { display: flex; align-items: center; gap: 8px; }
 .time-field input { min-height: 40px; padding: 0 10px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--surface-2); color: var(--text); }
 .row-side { display: flex; align-items: center; gap: 6px; }
