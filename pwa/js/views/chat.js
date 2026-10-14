@@ -117,7 +117,7 @@ export function mountChat(root, id) {
   const panelHost = h('div.region');
   const activityHost = h('div.region');
   const messageHost = h('div.region');
-  const composer = createComposer({ chatId: id, onSend: sendMessage });
+  const composer = createComposer({ chatId: id, onSend: sendMessage, onStop: stopAgent });
   // Il distanziatore spinge il compositore in fondo quando il contenuto e' corto (e garantisce un minimo di respiro).
   replace(root, h('div', { class: 'screen chat-screen' }, topHost, panelHost, activityHost, messageHost, h('div', { class: 'chat-spacer', 'aria-hidden': 'true' }), composer.el));
 
@@ -267,6 +267,19 @@ export function mountChat(root, id) {
 
   const submitAnswer = (answers) => questionAction('answer', { answers }, describeAnswerResult);
   const skipQuestion = () => questionAction('skip', {}, () => 'Domanda saltata.');
+
+  async function stopAgent() {
+    try {
+      const res = await api.post(`/api/chats/${enc}/stop`, {});
+      markActed(Date.now());
+      refreshSoon();
+      load();
+      return res?.verified === false ? 'Richiesta inviata. Non riesco ancora a confermare che Cursor si sia fermato.' : 'Agente fermato.';
+    } catch (err) {
+      if (shouldRefreshAfter(err)) refresh().catch(() => {});
+      throw new Error(describeActionError(err));
+    }
+  }
 
   async function sendMessage(text) {
     try {

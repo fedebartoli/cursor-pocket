@@ -577,6 +577,14 @@ viewport, che su iOS 10+ impedisce lo zoom automatico al focus ma lascia lo zoom
   mezzanotte; `GET/POST /api/settings/quiet`). Gli eventi vengono comunque segnati come notificati: finita la fascia non
   arriva un'ondata di avvisi vecchi. Il motivo dello scarto e' nel log (`push_skipped {reason, kind}`), mai il contenuto.
 
+### 10.4f Ferma l'agente dal telefono (15/10) [OK su pagina finta e in browser, NON PROVATO su Cursor reale]
+- `POST /api/chats/:id/stop`: il daemon apre la chat in Cursor (CDP) e preme "Stop generation" (stesso pulsante di invio, che con
+  il campo vuoto e l'agente al lavoro cambia etichetta: FINDINGS 8). Solo se la chat risulta in corso e senza domanda o
+  approvazione vive (409 `not_running` / `attention_pending`). Esito: il pulsante sparisce (`settled`) oppure la chat risulta ferma
+  nello stato letto dal database. Nel log solo `stop_agent {verified}`.
+- PWA: nel compositore, a campo vuoto e agente al lavoro, il pulsante di invio diventa "Ferma" (quadrato); serve un secondo tocco
+  entro 4 s (diventa rosso). Scrivendo del testo torna "Invia". Da provare dal vivo: etichetta e posizione del pulsante in Cursor 3.x.
+
 ### 10.5 Da verificare dal vivo, con Cursor riavviato con la porta di debug [NON PROVATO]
 Ogni punto ha una diagnostica pronta: `cd daemon && npm run cdp -- status | inspect | tray` (stampa la struttura della
 pagina e mai i testi).

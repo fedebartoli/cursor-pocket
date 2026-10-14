@@ -86,6 +86,7 @@ const UI_ERRORS = {
   draft_not_empty: [409, 'draft_not_empty', 'Sul Mac questa chat ha gia\' una bozza nel campo di scrittura: inviala o svuotala prima.'],
   no_approval: [409, 'no_approval', 'La richiesta non risulta piu\' in attesa in Cursor (forse l\'hai gia\' decisa sul Mac).'],
   question_pending: [409, 'question_pending', 'La chat ha una domanda in attesa: rispondi prima a quella.'],
+  not_running: [409, 'not_running', 'L\'agente non sta lavorando in Cursor (forse ha gia\' finito).'],
 };
 
 function mapUiError(err) {
@@ -345,6 +346,34 @@ export class Actions extends EventEmitter {
       });
       ok = true;
       this.logger.info('approval_decision', { decision, verified: res.verified === true });
+      this.watcher.boost?.(chatId);
+      return res;
+    } finally {
+      slot.done(ok);
+    }
+  }
+
+  /**
+   * Ferma l'agente di una chat che sta lavorando (pulsante "Stop generation" di Cursor). Non cancella nulla: l'agente
+   * smette di generare e la conversazione resta. Con una domanda o un'approvazione aperte non serve: si risponde a quelle.
+   */
+  async stopAgent(chatId) {
+    this.#requireReady();
+    const chat = this.#chat(chatId);
+    if (!chat.running) throw new ActionError(409, 'not_running', 'L\'agente non sta lavorando: forse ha gia\' finito.');
+    if (chat.attention?.live && (chat.attention.kind === 'domanda' || chat.attention.kind === 'approvazione')) {
+      throw new ActionError(409, 'attention_pending', 'La chat aspetta una tua decisione: rispondi, approva o rifiuta invece di fermarla.');
+    }
+    const slot = this.#dedupe('stop', chatId, 'stop', 6_000);
+    let ok = false;
+    try {
+      const res = await this.#run('stop', async () => {
+        const clicked = await this.ui.stop({ composerId: chatId });
+        const r = clicked?.settled === true ? { settled: true } : await this.#waitFor(() => (this.watcher.last?.chats.find((c) => c.id === chatId)?.running === false ? { stopped: true } : null), 8_000);
+        return { ok: true, verified: Boolean(r) };
+      });
+      ok = true;
+      this.logger.info('stop_agent', { verified: res.verified === true });
       this.watcher.boost?.(chatId);
       return res;
     } finally {

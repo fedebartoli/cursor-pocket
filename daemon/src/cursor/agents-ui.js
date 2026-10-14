@@ -43,6 +43,8 @@ export const SEL = Object.freeze({
   panelAgentAttr: 'data-glass-agent-id',
   panelHidden: '[data-keep-alive-hidden]',
   send: 'button[aria-label="Send message"]',
+  // Mentre l'agente lavora e il campo e' vuoto il pulsante di invio diventa "Stop generation".
+  stop: 'button[aria-label="Stop generation"]',
   // Approvazione di un comando di terminale (Cursor 3.24): la carta `.ui-shell-tool-call` sta dentro la riga del
   // transcript, che porta `data-message-id` = id del bubble nel database. In fondo ha "Skip" e "Run" (piu' il menu
   // delle opzioni e il pulsante della modalita' di esecuzione automatica, che NON si toccano).
@@ -156,6 +158,7 @@ function pageKit(SEL, APPROVE_LABEL, REJECT_LABEL) {
     const root = (c && (c.closest('form') || c.parentElement?.parentElement?.parentElement?.parentElement)) || document;
     return [...root.querySelectorAll(SEL.send)].find(K.visible) || [...document.querySelectorAll(SEL.send)].find(K.visible) || null;
   };
+  K.stop = () => [...K.scope().querySelectorAll(SEL.stop)].find(K.visible) || null;
   return K;
 }
 
@@ -197,6 +200,8 @@ function pageDo(a, K) {
         return K.composer();
       case 'send':
         return K.send();
+      case 'stop':
+        return K.stop();
       default:
         return null;
     }
@@ -257,6 +262,7 @@ function pageDo(a, K) {
       return {
         composer: c ? { text: K.editorText(c), empty: K.editorText(c) === '' } : null,
         send: s ? { disabled: K.isDisabled(s) } : null,
+        stop: !!K.stop(),
         tray: !!K.tray(),
       };
     }
@@ -661,6 +667,38 @@ export class AgentsUi {
             return !st.found || !st.approve ? true : null;
           },
           { timeoutMs: 4000, sleep: this.sleep },
+        );
+        return { clicked: true, settled: Boolean(gone) };
+      } finally {
+        await this.#restore(ctx, previous, composerId);
+      }
+    });
+  }
+
+  /**
+   * Ferma l'agente della chat: clic su "Stop generation" nel pannello della chat. Il pulsante sparisce (torna "Send" o
+   * "voice") quando Cursor ha fermato la generazione.
+   * @returns {Promise<{ clicked: boolean, settled: boolean }>}
+   */
+  async stop({ composerId }) {
+    return this.withSession(async (ctx) => {
+      const previous = await this.#openChat(ctx, composerId);
+      try {
+        const info = await waitFor(
+          async () => {
+            const i = await ctx.page({ op: 'composerInfo' });
+            return i.stop ? i : null;
+          },
+          { timeoutMs: 3000, sleep: this.sleep },
+        );
+        if (!info) throw new UiError('not_running', 'la chat non sta lavorando in Cursor');
+        await ctx.clickTarget({ target: 'stop' });
+        const gone = await waitFor(
+          async () => {
+            const i = await ctx.page({ op: 'composerInfo' });
+            return !i.stop ? true : null;
+          },
+          { timeoutMs: 6000, sleep: this.sleep },
         );
         return { clicked: true, settled: Boolean(gone) };
       } finally {

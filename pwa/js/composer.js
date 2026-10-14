@@ -8,6 +8,7 @@ import { icon } from './icons.js';
 export const MESSAGE_MAX = 8000; // come LIMITS.messageChars del daemon
 const MAX_HEIGHT = 140;
 const STATUS_MS = 9000;
+const STOP_ARM_MS = 4000;
 
 const drafts = new Map(); // chatId -> testo
 
@@ -15,12 +16,16 @@ const drafts = new Map(); // chatId -> testo
  * @param {object} p
  * @param {string} p.chatId
  * @param {(text: string) => Promise<string>} p.onSend  invia; risolve con il testo di esito, rifiuta con Error(messaggio)
+ * @param {() => Promise<string>} [p.onStop]  ferma l'agente (solo mentre lavora e il campo e' vuoto); stessa convenzione di onSend
  */
-export function createComposer({ chatId, onSend }) {
+export function createComposer({ chatId, onSend, onStop }) {
   let mode = 'ready'; // 'ready' | 'blocked' | 'unavailable' | 'hidden'
   let busy = false;
   let statusTimer = 0;
   let lastSig = '';
+  let running = false;
+  let armed = false;
+  let armTimer = 0;
 
   const hintEl = h('p', { class: 'dock-hint', hidden: true });
   const statusEl = h('p', { class: 'dock-status', role: 'status', hidden: true });
@@ -34,6 +39,8 @@ export function createComposer({ chatId, onSend }) {
     enterkeyhint: 'enter',
   });
   const sendBtn = h('button', { class: 'send', type: 'submit', 'aria-label': 'Invia messaggio' }, icon('arrowUp', { size: 22 }));
+  const sendIcon = sendBtn.firstChild;
+  const stopIcon = icon('stop', { size: 18 });
   const form = h('form', { class: 'composer', novalidate: true }, area, sendBtn);
   const el = h('div', { class: 'dock' }, hintEl, statusEl, form);
 
@@ -43,10 +50,24 @@ export function createComposer({ chatId, onSend }) {
     area.style.height = `${Math.min(area.scrollHeight, MAX_HEIGHT)}px`;
   }
 
+  // Come in Cursor: mentre l'agente lavora e il campo e' vuoto, il pulsante di invio diventa "Ferma".
+  const stopping = () => running && mode === 'ready' && onStop && area.value.trim().length === 0;
+
+  function disarm() {
+    armed = false;
+    clearTimeout(armTimer);
+  }
+
   function sync() {
     const locked = busy || mode !== 'ready';
     area.disabled = locked;
-    sendBtn.disabled = locked || area.value.trim().length === 0;
+    const stop = stopping();
+    if (!stop) disarm();
+    sendBtn.classList.toggle('stop', Boolean(stop));
+    sendBtn.classList.toggle('armed', Boolean(stop && armed));
+    sendBtn.setAttribute('aria-label', stop ? (armed ? 'Tocca ancora per fermare l\u2019agente' : 'Ferma l\u2019agente') : 'Invia messaggio');
+    sendBtn.replaceChildren(stop ? stopIcon : sendIcon);
+    sendBtn.disabled = stop ? busy : locked || area.value.trim().length === 0;
   }
 
   function showStatus(text, error = false) {
@@ -70,8 +91,35 @@ export function createComposer({ chatId, onSend }) {
     sync();
   });
 
+  async function doStop() {
+    if (!armed) {
+      armed = true;
+      showStatus('Tocca ancora per fermare l\u2019agente.');
+      clearTimeout(armTimer);
+      armTimer = setTimeout(() => {
+        armed = false;
+        showStatus(null);
+        sync();
+      }, STOP_ARM_MS);
+      sync();
+      return;
+    }
+    disarm();
+    busy = true;
+    showStatus(null);
+    sync();
+    try {
+      showStatus(await onStop());
+    } catch (err) {
+      showStatus(err?.message || 'Non sono riuscito a fermare l\u2019agente.', true);
+    }
+    busy = false;
+    sync();
+  }
+
   form.addEventListener('submit', async (ev) => {
     ev.preventDefault();
+    if (stopping()) return doStop();
     const text = area.value.trim();
     if (!text || busy || mode !== 'ready') return;
     busy = true;
@@ -104,16 +152,17 @@ export function createComposer({ chatId, onSend }) {
     /**
      * @param {{ mode: 'ready'|'blocked'|'unavailable'|'hidden', hint?: string, hintLink?: {href: string, label: string}, running?: boolean }} s
      */
-    update({ mode: next, hint, hintLink, running = false }) {
-      const sig = `${next}|${hint ?? ''}|${hintLink?.href ?? ''}|${running}`;
+    update({ mode: next, hint, hintLink, running: r = false }) {
+      const sig = `${next}|${hint ?? ''}|${hintLink?.href ?? ''}|${r}`;
       if (sig === lastSig) return;
       lastSig = sig;
       mode = next;
+      running = Boolean(r);
       // Con una domanda in attesa il compositore sparisce (la domanda e' li' sopra); senza azioni resta solo la riga
       // di spiegazione: un campo disattivato permanente occuperebbe spazio senza servire.
       el.hidden = next === 'blocked' || next === 'hidden';
       el.setAttribute('data-mode', next);
-      const note = hint || (running && next === 'ready' ? 'L\u2019agente sta lavorando: Cursor mette il messaggio in coda oppure lo invia subito, come da sua impostazione.' : '');
+      const note = hint || '';
       hintEl.hidden = !note;
       hintEl.replaceChildren();
       if (note) {
@@ -125,6 +174,7 @@ export function createComposer({ chatId, onSend }) {
     },
     destroy() {
       clearTimeout(statusTimer);
+      clearTimeout(armTimer);
     },
   };
 }

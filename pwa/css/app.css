@@ -558,3 +558,7 @@ button.section-head { cursor: pointer; }
 .send { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 50%; background: var(--accent); color: var(--on-accent); cursor: pointer; }
 .send:active { transform: scale(0.96); }
 .send:disabled { background: var(--surface-2); color: var(--text-3); }
+.send.stop { background: var(--surface-2); color: var(--text); }
+.send.stop svg { fill: currentColor; }
+.send.stop.armed { background: var(--danger); color: var(--on-danger); }
+.send.stop:disabled { opacity: 0.6; }

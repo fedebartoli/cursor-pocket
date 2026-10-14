@@ -133,7 +133,7 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
     }
 
     // --- chat ---
-    const m = /^\/api\/chats\/([^/]+)(?:\/(ignore|answer|message|skip|approval|prefs))?$/.exec(path);
+    const m = /^\/api\/chats\/([^/]+)(?:\/(ignore|answer|message|skip|approval|stop|prefs))?$/.exec(path);
     if (m) {
       const id = m[1];
       const action = m[2];
@@ -178,11 +178,12 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
         return sendJson(res, 200, { ok: true, ...prefs }, headers);
       }
       // Azioni verso Cursor (Fase 2): rispondere, saltare, scrivere un messaggio.
-      if ((action === 'answer' || action === 'message' || action === 'skip' || action === 'approval') && method === 'POST') {
+      if ((action === 'answer' || action === 'message' || action === 'skip' || action === 'approval' || action === 'stop') && method === 'POST') {
         const body = await readJson(req, MAX_ACTION_BODY_BYTES);
         let result;
         if (action === 'answer') result = await actions.answer(id, { key: body.key, answers: body.answers });
         else if (action === 'skip') result = await actions.skip(id, { key: body.key });
+        else if (action === 'stop') result = await actions.stopAgent(id);
         else if (action === 'approval') result = await actions.approval(id, { key: body.key, decision: body.decision });
         else result = await actions.sendMessage(id, { text: body.text });
         return sendJson(res, 200, result, headers);

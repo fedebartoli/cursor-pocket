@@ -379,7 +379,11 @@ try {
   await prefRow.locator('.swipe-action').click();
   await page.waitForFunction(() => ![...document.querySelectorAll('.swipe')].some((e) => e.innerText.includes('Pubblicazione del pacchetto')), null, { timeout: 8000 });
   await sleep(300);
-  const nRows = await page.locator('.swipe').count();
+  // Solo la sezione "Richiedono attenzione": le chat "In corso" stanno in un'altra lista e non contano nel badge.
+  const nRows = await page.evaluate(() => {
+    const head = [...document.querySelectorAll('*')].find((e) => e.children.length < 4 && /^Richiedono attenzione/.test((e.innerText || '').trim()) && e.nextElementSibling?.classList.contains('list'));
+    return head ? head.nextElementSibling.querySelectorAll('.swipe').length : 0;
+  });
   check('gesto: "Ignora" dalla riga toglie la chat da quelle che richiedono attenzione (badge coerente)', nRows === 0 ? await page.locator('.tab-badge').isHidden() : Number(await page.locator('.tab-badge').innerText()) === nRows, `righe ${nRows}`);
   await page.goto(CHAT(15));
   await page.locator('button:has-text("Ripristina")').click();
@@ -504,6 +508,22 @@ try {
   check('impostazioni: diagnostica connessione (flusso attivo, eventi e tempo di risposta)', diagText.includes('Flusso live') && diagText.includes('attivo') && /Tempo di risposta del daemon\s+\d+ ms/.test(diagText.replace(/\n/g, ' ')), diagText.replace(/\n/g, ' | ').slice(0, 160));
   check('impostazioni: pannello "Rispondere dal telefono" con stato Attivo', await page.locator('text=Attivo. Dalle chat').isVisible());
   await shot('07-settings');
+
+  // --- ferma l'agente: il pulsante di invio diventa "Ferma" a campo vuoto, serve un secondo tocco ---
+  await page.goto(CHAT(2));
+  await page.waitForSelector('.composer-input');
+  await page.waitForSelector('.send.stop', { timeout: 8000 });
+  check('ferma: con l\'agente al lavoro e il campo vuoto il pulsante e\' "Ferma" (icona SVG)', (await page.locator('.send.stop svg').count()) === 1 && (await page.locator('.send.stop').isEnabled()));
+  await page.locator('.composer-input').fill('x');
+  check('ferma: scrivendo torna "Invia"', (await page.locator('.send.stop').count()) === 0 && (await page.locator('.send').isEnabled()));
+  await page.locator('.composer-input').fill('');
+  await page.locator('.send.stop').click();
+  await page.waitForSelector('.send.stop.armed');
+  check('ferma: il primo tocco chiede conferma e non ferma nulla', (await page.locator('.dock-status').innerText()).includes('Tocca ancora'));
+  await shot('14-stop-armed');
+  await page.locator('.send.stop').click();
+  await page.waitForFunction(() => !document.querySelector('.send.stop'), null, { timeout: 12000 });
+  check('ferma: dopo il secondo tocco l\'agente e\' fermo e il pulsante torna "Invia"', (await page.locator('.send').count()) === 1);
 
   // --- niente scorrimento orizzontale ---
   const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);

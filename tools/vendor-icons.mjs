@@ -30,6 +30,7 @@ const ICONS = {
   folderOpen: 'folder-open',
   bell: 'bell',
   bellOff: 'bell-off',
+  stop: 'square',
   settings: 'settings',
   home: 'house',
   refresh: 'refresh-cw',

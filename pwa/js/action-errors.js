@@ -12,7 +12,7 @@ const CUSTOM = Object.freeze({
 });
 
 /** Codici dopo i quali conviene riscaricare lo stato (la situazione sul Mac e' cambiata). */
-const REFRESH_AFTER = new Set(['stale', 'no_question', 'mismatch', 'already_sent', 'not_found']);
+const REFRESH_AFTER = new Set(['stale', 'no_question', 'mismatch', 'already_sent', 'not_found', 'not_running']);
 
 export function describeActionError(err) {
   const code = err?.code;

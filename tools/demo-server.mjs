@@ -99,7 +99,7 @@ talk(2, 1, 'Sto aggiornando le query che leggono lo storico ordini.');
     { id: 'b5', type: 2, createdAt: t + 12_000, tool: { name: 'edit_file_v2', status: 'completed', toolCallId: 'tc-demo-2b', params: { path: '/demo/ordini.sql' } } },
     { id: 'b6', type: 2, createdAt: t + 20_000, tool: { name: 'run_terminal_command_v2', status: 'loading', toolCallId: 'tc-demo-2c', params: { command: 'npm test' } } },
   );
-  fx.conversation(id(2), b);
+  fx.conversation(id(2), b, { status: 'generating' });
 }
 chat(3, 'Piano per il flusso di checkout', 'negozio', 40, { hasPendingPlan: true });
 talk(3, 40, 'Ho preparato un piano in quattro passaggi: indirizzo, spedizione, pagamento, conferma.');
@@ -249,6 +249,16 @@ const demoUi = {
     chat(n, spec.name, spec.where, 0, { hasBlockingPendingActions: false, unfinishedRunAt: decision === 'approve' ? Date.now() : undefined });
     console.log('[demo] approvazione registrata:', decision, 'chat', n);
     return {};
+  },
+  async stop({ composerId }) {
+    const n = numOf(composerId);
+    const spec = chatSpecs.get(n);
+    if (!spec) throw Object.assign(new Error('demo'), { code: 'row_not_found' });
+    await new Promise((r) => setTimeout(r, 500));
+    fx.conversation(composerId, bubblesOf.get(n), { status: 'aborted' });
+    chat(n, spec.name, spec.where, 0, { unfinishedRunAt: undefined });
+    console.log('[demo] agente fermato, chat', n);
+    return { clicked: true, settled: true };
   },
   async sendMessage({ composerId }) {
     const n = numOf(composerId);

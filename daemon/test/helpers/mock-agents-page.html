@@ -37,6 +37,7 @@
   <div class="composer">
     <div class="tiptap ProseMirror ui-prompt-input-editor__input" contenteditable="true" role="textbox" id="composer"></div>
     <button type="button" aria-label="Send message" id="send" disabled>Invia</button>
+    <button type="button" aria-label="Stop generation" id="stop" hidden>Stop</button>
   </div>
 </main>
 <!-- Come in Cursor 3.24: i pannelli delle altre chat restano vivi ma nascosti, con un loro composer (il piu' in basso). -->
@@ -44,6 +45,7 @@
   <div data-agent-panel-conversation-shell data-glass-agent-id="decoy" style="position:absolute;left:0;right:0;bottom:0;height:30px">
     <div class="tiptap ProseMirror ui-prompt-input-editor__input decoy-input" contenteditable="true" id="decoy-composer"></div>
     <button type="button" aria-label="Send message" id="decoy-send">Invia</button>
+    <button type="button" aria-label="Stop generation" id="decoy-stop">Stop</button>
   </div>
 </div>
 <script>
@@ -229,11 +231,16 @@
     }
   }
 
-  function render() { sidebar(); tray(); approvals(); }
+  // Mentre la chat "lavora" compare "Stop generation"; il clic la ferma.
+  const stopBtn = $('#stop');
+  function running() { stopBtn.hidden = !(S.chats[S.current]?.running && !S.stopped.includes(S.current)); }
+  stopBtn.addEventListener('click', () => { S.stopped.push(S.current); S.log.push(`stop:${S.current}`); running(); });
+
+  function render() { sidebar(); tray(); approvals(); running(); }
 
   window.__mock = {
     reset(cfg) {
-      S = { current: cfg.current ?? null, chats: cfg.chats, qstate: {}, done: {}, submitted: [], skipped: [], sent: [], clicks: 0, log: [], decided: {} };
+      S = { current: cfg.current ?? null, chats: cfg.chats, qstate: {}, done: {}, submitted: [], skipped: [], sent: [], clicks: 0, log: [], decided: {}, stopped: [] };
       for (const [id, c] of Object.entries(S.chats)) {
         S.qstate[id] = { step: 0, selections: JSON.parse(JSON.stringify(cfg.initialSelections?.[id] ?? {})), freeform: { ...(cfg.initialFreeform?.[id] ?? {}) } };
         if (c.questions) {
@@ -246,7 +253,7 @@
       refreshSend();
       render();
     },
-    state() { return JSON.stringify({ current: S.current, submitted: S.submitted, skipped: S.skipped, sent: S.sent, clicks: S.clicks, log: S.log, decided: S.decided }); },
+    state() { return JSON.stringify({ current: S.current, submitted: S.submitted, skipped: S.skipped, sent: S.sent, clicks: S.clicks, log: S.log, decided: S.decided, stopped: S.stopped }); },
   };
 })();
 </script>

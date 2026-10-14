@@ -210,6 +210,7 @@ class FakeUi {
     this.onSkip = null;
     this.onMessage = null;
     this.onApproval = null;
+    this.onStop = null;
   }
   async probe() {
     return { up: this.up };
@@ -234,6 +235,9 @@ class FakeUi {
   }
   async approval(args) {
     return this.#run('approval', args, this.onApproval);
+  }
+  async stop(args) {
+    return this.#run('stop', args, this.onStop);
   }
 }
 
@@ -641,6 +645,54 @@ test('approvazione via HTTP: un comando troppo lungo per essere letto per intero
     assert.equal(ui.calls.length, 0);
     ui.onApproval = () => approvingConversation(h.fx, ID, { toolCallId: 'tc-ap', at: T0 - 2000, reviewStatus: 'Done', toolStatus: 'completed', composerStatus: 'aborted' });
     assert.equal((await post('approval', { key: 'tc-ap', decision: 'reject' })).status, 200);
+  } finally {
+    await h.stop();
+  }
+});
+
+test('ferma l\'agente via HTTP: solo se sta lavorando, clic sulla chat giusta, esito verificato, niente doppio invio', async () => {
+  const { h, ui, post } = await setup({ withQuestion: false });
+  try {
+    // chat ferma: nessun clic
+    const idle = await post('stop', {});
+    assert.equal(idle.status, 409);
+    assert.equal(idle.json().error, 'not_running');
+    assert.equal(ui.calls.length, 0);
+
+    h.fx.chat(ID, { name: 'Titolo', lastUpdatedAt: T0 - 500, header: { unfinishedRunAt: T0 - 1000 } });
+    h.fx.conversation(ID, [
+      { id: 'b1', type: 1, createdAt: T0 - 3000, text: 'Fai' },
+      { id: 'b2', type: 2, createdAt: T0 - 2000, text: 'Sto lavorando...' },
+    ], { status: 'generating' });
+    h.tick();
+    ui.stop = async (args) => (ui.calls.push(['stop', args]), { clicked: true, settled: true });
+    const r = await post('stop', {});
+    assert.equal(r.status, 200, r.text);
+    assert.equal(r.json().verified, true);
+    assert.deepEqual(ui.calls.map((c) => c[0]), ['stop']);
+    assert.equal(ui.calls[0][1].composerId, ID);
+    const again = await post('stop', {});
+    assert.equal(again.status, 409);
+    assert.equal(again.json().error, 'already_sent');
+  } finally {
+    await h.stop();
+  }
+});
+
+test('ferma l\'agente via HTTP: errore di Cursor tradotto, nessuna azione con la porta di debug chiusa', async () => {
+  const { h, ui, post } = await setup({ withQuestion: false });
+  try {
+    h.fx.chat(ID, { name: 'Titolo', lastUpdatedAt: T0 - 500, header: { unfinishedRunAt: T0 - 1000 } });
+    h.tick();
+    ui.fail = Object.assign(new Error('x'), { code: 'not_running' });
+    const r = await post('stop', {});
+    assert.equal(r.status, 409);
+    assert.equal(r.json().error, 'not_running');
+    ui.fail = null;
+    ui.up = false;
+    await h.app.actions.refresh();
+    const off = await post('stop', {});
+    assert.equal(off.status, 503);
   } finally {
     await h.stop();
   }

@@ -225,4 +225,23 @@ describe('AgentsUi su Chromium con la pagina finta', { skip }, () => {
       await assert.rejects(() => ui.approval({ composerId: 'chat-a', bubbleId: 'm-1', decision: 'boh' }), (e) => e.code === 'bad_decision');
     });
   });
+
+  describe('ferma l\'agente', () => {
+    const cfg = (running = true) => ({ current: 'chat-b', chats: { 'chat-a': { name: 'Chat A', running }, 'chat-b': { name: 'Chat B', running: true } } });
+
+    it('preme "Stop generation" nella chat indicata (non nel pannello nascosto), poi riapre la chat di prima', async () => {
+      await reset(cfg());
+      const r = await ui.stop({ composerId: 'chat-a' });
+      assert.deepEqual(r, { clicked: true, settled: true });
+      const st = await state();
+      assert.deepEqual(st.stopped, ['chat-a']);
+      assert.equal(st.current, 'chat-b');
+    });
+
+    it('se la chat non sta lavorando: not_running e nessun clic', async () => {
+      await reset(cfg(false));
+      await assert.rejects(() => ui.stop({ composerId: 'chat-a' }), (e) => e instanceof UiError && e.code === 'not_running');
+      assert.deepEqual((await state()).stopped, []);
+    });
+  });
 });

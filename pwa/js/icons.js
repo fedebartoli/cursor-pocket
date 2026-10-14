@@ -210,6 +210,18 @@ const DATA = {
    }
   ]
  ],
+ "stop": [
+  [
+   "rect",
+   {
+    "width": "18",
+    "height": "18",
+    "x": "3",
+    "y": "3",
+    "rx": "2"
+   }
+  ]
+ ],
  "settings": [
   [
    "path",
@@ -980,18 +992,6 @@ const DATA = {
    "path",
    {
     "d": "M12 12v9"
-   }
-  ]
- ],
- "stop": [
-  [
-   "rect",
-   {
-    "width": "18",
-    "height": "18",
-    "x": "3",
-    "y": "3",
-    "rx": "2"
    }
   ]
  ],
