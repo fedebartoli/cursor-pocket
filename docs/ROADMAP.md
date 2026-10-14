@@ -93,9 +93,11 @@ clic con Cursor in secondo piano, interfaccia dalla PWA su iPhone.
   vecchia in cache).
 
 ## Fase 3 - Rifinitura e pubblicazione
-- [ ] Hardening sicurezza, test, gestione aggiornamenti di Cursor (selettori).
-- [ ] README, licenza (da scegliere con l'utente), guida di installazione, avvertenze di sicurezza.
-- [ ] Rimuovere ogni dato personale dagli esempi; verificare che il database di Cursor non venga mai scritto.
+- [x] Hardening di pubblicazione (15/10): scansione di file e storia (nessun dato personale), email degli autori riscritta con quella noreply di GitHub (backup in `~/.cursor-pocket-backup/`), `SECURITY.md`, CI, `docs/IPHONE-CHECKLIST.md`.
+- [ ] Gestione aggiornamenti di Cursor (selettori): si scopre solo provando dopo ogni aggiornamento.
+- [x] README con screenshot, licenza MIT, guida di installazione, avvertenze di sicurezza.
+- [ ] Creare il repository su GitHub (l'utente ha scelto di aspettare).
+- [x] Nessun dato personale negli esempi; il database di Cursor si apre solo in lettura (test).
 
 ## Idee rimandate
 - Live Activity / app nativa (richiede account Developer a pagamento).
