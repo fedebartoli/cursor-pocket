@@ -56,6 +56,16 @@ export function sectionHead({ label, count, tone, iconName, expanded, onToggle, 
   return h('button', { class: cls, type: 'button', 'aria-expanded': String(!!expanded), onClick: onToggle }, children);
 }
 
+/** Interruttore accessibile (role=switch). `onToggle(nuovoValore)`. */
+export function switchRow({ label, sub, checked, onToggle, disabled = false }) {
+  return h(
+    'div.switch-row',
+    null,
+    h('div.switch-text', null, h('div.switch-label', null, label), sub ? h('div.switch-sub', null, sub) : null),
+    h('button', { class: `switch${checked ? ' on' : ''}`, type: 'button', role: 'switch', 'aria-checked': String(!!checked), 'aria-label': label, disabled, onClick: () => onToggle(!checked) }, h('span.switch-knob')),
+  );
+}
+
 export function emptyState({ iconName = 'terminal', title, text }) {
   return h('div.empty', null, icon(iconName, { size: 32 }), h('h2', null, title), text ? h('p', null, text) : null);
 }
@@ -128,6 +138,6 @@ export function chatRow(card, { showWorkspace = false, showPrompt = false } = {}
       labels.length ? h('div', { class: `row-state ${card.state}` }, stateIcon, h('span', null, labels.join(' \u00b7 '))) : null,
       prompt ? h('div.row-prompt', null, prompt) : null,
     ),
-    h('div.row-side', null, timeAgo(card.lastUpdatedAt)),
+    h('div.row-side', null, card.muted ? icon('bellOff', { size: 14 }) : null, timeAgo(card.lastUpdatedAt)),
   );
 }

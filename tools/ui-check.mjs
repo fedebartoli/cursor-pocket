@@ -180,6 +180,28 @@ try {
   await page.waitForSelector('.empty');
   check('scheda Preferite: senza cuori mostra lo stato vuoto', await page.locator('.empty h2', { hasText: 'Nessuna preferita' }).isVisible());
 
+  // silenziare: chat (campanella nella pagina) e progetti/orari (Impostazioni)
+  await page.goto(CHAT(2));
+  await page.waitForSelector('.chat-head');
+  await page.locator('.appbar [aria-label="Silenzia le notifiche di questa chat"]').click();
+  await page.waitForSelector('.appbar [aria-label="Riattiva le notifiche di questa chat"]', { timeout: 8000 });
+  await page.goto(`${BASE}/#/chat`);
+  await page.waitForSelector('.list .row');
+  check('chat silenziata: la riga mostra la campanella barrata', (await page.locator('.row', { hasText: 'Migrazione della tabella ordini' }).locator('.row-side svg').count()) === 1);
+  await page.goto(CHAT(2));
+  await page.waitForSelector('.chat-head');
+  await page.locator('.appbar [aria-label="Riattiva le notifiche di questa chat"]').click();
+  await page.waitForSelector('.appbar [aria-label="Silenzia le notifiche di questa chat"]', { timeout: 8000 });
+  await page.goto(`${BASE}/#/impostazioni`);
+  await page.waitForSelector('.switch');
+  check('impostazioni: orari senza notifiche e progetti silenziati con interruttori', (await page.locator('.panel-title', { hasText: 'Orari senza notifiche' }).isVisible()) && (await page.locator('.panel-title', { hasText: 'Progetti silenziati' }).isVisible()) && (await page.locator('.switch').count()) >= 4);
+  await page.locator('.switch[aria-label="Silenzio programmato"]').click();
+  await page.waitForSelector('.time-field', { timeout: 8000 });
+  check('orari senza notifiche: attivandoli compaiono Dalle e Alle', (await page.locator('.time-field input').count()) === 2 && (await page.locator('.switch[aria-label="Silenzio programmato"]').getAttribute('aria-checked')) === 'true');
+  await shot('13-quiet-settings');
+  await page.locator('.switch[aria-label="Silenzio programmato"]').click();
+  await page.waitForFunction(() => document.querySelectorAll('.time-field').length === 0, null, { timeout: 8000 });
+
   // "Come funziona" sta sotto Impostazioni e contiene le spiegazioni tolte dalle schermate
   await page.goto(`${BASE}/#/impostazioni`);
   await page.locator('.help-link').click();

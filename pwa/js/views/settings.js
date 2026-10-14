@@ -1,10 +1,10 @@
 // Impostazioni: notifiche push, informazioni sul daemon, uscita dal dispositivo.
 import { api } from '../api.js';
-import { appbar, banner } from '../components.js';
+import { appbar, banner, switchRow } from '../components.js';
 import { commit, h, replace } from '../dom.js';
 import { timeAgo } from '../format.js';
 import { icon } from '../icons.js';
-import { getLive } from '../live.js';
+import { getLive, refresh as refreshLive } from '../live.js';
 import { PushError, disablePush, enablePush, getPushState, sendTestPush } from '../push.js';
 
 export function mountSettings(root, { onLoggedOut }) {
@@ -12,6 +12,7 @@ export function mountSettings(root, { onLoggedOut }) {
   let info = null;
   let busy = null; // 'enable' | 'disable' | 'test' | 'logout'
   let note = null; // { error: boolean, text }
+  let quiet = null; // { enabled, from, to }
   let armedLogout = false;
   let armTimer = null;
   let alive = true;
@@ -34,6 +35,60 @@ export function mountSettings(root, { onLoggedOut }) {
       render();
     })
     .catch(() => {});
+
+  api
+    .get('/api/settings/quiet')
+    .then((q) => {
+      if (!alive) return;
+      quiet = q;
+      render();
+    })
+    .catch(() => {});
+
+  async function saveQuiet(patch) {
+    const next = { ...quiet, ...patch };
+    quiet = next; // subito, poi conferma dal daemon
+    render();
+    try {
+      quiet = await api.post('/api/settings/quiet', next);
+    } catch {
+      note = { error: true, text: 'Orari non salvati.' };
+    }
+    if (alive) render();
+  }
+
+  async function setProjectMuted(ws, muted) {
+    try {
+      await api.post(`/api/workspaces/${encodeURIComponent(ws.id)}/prefs`, { muted });
+    } catch {
+      note = { error: true, text: 'Impossibile aggiornare il progetto.' };
+    }
+    await refreshLive().catch(() => {});
+    if (alive) render();
+  }
+
+  function quietPanel() {
+    if (!quiet) return null;
+    const time = (label, key) => h('label', { class: 'time-field' }, h('span', null, label), h('input', { type: 'time', value: quiet[key], 'aria-label': label, onChange: (e) => e.target.value && saveQuiet({ [key]: e.target.value }) }));
+    return h(
+      'section.panel',
+      null,
+      h('div.panel-title', null, icon('clock', { size: 20 }), h('span.grow', null, 'Orari senza notifiche')),
+      switchRow({ label: 'Silenzio programmato', sub: quiet.enabled ? `Dalle ${quiet.from} alle ${quiet.to}` : null, checked: quiet.enabled, onToggle: (v) => saveQuiet({ enabled: v }) }),
+      quiet.enabled ? h('div', { class: 'time-pair' }, time('Dalle', 'from'), time('Alle', 'to')) : null,
+    );
+  }
+
+  function mutedPanel() {
+    const workspaces = getLive().payload?.state?.workspaces ?? [];
+    if (!workspaces.length) return null;
+    return h(
+      'section.panel',
+      null,
+      h('div.panel-title', null, icon('bellOff', { size: 20 }), h('span.grow', null, 'Progetti silenziati')),
+      workspaces.map((ws) => switchRow({ label: ws.name, sub: ws.muted ? 'Nessuna notifica' : null, checked: ws.muted === true, onToggle: (v) => setProjectMuted(ws, v) })),
+    );
+  }
 
   async function run(name, fn, onError) {
     busy = name;
@@ -198,7 +253,7 @@ export function mountSettings(root, { onLoggedOut }) {
     if (!alive) return;
     const out = [appbar({ title: 'Impostazioni' })];
     if (getLive().offline) out.push(banner({ text: 'Daemon non raggiungibile' }));
-    out.push(notificationsPanel(), actionsPanel(), daemonPanel());
+    out.push(notificationsPanel(), quietPanel(), mutedPanel(), actionsPanel(), daemonPanel());
     out.push(h('a', { class: 'row help-link', href: '#/come-funziona' }, icon('info', { size: 20 }), h('div.row-main', null, h('div.row-title', null, 'Come funziona')), icon('chevronRight', { size: 18 })));
     out.push(
       h(

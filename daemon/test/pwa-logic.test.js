@@ -195,3 +195,26 @@ test('bottomShift: barra in basso incollata al fondo visibile solo se il visual 
   assert.equal(bottomShift({ ...base, vvOffsetTop: 40, vvHeight: 800 }), 40, 'visual viewport oltre il layout: la barra scende');
   assert.equal(bottomShift({ ...base, vvHeight: 400, vvScale: 2 }), 0, 'pinch-zoom: non si tocca');
 });
+
+import { isQuiet, normalizeQuiet } from '../src/push/quiet.js';
+
+test('orari senza notifiche: fascia normale, a cavallo della mezzanotte, vuota e valori non validi', () => {
+  const at = (h, m = 0) => new Date(2026, 9, 15, h, m);
+  const night = { enabled: true, from: '22:00', to: '07:00' };
+  assert.equal(isQuiet(night, at(23)), true);
+  assert.equal(isQuiet(night, at(3)), true);
+  assert.equal(isQuiet(night, at(7)), false, 'la fine e\' esclusa');
+  assert.equal(isQuiet(night, at(21, 59)), false);
+  assert.equal(isQuiet(night, at(22)), true, 'l\'inizio e\' incluso');
+  const day = { enabled: true, from: '09:00', to: '12:30' };
+  assert.equal(isQuiet(day, at(10)), true);
+  assert.equal(isQuiet(day, at(12, 30)), false);
+  assert.equal(isQuiet({ enabled: true, from: '08:00', to: '08:00' }, at(8)), false, 'inizio = fine: nessuna fascia');
+  assert.equal(isQuiet({ ...night, enabled: false }, at(23)), false);
+  assert.equal(isQuiet(null, at(23)), false);
+  assert.deepEqual(normalizeQuiet({ enabled: true, from: '22:00', to: '07:00' }), night);
+  assert.deepEqual(normalizeQuiet({ enabled: false }), { enabled: false, from: '22:00', to: '07:00' });
+  assert.equal(normalizeQuiet({ enabled: true, from: '7:00', to: '07:00' }), null);
+  assert.equal(normalizeQuiet({ enabled: 1 }), null);
+  assert.equal(normalizeQuiet('x'), null);
+});

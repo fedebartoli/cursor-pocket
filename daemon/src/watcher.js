@@ -223,7 +223,7 @@ export class Watcher extends EventEmitter {
 
     const chat = buildChat({ entry, ws, attention, now, staleRunMs: cfg.staleRunMs, running });
     const events = [];
-    const summary = { id: chat.id, name: chat.name, workspaceName: chat.workspaceName };
+    const summary = { id: chat.id, name: chat.name, workspaceName: chat.workspaceName, sectionId: chat.sectionId };
 
     // 1) Nuova richiesta viva: una domanda (`ask_question`) o un'approvazione (`reviewData` Requested), mai un tool in
     // esecuzione (FINDINGS 9.1, 11). L'approvazione deve restare in attesa per `approvalDelayMs` prima di notificare.

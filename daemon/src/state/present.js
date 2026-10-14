@@ -236,6 +236,7 @@ export function presentState({ chats, settings, ignored, now, pendingAfterMs, pr
       name: s.label,
       home: s.home,
       collapsed: collapsed.has(s.id),
+      muted: prefs?.get(`ws:${s.id}`)?.muted === true,
       lastUpdatedAt: s.lastUpdatedAt,
       counts: { attention: wsAttention, running: wsRunning, total: cards.length },
       chats: cards,

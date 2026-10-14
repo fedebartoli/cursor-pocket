@@ -190,6 +190,30 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
       throw new HttpError(405, 'method_not_allowed', 'Metodo non consentito');
     }
 
+    // --- preferenze di notifica ---
+    const wsm = /^\/api\/workspaces\/([\w-]{1,80})\/prefs$/.exec(path);
+    if (wsm && method === 'POST') {
+      const body = await readJson(req);
+      if (typeof body.muted !== 'boolean') throw new HttpError(400, 'bad_prefs', 'Preferenza non valida');
+      const known = watcher.last?.chats.some((c) => c.sectionId === wsm[1]);
+      if (!known) throw new HttpError(404, 'not_found', 'Progetto non trovato');
+      const prefs = store.setChatPrefs(`ws:${wsm[1]}`, { muted: body.muted }, now());
+      watcher.recompute();
+      return sendJson(res, 200, { ok: true, muted: prefs.muted }, headers);
+    }
+    if (path === '/api/settings/quiet') {
+      if (method === 'GET') return sendJson(res, 200, notifier.quiet, headers);
+      if (method === 'POST') {
+        const body = await readJson(req);
+        try {
+          notifier.quiet = body;
+        } catch {
+          throw new HttpError(400, 'bad_quiet', 'Orari non validi (formato HH:MM)');
+        }
+        return sendJson(res, 200, notifier.quiet, headers);
+      }
+    }
+
     // --- push ---
     if (path === '/api/push/public-key' && method === 'GET') {
       return sendJson(res, 200, { publicKey: notifier.publicKey }, headers);

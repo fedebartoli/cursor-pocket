@@ -344,8 +344,19 @@ export function mountChat(root, id) {
     render();
   }
 
+  async function toggleMute(card) {
+    try {
+      await api.post(`/api/chats/${enc}/prefs`, { muted: !card.muted });
+    } catch (err) {
+      notice = `Impossibile aggiornare le notifiche: ${err.message}`;
+    }
+    await refresh().catch(() => {});
+    render();
+  }
+
   function renderTop(lv, card) {
     const actions = [iconButton({ label: 'Aggiorna', name: 'refresh', onClick: () => refresh().catch(() => {}) })];
+    if (card) actions.unshift(iconButton({ label: card.muted ? 'Riattiva le notifiche di questa chat' : 'Silenzia le notifiche di questa chat', name: card.muted ? 'bellOff' : 'bell', onClick: () => toggleMute(card) }));
     if (card) actions.unshift(iconButton({ label: card.favorite ? 'Togli dalle preferite' : 'Aggiungi alle preferite', name: card.favorite ? 'heartOff' : 'heart', onClick: () => toggleFavorite(card) }));
     if (!card) {
       return commit(

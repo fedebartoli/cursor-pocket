@@ -396,3 +396,90 @@ test('preferenze per chat: preferita e silenziata si salvano nel daemon, compaio
     await h.stop();
   }
 });
+
+async function newQuestionPush(h, cookie, { mute, quiet } = {}) {
+  await h.req({ method: 'POST', path: '/api/push/subscribe', cookie, body: { subscription: validSub() } });
+  h.fx.chat(ID, { name: 'Migrazione', lastUpdatedAt: T0 - 1000 });
+  h.tick();
+  h.tick();
+  if (mute) await h.req({ method: 'POST', path: mute.path, cookie, body: { muted: true } });
+  if (quiet) assert.equal((await h.req({ method: 'POST', path: '/api/settings/quiet', cookie, body: quiet })).status, 200);
+  withQuestion(h);
+  h.tick();
+  await new Promise((r) => setImmediate(r));
+  h.tick();
+  await new Promise((r) => setImmediate(r));
+}
+
+test('silenziare: una chat silenziata non riceve push; il log dice solo il motivo', async () => {
+  const h = await startHarness();
+  try {
+    const cookie = await h.pair();
+    await newQuestionPush(h, cookie, { mute: { path: `/api/chats/${ID}/prefs` } });
+    assert.equal(h.sent.length, 0);
+    assert.ok(h.logLines.some((l) => l.includes('push_skipped') && l.includes('chat silenziata')));
+  } finally {
+    await h.stop();
+  }
+});
+
+test('silenziare: un progetto silenziato non riceve push', async () => {
+  const h = await startHarness();
+  try {
+    const cookie = await h.pair();
+    await h.req({ method: 'POST', path: '/api/push/subscribe', cookie, body: { subscription: validSub() } });
+    h.fx.chat(ID, { name: 'Migrazione', lastUpdatedAt: T0 - 1000 });
+    h.tick();
+    const ws = (await h.req({ path: '/api/state', cookie })).json().state.workspaces[0];
+    assert.equal(ws.muted, false);
+    const r = await h.req({ method: 'POST', path: `/api/workspaces/${ws.id}/prefs`, cookie, body: { muted: true } });
+    assert.deepEqual(r.json(), { ok: true, muted: true });
+    h.tick();
+    assert.equal((await h.req({ path: '/api/state', cookie })).json().state.workspaces[0].muted, true);
+    withQuestion(h);
+    h.tick();
+    await new Promise((r2) => setImmediate(r2));
+    h.tick();
+    await new Promise((r2) => setImmediate(r2));
+    assert.equal(h.sent.length, 0);
+    assert.equal((await h.req({ method: 'POST', path: '/api/workspaces/sconosciuto/prefs', cookie, body: { muted: true } })).status, 404);
+    assert.equal((await h.req({ method: 'POST', path: `/api/workspaces/${ws.id}/prefs`, cookie, body: { muted: 'si' } })).status, 400);
+  } finally {
+    await h.stop();
+  }
+});
+
+test('orari senza notifiche: dentro la fascia niente push, fuori si; validazione e lettura', async () => {
+  const h = await startHarness();
+  try {
+    const cookie = await h.pair();
+    const q = (await h.req({ path: '/api/settings/quiet', cookie })).json();
+    assert.deepEqual(q, { enabled: false, from: '22:00', to: '07:00' });
+    assert.equal((await h.req({ method: 'POST', path: '/api/settings/quiet', cookie, body: { enabled: true, from: '25:00', to: '07:00' } })).status, 400);
+    assert.equal((await h.req({ method: 'POST', path: '/api/settings/quiet', cookie, body: { enabled: 'si' } })).status, 400);
+    // fascia che contiene sempre l'istante di prova: dalle 00:00 alle 23:59 meno un minuto non basta, quindi si usa l'ora locale corrente
+    const d = new Date(T0);
+    const hh = (n) => String(n).padStart(2, '0');
+    const from = `${hh(d.getHours())}:00`;
+    const to = `${hh((d.getHours() + 1) % 24)}:00`;
+    await newQuestionPush(h, cookie, { quiet: { enabled: true, from, to } });
+    assert.equal(h.sent.length, 0, 'silenzio');
+    assert.ok(h.logLines.some((l) => l.includes('orario senza notifiche')));
+  } finally {
+    await h.stop();
+  }
+
+  const h2 = await startHarness();
+  try {
+    const cookie = await h2.pair();
+    const d = new Date(T0);
+    const hh = (n) => String(n).padStart(2, '0');
+    // fascia che NON contiene l'istante: parte due ore dopo
+    const from = `${hh((d.getHours() + 2) % 24)}:00`;
+    const to = `${hh((d.getHours() + 3) % 24)}:00`;
+    await newQuestionPush(h2, cookie, { quiet: { enabled: true, from, to } });
+    assert.equal(h2.sent.length, 1, 'fuori fascia: arriva');
+  } finally {
+    await h2.stop();
+  }
+});

@@ -3,6 +3,7 @@
 // I log NON contengono mai testi di chat, endpoint o chiavi: solo conteggi (vedi src/log.js).
 import { sendPush, generateVapidKeys } from './webpush.js';
 import { toolActionLabel } from '../state/present.js';
+import { DEFAULT_QUIET, isQuiet, normalizeQuiet } from './quiet.js';
 import { clampStr, safeJsonParse, sleep as realSleep } from '../util.js';
 
 const RETRY_DELAYS_MS = [1000, 4000];
@@ -133,11 +134,36 @@ export class Notifier {
     return { sent, failed, removed };
   }
 
+  /** Orari senza notifiche (salvati nello store del daemon). */
+  get quiet() {
+    return normalizeQuiet(safeJsonParse(this.#store.getMeta('quiet_hours'), null)) ?? { ...DEFAULT_QUIET };
+  }
+  set quiet(v) {
+    const q = normalizeQuiet(v);
+    if (!q) throw new Error('orari non validi');
+    this.#store.setMeta('quiet_hours', JSON.stringify(q));
+  }
+
+  /** Perche' questo evento non va notificato (chat o progetto silenziati, fascia oraria), o null. */
+  #silencedReason(event) {
+    const prefs = this.#store.chatPrefs();
+    if (prefs.get(event.chat.id)?.muted) return 'chat silenziata';
+    if (event.chat.sectionId && prefs.get(`ws:${event.chat.sectionId}`)?.muted) return 'progetto silenziato';
+    if (isQuiet(this.quiet, new Date(this.#now()))) return 'orario senza notifiche';
+    return null;
+  }
+
   /** Invia la notifica di un evento (una sola volta per `dedupeKey`). */
   async notify(event) {
     const now = this.#now();
     if (this.#store.hasNotified(event.dedupeKey)) return { skipped: 'duplicato' };
     this.#store.markNotified(event.dedupeKey, now);
+    // Segnato come gia' notificato anche se silenziato: togliendo il silenzio non arriva una raffica di notifiche vecchie.
+    const silenced = this.#silencedReason(event);
+    if (silenced) {
+      this.#log.info('push_skipped', { reason: silenced, kind: event.type });
+      return { skipped: silenced };
+    }
     const message = this.compose(event);
     // Nel log va il TIPO (domanda, approvazione, finita), mai il contenuto: serve a capire cosa e' partito e quando.
     // `detectMs`: dall'inizio della richiesta (bubble) a quando il daemon l'ha notificata; `sendMs`: durata dell'invio.

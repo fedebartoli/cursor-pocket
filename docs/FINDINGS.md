@@ -571,6 +571,12 @@ viewport, che su iOS 10+ impedisce lo zoom automatico al focus ma lascia lo zoom
   con la tastiera aperta (ricerca) la barra si nasconde. Se non basta: scorrimento in un contenitore interno con la barra
   fuori dal flusso (piu' invasivo: tocca pull-to-refresh e posizione di scorrimento).
 
+### 10.4e Silenzia e orari senza notifiche (15/10) [OK in test, NON PROVATO su iPhone]
+- Silenzio per chat (campanella nella pagina della chat), per progetto (Impostazioni > Progetti silenziati; chiave
+  `ws:<sectionId>` in `chat_prefs`) e fascia oraria (`quiet_hours` in `meta`, ora locale del Mac, anche a cavallo della
+  mezzanotte; `GET/POST /api/settings/quiet`). Gli eventi vengono comunque segnati come notificati: finita la fascia non
+  arriva un'ondata di avvisi vecchi. Il motivo dello scarto e' nel log (`push_skipped {reason, kind}`), mai il contenuto.
+
 ### 10.5 Da verificare dal vivo, con Cursor riavviato con la porta di debug [NON PROVATO]
 Ogni punto ha una diagnostica pronta: `cd daemon && npm run cdp -- status | inspect | tray` (stampa la struttura della
 pagina e mai i testi).
