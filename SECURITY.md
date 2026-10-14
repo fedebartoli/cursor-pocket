@@ -1,28 +1,28 @@
-# Sicurezza
+# Security
 
 **English.** cursor-pocket lets a phone drive agents that can run shell commands on your Mac. Treat it like remote access to your
 machine. Report vulnerabilities privately (GitHub "Report a vulnerability" on the repository, not a public issue).
 
-## Cosa protegge cosa
+## What protects what
 
-- Il daemon ascolta solo su `127.0.0.1`. L'unico modo previsto per raggiungerlo e' `tailscale serve` (HTTPS dentro la tua tailnet).
-  **Non usare mai `tailscale funnel`**: pubblica il Mac su Internet e lascia nomi DNS pubblici anche dopo averlo spento
-  (vedi `docs/SETUP.md`).
-- Ogni dispositivo si abbina con un codice monouso mostrato sul Mac (`npm run pair`) e riceve una sessione propria, revocabile da
-  Impostazioni ("Dispositivi abbinati"). Senza sessione l'API risponde 401. Le richieste che cambiano dati verificano anche l'origine (nessuna richiesta da altri siti).
-- Il database di Cursor si apre sempre in sola lettura (`mode=ro`) e non viene mai scritto.
-- Le chat, le chiavi e i token non vengono scritti nei log. I dati del daemon stanno in `daemon/data/` (permessi 0700, ignorata da git).
+- The daemon listens only on `127.0.0.1`. The only intended way to reach it is `tailscale serve` (HTTPS within your tailnet).
+  **Never use `tailscale funnel`**: it exposes the Mac to the Internet and leaves public DNS names even after you turn it off
+  (see `docs/SETUP.md`).
+- Each device pairs with a one-time code shown on the Mac (`npm run pair`) and receives its own session, revocable from
+  Impostazioni (Settings) ("Dispositivi abbinati" (Paired devices)). Without a session the API returns 401. Requests that change data also verify the origin (no requests from other sites).
+- The Cursor database is always opened read-only (`mode=ro`) and is never written to.
+- Chats, keys, and tokens are not written to logs. Daemon data lives in `daemon/data/` (permissions 0700, ignored by git).
 
-## Rischi accettati (da conoscere)
+## Accepted risks (good to know)
 
-- Le azioni passano dall'interfaccia di Cursor con la porta di debug (CDP). Finche' la porta e' aperta, **qualunque programma locale
-  dell'utente** puo' controllare Cursor. La porta e' solo su loopback; attivala solo se ti servono le azioni.
-- Chi ottiene una sessione valida puo' rispondere alle richieste, **approvare l'esecuzione di comandi** e scrivere agli agenti.
-  Proteggi l'iPhone (codice, Face ID) e scollega i dispositivi persi.
-- "Mac sveglio a schermo chiuso" usa una regola `sudo` limitata e senza password (`tools/mac/power-setup.sh`): leggila prima di
-  installarla; si toglie con `uninstall`.
-- Il progetto dipende da dettagli interni di Cursor che possono cambiare: dopo un aggiornamento di Cursor controlla `docs/FINDINGS.md`.
+- Actions go through the Cursor interface via the debug port (CDP). As long as the port is open, **any local program
+  running as the user** can control Cursor. The port is loopback-only; enable it only if you need actions.
+- Whoever obtains a valid session can respond to requests, **approve command execution**, and write to agents.
+  Protect your iPhone (passcode, Face ID) and disconnect lost devices.
+- "Mac sveglio a schermo chiuso" ("Keep Mac awake with lid closed") uses a limited, passwordless `sudo` rule (`tools/mac/power-setup.sh`): read it before
+  installing; remove it with `uninstall`.
+- The project depends on Cursor internals that may change: after a Cursor update check `docs/FINDINGS.md`.
 
-## Segnalazioni
+## Reporting
 
-Usa la funzione privata di GitHub ("Security" > "Report a vulnerability"). Non pubblicare chat, chiavi o screenshot reali nelle issue.
+Use GitHub's private feature ("Security" > "Report a vulnerability"). Do not publish chats, keys, or real screenshots in issues.

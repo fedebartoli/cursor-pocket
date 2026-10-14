@@ -1,51 +1,51 @@
-# Prove su iPhone vero
+# Testing on a real iPhone
 
-Tutto cio' che segue e' stato provato in WebKit/Chromium e sul Cursor vero via CDP, ma NON su un iPhone fisico.
-Spunta ogni riga; se qualcosa non va, annota la schermata e cosa ti aspettavi (`docs/FINDINGS.md` va aggiornato con l'esito).
+Everything below was tested in WebKit/Chromium and on real Cursor via CDP, but NOT on a physical iPhone.
+Check off each line; if something fails, note the screen and what you expected (update `docs/FINDINGS.md` with the outcome).
 
-Preparazione: Mac acceso con Cursor avviato con `tools/cursor-cdp.sh`, daemon attivo (`tools/launchd.sh status`), PWA aperta dalla
-schermata Home (non da Safari). Per le prove con l'agente usa una chat di prova, non un lavoro vero.
+Preparation: Mac on with Cursor started with `tools/cursor-cdp.sh`, daemon running (`tools/launchd.sh status`), PWA opened from the
+Home screen (not from Safari). For agent tests use a test chat, not real work.
 
-## 1. Installazione e abbinamento
-- [ ] La PWA parte a schermo intero (senza barre di Safari), con l'icona giusta.
-- [ ] Avvio: niente schermata nera o scheletro infinito; se il Mac e' irraggiungibile compare "Daemon non raggiungibile" con "Riprova" entro ~15 s.
-- [ ] Abbinamento con il codice di `npm run pair`; dopo aver chiuso e riaperto l'app non chiede di nuovo il codice.
+## 1. Installation and pairing
+- [ ] The PWA launches full screen (no Safari bars), with the correct icon.
+- [ ] Startup: no black screen or endless skeleton; if the Mac is unreachable, "Daemon non raggiungibile" ("Daemon unreachable") appears with "Riprova" ("Retry") within ~15 s.
+- [ ] Pairing with the code from `npm run pair`; after closing and reopening the app it does not ask for the code again.
 
-## 2. Barra in basso e scorrimento
-- [ ] La barra (Attenzione, Chat, Preferite, Impostazioni) resta ferma mentre scorri e al rimbalzo a inizio e fine elenco.
-- [ ] Tocca il campo di ricerca (tastiera su e giu'): la barra sparisce con la tastiera e torna al suo posto, mai a meta' schermo.
-- [ ] Cambiando scheda l'elenco riprende la posizione di prima.
-- [ ] Tirando in basso dall'inizio dell'elenco si aggiorna (gesto "tira per aggiornare").
-- [ ] Doppio tocco: nessuno zoom. Pizzico con due dita: zoom possibile.
+## 2. Bottom bar and scrolling
+- [ ] The bar (Attenzione (Attention), Chat, Preferite (Favorites), Impostazioni (Settings)) stays fixed while you scroll and on bounce at the start and end of the list.
+- [ ] Tap the search field (keyboard up and down): the bar hides with the keyboard and returns to place, never halfway up the screen.
+- [ ] When switching tabs the list restores its previous scroll position.
+- [ ] Pulling down from the top of the list refreshes (pull-to-refresh gesture).
+- [ ] Double tap: no zoom. Pinch with two fingers: zoom allowed.
 
-## 3. Notifiche (app chiusa e schermo bloccato)
-- [ ] Permesso notifiche concesso da Impostazioni.
-- [ ] Domanda dell'agente: arriva la notifica; toccandola si apre quella chat.
-- [ ] Approvazione di un comando: arriva la notifica con testo chiaro.
-- [ ] Chat finita: arriva la notifica.
-- [ ] Il numero rosso sull'icona dell'app corrisponde alle richieste da decidere e scende quando le risolvi.
-- [ ] Chat o progetto silenziati, e orari senza notifiche: non arriva nulla.
+## 3. Notifications (app closed and screen locked)
+- [ ] Notification permission granted from Impostazioni (Settings).
+- [ ] Agent question: the notification arrives; tapping it opens that chat.
+- [ ] Command approval: the notification arrives with clear text.
+- [ ] Chat finished: the notification arrives.
+- [ ] The red badge on the app icon matches pending decisions and decreases when you resolve them.
+- [ ] Muted chats or projects, and quiet hours: nothing arrives.
 
-## 4. Azioni su una chat
-- [ ] Rispondere a una domanda (scelta singola, multipla, "Altro" con testo): Cursor registra la risposta.
-- [ ] "Ignora" (anche scorrendo la riga): il pallino sparisce, in Cursor non cambia nulla; "Ripristina" lo riporta.
-- [ ] Scrivere un messaggio con il compositore sopra la tastiera, anche con un'immagine allegata.
-- [ ] "Ferma" l'agente mentre lavora.
-- [ ] Approvare o rifiutare un comando.
-- [ ] Rinomina, Fissa/Togli, Archivia e Ripristina dal pannello in fondo alla chat.
-- [ ] Cuore: la chat compare in Preferite.
-- [ ] Conversazione intera (sola lettura): scorre, "Messaggi precedenti" carica altri pezzi.
+## 4. Actions on a chat
+- [ ] Answer a question (single choice, multiple choice, "Altro" ("Other") with text): Cursor records the answer.
+- [ ] "Ignora" ("Dismiss") (including by swiping the row): the dot disappears, nothing changes in Cursor; "Ripristina" ("Restore") brings it back.
+- [ ] Write a message with the composer above the keyboard, including with an attached image.
+- [ ] "Ferma" ("Stop") the agent while it is working.
+- [ ] Approve or reject a command.
+- [ ] Rinomina (Rename), Fissa/Togli (Pin/Unpin), Archivia (Archive), and Ripristina from the panel at the bottom of the chat.
+- [ ] Heart: the chat appears in Preferite.
+- [ ] Full conversation (read-only): scrolls, "Messaggi precedenti" ("Earlier messages") loads more chunks.
 
-## 5. Nuova chat
-- [ ] "+" nella scheda Chat: scegli progetto, scrivi, avvia: la chat compare e si apre.
-- [ ] "Scegli ramo e modello": le liste arrivano da Cursor; "Come in Cursor" e' la scelta di partenza. Con un'altra scelta la chat parte
-      con quella, e dopo Cursor ha di nuovo i valori di prima.
+## 5. New chat
+- [ ] "+" on the Chat tab: choose project, write, start: the chat appears and opens.
+- [ ] "Scegli ramo e modello" ("Choose branch and model"): lists come from Cursor; "Come in Cursor" ("Same as Cursor") is the default. With another choice the chat starts
+      with that one, and afterward Cursor has its previous values again.
 
-## 6. Mac sveglio e tenuta
-- [ ] Impostazioni > Mac sveglio: acceso con un agente al lavoro il Mac non va in stop; spento torna normale.
-- [ ] Con regola `sudo` installata e schermo chiuso, l'agente continua a lavorare.
-- [ ] Dopo uno o due giorni la PWA e' ancora abbinata e le notifiche arrivano ancora.
-- [ ] Dopo aver cambiato rete (Wi-Fi/5G) l'app si ricollega da sola.
+## 6. Mac sveglio (Keep Mac awake) and reliability
+- [ ] Impostazioni > Mac sveglio: on, with an agent working the Mac does not sleep; off, behavior returns to normal.
+- [ ] With the `sudo` rule installed and the lid closed, the agent keeps working.
+- [ ] After one or two days the PWA is still paired and notifications still arrive.
+- [ ] After changing network (Wi-Fi/5G) the app reconnects on its own.
 
-## 7. Dispositivi
-- [ ] Impostazioni > Dispositivi abbinati: il telefono e' elencato; "Scollega" su un secondo dispositivo di prova lo disconnette.
+## 7. Devices
+- [ ] Impostazioni > Dispositivi abbinati (Paired devices): the phone is listed; "Scollega" ("Disconnect") on a second test device disconnects it.
