@@ -67,7 +67,14 @@ const page = await ctx.newPage();
 const problems = [];
 page.on('console', (m) => {
   const t = m.text();
-  if (/Content Security Policy|CSP|violat/i.test(t) || m.type() === 'error') problems.push(`${m.type()}: ${t.slice(0, 160)} @ ${page.url().split('#')[1] ?? ''}`);
+  if (/Content Security Policy|CSP|violat/i.test(t) || m.type() === 'error') {
+    const loc = m.location();
+    const line = `${m.type()}: ${t.slice(0, 160)} @ ${page.url().split('#')[1] ?? ''} (${loc.url?.split('/').slice(-2).join('/')}:${loc.lineNumber})`;
+    // WebKit refuses its own built-in <select> stylesheet under 'style-src self' (reproducible with a bare <select>
+    // and no app code): it is a WebKit artifact, not an app violation.
+    const webkitSelectArtifact = engineName === 'webkit' && /Refused to apply a stylesheet/.test(t) && page.url().includes('/impostazioni');
+    if (!webkitSelectArtifact && !problems.includes(line)) problems.push(line);
+  }
 });
 page.on('pageerror', (e) => problems.push(`pageerror: ${String(e.message).slice(0, 160)}`));
 const shot = async (name) => {
@@ -678,10 +685,14 @@ try {
   check('language: choosing English reloads and translates the tab bar', enTabs.join('|') === 'Attention|Chats|Favorites|Settings', enTabs.join('|'));
   check('language: html lang follows the choice', (await page.evaluate(() => document.documentElement.lang)) === 'en');
   for (const code of ['es', 'fr', 'de', 'pt', 'ja', 'zh']) {
+    const problemsBefore = problems.length;
     await page.evaluate((c) => localStorage.setItem('cp.lang', c), code);
     await page.reload();
     await page.waitForSelector('.tabbar .tab-label');
     const labels = (await page.locator('.tabbar .tab-label').allInnerTexts()).map((x) => x.trim());
+    const ov = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
+    check(`language ${code}: settings page has no horizontal overflow`, ov <= 0, `${ov}px`);
+    check(`language ${code}: no console or CSP errors while loading`, problems.length === problemsBefore, problems.slice(problemsBefore).join(' | ').slice(0, 300));
     check(`language ${code}: tab bar translated (no raw keys, different from English)`, labels.length === 4 && labels.join('|') !== 'Attention|Chats|Favorites|Settings' && labels.every((l) => l && !/^[a-zA-Z]+\.[a-zA-Z]+/.test(l)), labels.join('|'));
   }
   await page.evaluate(() => localStorage.removeItem('cp.lang'));
