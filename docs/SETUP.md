@@ -78,7 +78,14 @@ tailnet (non su Internet).
    certificato; le successive sono immediate. L'app di Tailscale deve essere connessa: da ferma non risultano i certificati.
 3. Controllo: `tailscale serve status` (deve riportare `(tailnet only)`). Per togliere l'esposizione:
    `tailscale serve --https=443 off` oppure `tailscale serve reset`.
-4. Non usare `tailscale funnel`: rende il servizio pubblico su Internet.
+4. Non usare `tailscale funnel`: rende il servizio pubblico su Internet. EFFETTO COLLATERALE VERIFICATO: se su questo Mac
+   e' acceso il Funnel anche solo per un'ALTRA porta/progetto (es. 8443), il nome `<mac>.<tailnet>.ts.net` ottiene un
+   indirizzo pubblico su Internet. Dal Mac il nome si risolve ancora verso Tailscale (`dig +short <nome>` mostra 100.x), ma
+   `dig +short <nome> @8.8.8.8` mostra indirizzi pubblici che sulla 443 chiudono la connessione. Sul telefono il sintomo
+   osservato e' stato: PWA ferma sullo scheletro e anche Safari che non carica l'indirizzo (la causa lato iPhone e' dedotta
+   da questo, non provata dentro l'iPhone). Controllo: `tailscale serve status --json` e cerca `AllowFunnel`. Rimedio:
+   spegnere il Funnel (`tailscale funnel --https=<porta> off`). Dalla versione con timeout l'app mostra "Daemon non
+   raggiungibile" dopo 10 secondi invece di restare ferma.
 5. Facoltativo ma consigliato: `CP_ALLOWED_TS_LOGINS=tuo@account npm start` accetta solo richieste che portano
    quell'identita' Tailscale (intestazione aggiunta da `serve`; blocca anche un eventuale Funnel, che non la porta).
 
