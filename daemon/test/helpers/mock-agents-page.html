@@ -299,6 +299,9 @@
       S.newChats.push({ id, project: S.newChat.project, text, images });
       S.newChat = null;
       S.current = id;
+      // Come Cursor: per un attimo c'e' anche una riga "bozza" (altro id) che poi sparisce.
+      S.chats['draft-' + id] = { name: 'Bozza' };
+      setTimeout(() => { delete S.chats['draft-' + id]; sidebar(); }, 500);
       comp.replaceChildren();
       previews.replaceChildren();
       refreshSend();

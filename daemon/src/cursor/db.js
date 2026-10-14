@@ -53,7 +53,7 @@ export class CursorDb {
       ),
       // Stato di UNA chat (archiviata? nome?), per verificare archivia / ripristina / rinomina.
       oneHeader: db.prepare(
-        `SELECT COALESCE(isArchived, 0) AS isArchived, json_extract(value, '$.name') AS name
+        `SELECT COALESCE(isArchived, 0) AS isArchived, COALESCE(json_extract(value, '$.isDraft'), 0) AS isDraft, json_extract(value, '$.name') AS name
            FROM composerHeaders WHERE composerId = ?`,
       ),
       // Solo la "coda" del composerData: evita di fare il parsing di megabyte in JavaScript.
@@ -173,7 +173,7 @@ export class CursorDb {
   /** `{ archived, name }` di una chat (null se non esiste). */
   chatFlags(composerId) {
     const r = this.#need().oneHeader.get(composerId);
-    return r ? { archived: r.isArchived === 1, name: typeof r.name === 'string' ? r.name : null } : null;
+    return r ? { archived: r.isArchived === 1, draft: r.isDraft === 1, name: typeof r.name === 'string' ? r.name : null } : null;
   }
 
   /** Stato sintetico del composerData di una chat (null se non esiste). */

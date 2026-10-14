@@ -871,6 +871,15 @@ test('nuova chat via HTTP: progetto risolto dal daemon, controlli, file allegati
     assert.equal((await create({ sectionId, text: 'Crea  un\nREADME' })).json().error, 'already_sent', 'doppio tocco');
     assert.ok(!h.logLines.join('').includes('README'), 'il testo non finisce nei log');
 
+    // una riga "bozza" (isDraft) non e' la chat vera: non si dichiara verificata
+    ui.onNewChat = () => {
+      h.fx.chat('44444444-4444-4444-8444-444444444444', { name: 'Bozza', header: { isDraft: true } });
+      return { composerId: '44444444-4444-4444-8444-444444444444' };
+    };
+    const dr = await create({ sectionId, text: 'terza' });
+    assert.equal(dr.status, 200, dr.text);
+    assert.equal(dr.json().verified, false);
+
     // errori della UI tradotti
     ui.onNewChat = () => {
       throw Object.assign(new Error('x'), { code: 'not_local' });

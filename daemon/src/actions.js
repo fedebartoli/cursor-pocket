@@ -480,7 +480,10 @@ export class Actions extends EventEmitter {
     try {
       const res = await this.#run('newchat', async () => {
         const r = await this.ui.newChat({ project: known.workspaceName, text: clean, ...(files.length ? { files } : {}) });
-        const seen = await this.#waitFor(() => (this.db.chatFlags(r.composerId) ? true : null), 12_000);
+        const seen = await this.#waitFor(() => {
+          const f = this.db.chatFlags(r.composerId);
+          return f && !f.draft && !f.archived ? true : null; // la "bozza" che Cursor crea prima dell'invio non conta
+        }, 12_000);
         return { ok: true, chatId: r.composerId, verified: Boolean(seen) };
       });
       ok = true;

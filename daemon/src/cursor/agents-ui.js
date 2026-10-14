@@ -1105,11 +1105,21 @@ export class AgentsUi {
         throw e;
       }
       await ctx.clickTarget({ target: 'send' });
+      // Cursor crea PRIMA una riga "bozza" e, inviato il messaggio, la sostituisce con la chat vera (altro id): si prende la riga
+      // nuova solo quando l'elenco delle righe nuove e' stabile e ne resta una.
+      let lastSig = null;
+      let since = 0;
       const created = await waitFor(async () => {
         const keys = await ctx.page({ op: 'rowKeys' });
         const fresh = keys.filter((k) => !before.has(k));
-        return fresh.length === 1 ? fresh[0] : null;
-      }, { timeoutMs: 12_000, sleep: this.sleep });
+        const sig = fresh.join('|');
+        if (sig !== lastSig) {
+          lastSig = sig;
+          since = Date.now();
+          return null;
+        }
+        return fresh.length === 1 && Date.now() - since >= 1200 ? fresh[0] : null;
+      }, { timeoutMs: 15_000, intervalMs: 250, sleep: this.sleep });
       if (!created) throw new UiError('send_failed', 'non vedo la chat nuova in Cursor');
       await this.#restore(ctx, previous, created.replace(/^row:/, ''));
       return { composerId: created.replace(/^row:/, '') };
