@@ -46,7 +46,7 @@ export default {
     "app.tabAttentionWithCount": "Aktion, {count} Entscheidungen offen",
     "app.tabChats": "Chats",
     "app.tabFavorites": "Favoriten",
-    "app.tabSettings": "Einstellungen",
+    "app.tabSettings": "Optionen",
     "archive.daemonUnreachable": "Daemon nicht erreichbar",
     "archive.emptyText": "Lokal in Cursor archivierte Chats erscheinen hier.",
     "archive.emptyTitle": "Keine archivierten Chats",
