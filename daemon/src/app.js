@@ -56,6 +56,7 @@ export function createApp({ config, logger, now = Date.now, send, actionsDeps = 
       chats: last.chats,
       settings: last.settings,
       ignored: store.ignoredSet(),
+      prefs: store.chatPrefs(),
       now: now(),
       pendingAfterMs: config.pendingAfterMs,
     });
@@ -74,6 +75,7 @@ export function createApp({ config, logger, now = Date.now, send, actionsDeps = 
   function maintain() {
     const t = now();
     store.pruneIgnored(t - 90 * DAY);
+    store.prunePrefs?.();
     store.pruneNotified(t - 30 * DAY);
     store.pruneSessions(t - 90 * DAY);
     store.prunePairing(t - DAY);

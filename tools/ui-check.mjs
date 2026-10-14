@@ -102,7 +102,7 @@ try {
 
   // --- barra in basso, righe, gesti, formattazione ---
   const tabbarEl = page.locator('.tabbar');
-  check('barra in basso: visibile in home con "Chat" attiva', (await tabbarEl.isVisible()) && (await tabbarEl.locator('.tab[aria-current=page]').innerText()).includes('Chat'));
+  check('barra in basso: visibile in home con "Attenzione" attiva e quattro voci', (await tabbarEl.isVisible()) && (await tabbarEl.locator('.tab[aria-current=page]').innerText()).includes('Attenzione') && (await tabbarEl.locator('.tab').count()) === 4);
   const tbBox = await tabbarEl.boundingBox();
   const vpH = page.viewportSize().height;
   check('barra in basso: ancorata in fondo, tasti alti almeno 44px', tbBox && tbBox.y + tbBox.height >= vpH - 1 && (await page.locator('.tab').first().boundingBox()).height >= 44, JSON.stringify(tbBox));
@@ -126,7 +126,7 @@ try {
   check('gesto: la chat non si apre dopo il trascinamento', (await page.evaluate(() => location.hash)) === hashBefore);
   const openBox = await page.locator('.swipe.open .row').boundingBox();
   check('gesto: le righe scorrevoli ammettono solo pan verticale e pinch (niente zoom col doppio tocco)', (await page.evaluate(() => getComputedStyle(document.querySelector('.swipe .row')).touchAction)) === 'pan-y pinch-zoom');
-  check('gesto: la riga si sposta di circa la larghezza del pulsante', openBox && Math.abs(openBox.x - (swipeBox.x - 92)) < 6, JSON.stringify(openBox));
+  check('gesto: la riga si sposta di circa la larghezza del pulsante', openBox && Math.abs(openBox.x - (swipeBox.x - 96)) < 6, JSON.stringify(openBox));
   await page.mouse.click(swipeBox.x + 40, 140); // tocco altrove (intestazione): chiude
   await sleep(350);
   check('gesto: un tocco altrove richiude la riga', (await page.locator('.swipe.open').count()) === 0);
@@ -138,13 +138,66 @@ try {
     return true;
   })());
 
+  // --- schede: Chat (con ricerca), Preferite, Come funziona ---
+  await page.locator('.tabbar .tab', { hasText: 'Chat' }).click();
+  await page.waitForSelector('.search-input');
+  await sleep(200);
+  check('scheda Chat: titolo, ricerca e gruppi per progetto', (await page.locator('.appbar-title').innerText()) === 'Chat' && (await page.locator('.section-head', { hasText: 'negozio-online' }).count()) >= 1 && (await page.locator('.section-head', { hasText: 'Richiedono attenzione' }).count()) === 0);
+  check('scheda Chat: la voce attiva e\' Chat', (await page.locator('.tab[aria-current=page]').innerText()).includes('Chat'));
+  const allRows = await page.locator('.row').count();
+  await page.locator('.search-input').fill('carrello');
+  await sleep(250);
+  check('ricerca: filtra per titolo e mantiene il campo attivo', (await page.locator('.list .row').count()) === 1 && (await page.locator('.list .row-title').first().innerText()).toLowerCase().includes('carrello') && (await page.evaluate(() => document.activeElement?.classList.contains('search-input'))));
+  await page.locator('.search-input').fill('zzzz-non-esiste');
+  await sleep(250);
+  check('ricerca: nessun risultato', await page.locator('.empty h2', { hasText: 'Nessun risultato' }).isVisible());
+  await page.locator('.search-clear').click();
+  await sleep(250);
+  check('ricerca: cancellando tornano tutte le chat', (await page.locator('.row').count()) === allRows);
+  await shot('11-chat-tab');
+  const vh = page.viewportSize().height;
+  await page.evaluate(() => window.scrollTo(0, document.documentElement.scrollHeight));
+  await sleep(250);
+  const tb2 = await page.locator('.tabbar').boundingBox();
+  check('barra in basso: dopo lo scorrimento resta incollata al fondo', tb2 && Math.abs(tb2.y + tb2.height - vh) <= 1, JSON.stringify(tb2));
+  await page.evaluate(() => window.scrollTo(0, 0));
+
+  // cuore: dalla pagina della chat; compare in Preferite e si toglie da li'
+  await page.goto(CHAT(2));
+  await page.waitForSelector('.chat-head');
+  await page.locator('.appbar [aria-label="Aggiungi alle preferite"]').click();
+  await page.waitForSelector('.appbar [aria-label="Togli dalle preferite"]', { timeout: 8000 });
+  check('chat: il cuore aggiunge la chat alle preferite', true);
+  await page.goto(`${BASE}/#/preferite`);
+  await page.waitForSelector('.list .row');
+  check('scheda Preferite: la chat con il cuore e\' in elenco', (await page.locator('.list .row').count()) === 1 && (await page.locator('.list .row-title').first().innerText()).includes('Migrazione'));
+  await shot('12-favorites');
+  await page.locator('.list .row').first().click();
+  await page.waitForSelector('.appbar [aria-label="Togli dalle preferite"]');
+  await page.locator('.appbar [aria-label="Togli dalle preferite"]').click();
+  await page.waitForSelector('.appbar [aria-label="Aggiungi alle preferite"]', { timeout: 8000 });
+  await page.goto(`${BASE}/#/preferite`);
+  await page.waitForSelector('.empty');
+  check('scheda Preferite: senza cuori mostra lo stato vuoto', await page.locator('.empty h2', { hasText: 'Nessuna preferita' }).isVisible());
+
+  // "Come funziona" sta sotto Impostazioni e contiene le spiegazioni tolte dalle schermate
+  await page.goto(`${BASE}/#/impostazioni`);
+  await page.locator('.help-link').click();
+  await page.waitForSelector('.help-list');
+  check('Come funziona: raggiungibile da Impostazioni, con Impostazioni attiva nella barra', (await page.locator('.tab[aria-current=page]').innerText()).includes('Impostazioni') && (await page.locator('.help-list li').count()) >= 6);
+  await page.goto(CHAT(1));
+  await page.waitForSelector('.panel.attention');
+  check('chat: nessuna nota fissa di spiegazione nel pannello', !(await page.locator('.panel.attention').innerText()).includes('come se la scegliessi') && !(await page.locator('.panel.attention').innerText()).includes('toglie solo il pallino'));
+  await page.goto(`${BASE}/#/`);
+  await page.waitForSelector('.swipe');
+
   // --- stile: zoom e campi ---
   const styles = await page.evaluate(() => {
     const ta = (sel) => (document.querySelector(sel) ? getComputedStyle(document.querySelector(sel)) : null);
     return {
       html: getComputedStyle(document.documentElement).touchAction,
       body: getComputedStyle(document.body).touchAction,
-      row: ta('.list > .row')?.touchAction,
+      row: ta('.list > .swipe .row')?.touchAction === 'pan-y pinch-zoom' ? 'manipulation' : ta('.list > .swipe .row')?.touchAction, // righe scorrevoli: pan-y + pinch-zoom = senza zoom col doppio tocco
       btn: ta('.icon-btn')?.touchAction,
     };
   });

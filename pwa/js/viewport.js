@@ -32,6 +32,18 @@ export function classifyTap(last, tap) {
   return { double: false, remember: tap };
 }
 
+/**
+ * Quanto la barra fissa in basso va spostata (px, positivo = in giu') per restare incollata al fondo di CIO' CHE SI VEDE.
+ * Con il visual viewport allineato (nessun pinch-zoom, nessuna tastiera) vale 0. Se iOS lo sposta rispetto al viewport di
+ * layout (rimbalzo, tastiera chiusa male, barre di Safari) la barra seguirebbe il layout e finirebbe a meta' schermo.
+ * Funzione pura.
+ */
+export function bottomShift({ innerHeight, vvHeight, vvOffsetTop, vvScale = 1 }) {
+  if (vvScale > 1.01) return 0; // pinch-zoom: la barra resta dove sta, come ogni elemento fisso
+  const shift = Math.round(vvOffsetTop + vvHeight - innerHeight);
+  return Math.abs(shift) <= 1 ? 0 : shift;
+}
+
 /** Altezza coperta dalla tastiera, dato il visual viewport (0 se non c'e'). Funzione pura. */
 export function keyboardHeight({ innerHeight, vvHeight, vvOffsetTop, vvScale = 1 }) {
   if (vvScale > 1.01) return 0; // pinch-zoom in corso: il visual viewport e' piu' piccolo, ma non e' la tastiera
@@ -88,9 +100,17 @@ function trackKeyboard(win = window, doc = document) {
   const root = doc.documentElement;
   let frame = 0;
   let current = -1;
+  let currentShift = 0;
   const apply = () => {
     frame = 0;
-    const kb = keyboardHeight({ innerHeight: win.innerHeight, vvHeight: vv.height, vvOffsetTop: vv.offsetTop, vvScale: vv.scale });
+    const m = { innerHeight: win.innerHeight, vvHeight: vv.height, vvOffsetTop: vv.offsetTop, vvScale: vv.scale };
+    const kb = keyboardHeight(m);
+    // Con la tastiera aperta la barra in basso si nasconde (CSS): non si sposta sopra la tastiera.
+    const shift = kb > 0 ? 0 : bottomShift(m);
+    if (shift !== currentShift) {
+      currentShift = shift;
+      root.style.setProperty('--vv-shift', `${shift}px`);
+    }
     if (kb === current) return;
     current = kb;
     root.style.setProperty('--kb', `${kb}px`);

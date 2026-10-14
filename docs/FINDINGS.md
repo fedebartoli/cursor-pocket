@@ -558,6 +558,19 @@ ancora scritti), per cui si ricade sull'attesa dei `params`. Effetto atteso: il 
 Zoom al tocco di un campo di testo su iOS (segnalato dall'utente, i font erano gia' a 16 px): aggiunto `maximum-scale=1` al
 viewport, che su iOS 10+ impedisce lo zoom automatico al focus ma lascia lo zoom con due dita (accessibilita'). NON provato su iPhone.
 
+### 10.4d Schede, preferite e pagine alleggerite (15/10) [OK in browser, NON PROVATO su iPhone]
+- Scelte dell'utente: barra a 4 voci (Attenzione, Chat, Preferite, Impostazioni), barra SEMPRE ferma in basso, niente note
+  esplicative nelle schermate di lavoro (spostate in "Come funziona", sotto Impostazioni), cuore per le preferite.
+- Attenzione = richieste da decidere + chat in corso + in sospeso; Chat = gruppi per progetto come la sidebar, con ricerca;
+  Preferite = chat con il cuore. Preferite e silenziate sono preferenze LOCALI del daemon (`chat_prefs` in `store.db`,
+  `POST /api/chats/:id/prefs {favorite?, muted?}`), non toccano Cursor. Scorrere una riga: "Ignora" se richiede attenzione,
+  altrimenti il cuore.
+- Barra in basso: l'utente segnala che sull'iPhone a volte sale a meta' schermo mentre scorre la lista. Non riprodotto nei
+  browser di prova (li' e' ferma). Difese, TUTTE da provare sul telefono: livello proprio (`translate3d`, `will-change`) e
+  riallineamento al fondo del visual viewport (`--vv-shift`, `bottomShift` in `viewport.js`, solo senza tastiera ne' zoom);
+  con la tastiera aperta (ricerca) la barra si nasconde. Se non basta: scorrimento in un contenitore interno con la barra
+  fuori dal flusso (piu' invasivo: tocca pull-to-refresh e posizione di scorrimento).
+
 ### 10.5 Da verificare dal vivo, con Cursor riavviato con la porta di debug [NON PROVATO]
 Ogni punto ha una diagnostica pronta: `cd daemon && npm run cdp -- status | inspect | tray` (stampa la struttura della
 pagina e mai i testi).

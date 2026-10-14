@@ -199,6 +199,7 @@ export function mountSettings(root, { onLoggedOut }) {
     const out = [appbar({ title: 'Impostazioni' })];
     if (getLive().offline) out.push(banner({ text: 'Daemon non raggiungibile' }));
     out.push(notificationsPanel(), actionsPanel(), daemonPanel());
+    out.push(h('a', { class: 'row help-link', href: '#/come-funziona' }, icon('info', { size: 20 }), h('div.row-main', null, h('div.row-title', null, 'Come funziona')), icon('chevronRight', { size: 18 })));
     out.push(
       h(
         'section.panel',

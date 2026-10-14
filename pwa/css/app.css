@@ -128,13 +128,20 @@ h1, h2, h3, p { margin: 0; }
   background: var(--bg);
   border-top: 1px solid var(--line);
   padding-bottom: env(safe-area-inset-bottom);
+  /* Sempre ancorata al fondo dello schermo: livello proprio (su iOS evita gli scatti delle barre fisse mentre si scorre)
+     e, se il visual viewport si sposta rispetto a quello di layout, viewport.js la riallinea con --vv-shift. */
+  transform: translate3d(0, var(--vv-shift, 0px), 0);
+  -webkit-transform: translate3d(0, var(--vv-shift, 0px), 0);
+  will-change: transform;
+  backface-visibility: hidden;
 }
-.tabbar[hidden] { display: none; }
+.tabbar[hidden], .kb-open .tabbar { display: none; }
 .tabbar-inner { display: flex; max-width: 640px; margin: 0 auto; padding: 0 env(safe-area-inset-right) 0 env(safe-area-inset-left); }
-.tab { flex: 1; min-height: var(--tabbar-h); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--text-3); font-size: 12px; font-weight: 600; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
+.tab { flex: 1 1 0; min-width: 0; min-height: var(--tabbar-h); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; color: var(--text-3); font-size: 12px; font-weight: 600; -webkit-user-select: none; user-select: none; -webkit-touch-callout: none; }
 .tab[aria-current="page"] { color: var(--accent); }
 .tab:active { background: var(--surface-2); }
 .tab-icon { position: relative; display: grid; place-items: center; }
+.tab-label { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; padding: 0 2px; }
 .tab-badge { position: absolute; top: -5px; left: 55%; min-width: 18px; padding: 0 5px; border-radius: var(--r-pill); background: var(--danger); color: var(--on-danger); font-size: 11px; font-weight: 700; line-height: 18px; text-align: center; }
 .tab-badge[hidden] { display: none; }
 body.has-tabbar .app { padding-bottom: calc(var(--tabbar-h) + 24px + env(safe-area-inset-bottom)); }
@@ -213,7 +220,7 @@ button.section-head { cursor: pointer; }
 
 
 /* Riga con "Ignora" scoperto scorrendo (home, sezione "Richiedono attenzione") */
-.swipe { --swipe-w: 92px; position: relative; overflow: hidden; touch-action: pan-y pinch-zoom; }
+.swipe { --swipe-w: 96px; position: relative; overflow: hidden; touch-action: pan-y pinch-zoom; }
 .swipe + .swipe { border-top: 1px solid var(--line); }
 .swipe .row { position: relative; background: var(--surface); transform: translateX(var(--swipe, 0px)); touch-action: pan-y pinch-zoom; }
 .swipe .row + .row { border-top: 0; }
@@ -341,6 +348,17 @@ button.section-head { cursor: pointer; }
   -webkit-user-select: text;
   user-select: text;
 }
+/* ---------- ricerca, "Come funziona" ---------- */
+.search { display: flex; align-items: center; gap: 8px; margin: 12px var(--gutter) 0; padding: 0 6px 0 12px; min-height: 44px; border: 1px solid var(--line); border-radius: var(--r-control); background: var(--surface); color: var(--text-2); }
+.search[hidden] { display: none; }
+.search-input { flex: 1; min-width: 0; min-height: 42px; border: 0; outline: 0; background: transparent; color: var(--text); }
+.search-input::-webkit-search-cancel-button { display: none; }
+.search-clear[hidden] { display: none; }
+.swipe-action.fav { background: var(--accent); color: var(--on-accent); }
+.help-link { display: flex; align-items: center; gap: 12px; width: calc(100% - 2 * var(--gutter)); margin: var(--gutter) var(--gutter) 0; min-height: var(--tap); border-radius: var(--r-box); }
+.panel.help { margin-top: var(--gutter); }
+.help-title { font-size: 16px; font-weight: 650; }
+.help-list { margin: 8px 0 0; padding-left: 20px; display: grid; gap: 8px; color: var(--text-2); font-size: 15px; }
 .decision { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
 .btn.armed { background: var(--danger); border-color: var(--danger); color: var(--on-danger); }
 .steps { margin: 8px 0 0; padding-left: 20px; color: var(--text-2); font-size: 14px; display: grid; gap: 4px; }

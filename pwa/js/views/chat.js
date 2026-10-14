@@ -44,13 +44,13 @@ const signatureOf = (c) => (c ? `${c.state}|${c.attention?.key ?? ''}|${c.lastUp
 function explanation(a) {
   switch (a.kind) {
     case 'approvazione':
-      return 'L\u2019agente \u00e8 fermo in attesa della tua approvazione in Cursor. Per questo tipo di richiesta approva o rifiuta sul Mac: da qui si decidono solo i comandi di terminale.';
+      return 'Da qui si decidono solo i comandi di terminale: approva o rifiuta sul Mac.';
     case 'piano':
-      return 'C\u2019\u00e8 un piano in attesa della tua approvazione. Aprilo in Cursor sul Mac.';
+      return 'Piano in attesa: aprilo in Cursor sul Mac.';
     case 'residuo':
-      return 'Cursor segna questa chat come in attesa, ma non risulta una richiesta aperta. Potrebbe essere un residuo: in quel caso puoi ignorarla.';
+      return 'Possibile residuo: non risulta una richiesta aperta.';
     default:
-      return 'Domanda in attesa. Apri Cursor sul Mac per rispondere.';
+      return 'Apri Cursor sul Mac per rispondere.';
   }
 }
 
@@ -295,21 +295,18 @@ export function mountChat(root, id) {
     const ap = detail?.approval?.key === a.key ? detail.approval : null;
     const children = [h('div', { class: `panel-title${live ? ' danger' : ''}` }, preparingNow ? icon('spinner', { size: 20, className: 'spin' }) : icon(kindIcon, { size: 20 }), h('span.grow', null, preparingNow ? 'L\u2019agente sta preparando la domanda' : heading), h('span.hint', null, timeAgo(a.since)))];
     if (preparingNow) {
-      children.push(h('p.panel-note', null, 'Cursor scrive il testo della domanda solo quando l\u2019agente ha finito di formularla. Appena \u00e8 pronta potrai rispondere da qui: la pagina si aggiorna da sola.'));
+      // il titolo dice gia' tutto: nessun testo in piu'
     } else if (q) {
       children.push(...questionBlocks(q));
       if (live) {
         const why = unavailableReason(actionsStatus, offline);
-        children.push(h('p.panel-note', null, 'Qui le opzioni sono solo da leggere. ', why.text, ' ', why.link ? h('a', { class: 'link', href: why.link.href }, why.link.label) : null));
-      } else {
-        children.push(h('p.panel-note', null, 'Per rispondere apri Cursor sul Mac.'));
+        children.push(h('p.panel-note', null, why.text, ' ', why.link ? h('a', { class: 'link', href: why.link.href }, why.link.label) : null));
       }
     } else if (ap?.supported && ap.command) {
       if (ap.description) children.push(h('p.panel-detail', null, ap.description));
       children.push(h('pre.cmd', { tabindex: '0', 'aria-label': 'Comando da eseguire' }, ap.command));
       if (ap.truncated) children.push(h('p.panel-note', null, 'Comando troppo lungo per essere mostrato per intero: per eseguirlo usa Cursor sul Mac. Da qui puoi solo rifiutarlo.'));
-      if (!live) children.push(h('p.panel-note', null, 'Per decidere apri Cursor sul Mac.'));
-      else if (!actionsOk) children.push(h('p.panel-note', null, 'Da qui puoi solo leggerlo. ', unavailableReason(actionsStatus, offline).text));
+      if (live && !actionsOk) children.push(h('p.panel-note', null, unavailableReason(actionsStatus, offline).text));
     } else {
       if (a.detail) children.push(h('p.panel-detail', null, a.detail));
       children.push(h('p.panel-note', null, explanation(a)));
@@ -325,22 +322,31 @@ export function mountChat(root, id) {
         h('button', { class: `btn block${armed === decision ? ' armed' : ''}${cls}`, type: 'button', disabled: dis || (decision === 'approve' && noApprove), onClick: () => approvalTap(decision) }, icon(iconName, { size: 18 }), armed === decision ? 'Conferma' : label);
       actions.push(h('div.decision', null, btn('approve', 'Esegui', 'check', ' primary'), btn('reject', 'Rifiuta', 'close', '')));
       if (formNotice) actions.push(h('p', { class: `hint${formNotice.error ? ' error-text' : ''}`, role: 'status' }, formNotice.text));
-      else actions.push(h('p.hint', null, armed ? 'Tocca ancora lo stesso pulsante per confermare.' : 'Esegui lancia il comando sul Mac. Serve un secondo tocco per confermare.'));
+      else if (armed) actions.push(h('p.hint', null, 'Tocca ancora per confermare.'));
     }
     if (live) {
       actions.push(h('button', { class: 'btn block', type: 'button', disabled: busy, onClick: () => ignoreAction('post', card, 'Impossibile ignorare') }, icon('eyeOff', { size: 18 }), 'Ignora'));
-      actions.push(h('p.hint', null, 'Toglie il pallino solo da questa app. Non invia nulla a Cursor.'));
     } else if (ignored) {
       actions.push(h('button', { class: 'btn block', type: 'button', disabled: busy, onClick: () => ignoreAction('del', card, 'Impossibile ripristinare') }, icon('restore', { size: 18 }), 'Ripristina'));
-      actions.push(h('p.hint', null, 'Rimette la richiesta tra quelle che richiedono attenzione.'));
     }
     if (actions.length) children.push(h('div.panel-actions', null, actions));
 
     return h('section', { class: `panel${live ? ' attention' : ''}` }, children);
   }
 
+  async function toggleFavorite(card) {
+    try {
+      await api.post(`/api/chats/${enc}/prefs`, { favorite: !card.favorite });
+    } catch (err) {
+      notice = `Impossibile aggiornare le preferite: ${err.message}`;
+    }
+    await refresh().catch(() => {});
+    render();
+  }
+
   function renderTop(lv, card) {
     const actions = [iconButton({ label: 'Aggiorna', name: 'refresh', onClick: () => refresh().catch(() => {}) })];
+    if (card) actions.unshift(iconButton({ label: card.favorite ? 'Togli dalle preferite' : 'Aggiungi alle preferite', name: card.favorite ? 'heartOff' : 'heart', onClick: () => toggleFavorite(card) }));
     if (!card) {
       return commit(
         topHost,

@@ -1,14 +1,17 @@
-// Elenco: "Richiedono attenzione", "In sospeso" e le chat raggruppate per workspace nell'ordine della sidebar di Cursor.
-import { appbar, banner, chatRow, emptyState, iconButton, sectionHead, skeleton } from '../components.js';
+// Elenchi delle tre schede principali, che condividono gesti e aggiornamento:
+//   'attention'  richieste da decidere ("Richiedono attenzione"), chat "In corso" e "In sospeso"
+//   'chats'      tutte le chat raggruppate per workspace nell'ordine della sidebar di Cursor, con ricerca
+//   'favorites'  le chat con il cuore (preferenza locale al daemon)
+import { STATE, appbar, banner, chatRow, emptyState, iconButton, sectionHead, skeleton } from '../components.js';
 import { api } from '../api.js';
-import { commit, h } from '../dom.js';
+import { commit, h, replace } from '../dom.js';
 import { icon } from '../icons.js';
 import { getLive, refresh } from '../live.js';
 import { environment } from '../push.js';
 
 const PREFS_KEY = 'cp.home.v1';
 const PREVIEW = 5; // chat mostrate per workspace prima di "Mostra altre"
-const SWIPE_W = 92; // larghezza del pulsante "Ignora" scoperto scorrendo una riga (anche in app.css: --swipe-w)
+const SWIPE_W = 96; // larghezza del pulsante "Ignora" scoperto scorrendo una riga (anche in app.css: --swipe-w)
 const PTR_TRIGGER = 56; // trascinamento (px, dopo la resistenza) oltre il quale si aggiorna
 const PTR_MAX = 80;
 
@@ -21,8 +24,11 @@ function readPrefs() {
   }
 }
 
-export function mountHome(root) {
+const TITLES = { attention: 'Attenzione', chats: 'Chat', favorites: 'Preferite' };
+
+export function mountHome(root, mode = 'attention') {
   const prefs = readPrefs();
+  let query = ''; // ricerca (solo scheda Chat)
   const expandedLists = new Set();
   let refreshing = false;
   let alive = true;
@@ -60,11 +66,12 @@ export function mountHome(root) {
   // --- gesti -----------------------------------------------------------------------------------------------
   // Scorrere una riga verso sinistra scopre "Ignora" (la stessa azione della pagina chat, che resta per chi usa VoiceOver).
   // Il tocco semplice apre la chat come prima; un trascinamento orizzontale non la apre.
-  async function ignoreCard(card) {
+  async function swipeAction(card) {
     try {
-      await api.post(`/api/chats/${encodeURIComponent(card.id)}/ignore`, { key: card.attention.key });
+      if (card.state === STATE.ATTENTION) await api.post(`/api/chats/${encodeURIComponent(card.id)}/ignore`, { key: card.attention.key });
+      else await api.post(`/api/chats/${encodeURIComponent(card.id)}/prefs`, { favorite: !card.favorite });
     } catch {
-      // se la richiesta e' cambiata nel frattempo l'elenco si aggiorna comunque
+      // se la situazione e' cambiata nel frattempo l'elenco si aggiorna comunque
     }
     await refresh().catch(() => {});
     closeSwipes(null);
@@ -86,12 +93,19 @@ export function mountHome(root) {
     flushRender();
   };
 
-  function swipeRow(card) {
+  function swipeRow(card, opts = { showWorkspace: true, showPrompt: true }) {
+    // Scorrendo: una richiesta viva si "Ignora" (stessa azione della pagina chat); le altre chat si fissano con il cuore.
+    const attention = card.state === STATE.ATTENTION;
     const wrap = h(
       'div.swipe',
       null,
-      h('button', { class: 'swipe-action', type: 'button', tabindex: '-1', 'aria-hidden': 'true', onClick: () => ignoreCard(card) }, icon('eyeOff', { size: 20 }), h('span', null, 'Ignora')),
-      chatRow(card, { showWorkspace: true, showPrompt: true }),
+      h(
+        'button',
+        { class: `swipe-action${attention ? '' : ' fav'}`, type: 'button', tabindex: '-1', 'aria-hidden': 'true', onClick: () => swipeAction(card) },
+        icon(attention ? 'eyeOff' : card.favorite ? 'heartOff' : 'heart', { size: 20 }),
+        h('span', null, attention ? 'Ignora' : card.favorite ? 'Rimuovi' : 'Preferita'),
+      ),
+      chatRow(card, opts),
     );
     let pid = null;
     let sx = 0;
@@ -258,7 +272,87 @@ export function mountHome(root) {
             `Mostra altre ${hidden}`,
           )
         : null;
-    return [head, h('div.list', null, cards.map((c) => chatRow(c)), more)];
+    return [head, h('div.list', null, cards.map((c) => swipeRow(c, { showWorkspace: false })), more)];
+  }
+
+  // Regioni persistenti: la ricerca non viene ricreata a ogni aggiornamento (si perderebbero focus e tastiera).
+  const headHost = h('div.region');
+  const toolsHost = h('div.region');
+  const bodyHost = h('div.region');
+  const search = mode === 'chats' ? createSearch() : null;
+  replace(root, h('div', { class: 'screen' }, headHost, toolsHost, bodyHost));
+  if (search) toolsHost.append(search.el);
+
+  function createSearch() {
+    const input = h('input', { class: 'search-input', type: 'search', placeholder: 'Cerca una chat', 'aria-label': 'Cerca una chat', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', enterkeyhint: 'search' });
+    const clear = h('button', { class: 'icon-btn search-clear', type: 'button', 'aria-label': 'Cancella la ricerca', hidden: true, onClick: () => {
+      input.value = '';
+      onInput();
+      input.focus();
+    } }, icon('close', { size: 18 }));
+    const onInput = () => {
+      query = input.value.trim().toLowerCase();
+      clear.hidden = input.value === '';
+      render();
+    };
+    input.addEventListener('input', onInput);
+    return { el: h('div.search', null, icon('search', { size: 18 }), input, clear), input };
+  }
+
+  const matches = (c) => !query || `${c.name} ${c.workspaceName}`.toLowerCase().includes(query);
+
+  function attentionBody(state) {
+    const out = [];
+    const running = state.workspaces.flatMap((w) => w.chats).filter((c) => c.state === STATE.RUNNING);
+    if (state.attention.length) {
+      out.push(sectionHead({ label: 'Richiedono attenzione', count: state.attention.length, tone: 'danger' }), h('div.list', null, state.attention.map((c) => swipeRow(c))));
+    }
+    if (running.length) {
+      out.push(sectionHead({ label: 'In corso', count: running.length, iconName: 'spinner' }), h('div.list', null, running.map((c) => swipeRow(c, { showWorkspace: true }))));
+    }
+    if (state.pending.length) {
+      const open = Boolean(prefs.pendingOpen);
+      out.push(
+        sectionHead({
+          label: 'In sospeso',
+          count: state.pending.length,
+          iconName: 'clock',
+          expanded: open,
+          onToggle: () => {
+            prefs.pendingOpen = !open;
+            save();
+            render();
+          },
+        }),
+      );
+      if (open) out.push(h('div.list', null, state.pending.map((c) => chatRow(c, { showWorkspace: true }))));
+    }
+    if (!out.length) out.push(emptyState({ iconName: 'checkCircle', title: 'Niente da decidere', text: 'Le domande e le approvazioni degli agenti compaiono qui.' }));
+    return out;
+  }
+
+  function chatsBody(state) {
+    const out = [];
+    let shown = 0;
+    for (const ws of state.workspaces) {
+      if (!query) {
+        out.push(...workspaceBlock(ws));
+        shown += ws.chats.length;
+        continue;
+      }
+      const cards = ws.chats.filter(matches);
+      if (!cards.length) continue;
+      shown += cards.length;
+      out.push(sectionHead({ label: ws.name, count: cards.length, alert: cards.some((c) => c.state === STATE.ATTENTION), iconName: 'folderOpen' }), h('div.list', null, cards.map((c) => swipeRow(c, { showWorkspace: false }))));
+    }
+    if (query && !shown) out.push(emptyState({ iconName: 'search', title: 'Nessun risultato' }));
+    return out;
+  }
+
+  function favoritesBody(state) {
+    const favs = state.workspaces.flatMap((w) => w.chats).filter((c) => c.favorite).sort((a, b) => b.lastUpdatedAt - a.lastUpdatedAt);
+    if (!favs.length) return [emptyState({ iconName: 'heart', title: 'Nessuna preferita', text: 'Tocca il cuore in una chat, o scorri una riga, per ritrovarla qui.' })];
+    return [h('div.list', null, favs.map((c) => swipeRow(c, { showWorkspace: true })))];
   }
 
   function render() {
@@ -272,34 +366,30 @@ export function mountHome(root) {
     const state = lv.payload?.state ?? null;
     const status = lv.payload?.status ?? null;
 
-    const out = [
+    const top = [
       appbar({
-        title: 'Cursor Pocket',
+        title: TITLES[mode],
         logo: true,
-        actions: [
-          iconButton({ label: 'Aggiorna', name: 'refresh', spin: refreshing, onClick: doRefresh }),
-        ],
+        actions: [iconButton({ label: 'Aggiorna', name: 'refresh', spin: refreshing, onClick: doRefresh })],
       }),
     ];
-
     if (lv.offline) {
-      out.push(banner({ text: 'Daemon non raggiungibile', detail: 'Controlla che sia attivo sul Mac e che Tailscale sia connesso.', actionLabel: 'Riprova', onAction: doRefresh }));
+      top.push(banner({ text: 'Daemon non raggiungibile', detail: 'Controlla che sia attivo sul Mac e che Tailscale sia connesso.', actionLabel: 'Riprova', onAction: doRefresh }));
     } else if (status && !status.ok) {
-      out.push(
+      top.push(
         banner({
           text: status.error === 'db' ? 'Database di Cursor non leggibile' : 'Il daemon si sta avviando',
           detail: status.error === 'db' ? 'I dati mostrati potrebbero non essere aggiornati.' : null,
         }),
       );
     }
-    const hint = pushHint();
-    if (hint) out.push(hint);
+    const hint = mode === 'attention' ? pushHint() : null;
+    if (hint) top.push(hint);
 
-    if (!state) {
-      out.push(skeleton());
-    } else if (state.counts.total === 0) {
-      out.push(emptyState({ iconName: 'terminal', title: 'Nessuna chat locale', text: 'Le chat locali dell\u2019Agents Window di Cursor compariranno qui.' }));
-    } else {
+    let body;
+    if (!state) body = [skeleton()];
+    else if (state.counts.total === 0) body = [emptyState({ iconName: 'terminal', title: 'Nessuna chat locale', text: 'Le chat locali dell\u2019Agents Window di Cursor compariranno qui.' })];
+    else {
       // Sistema le preferenze: niente voci per workspace che non esistono piu'.
       const ids = new Set(state.workspaces.map((w) => w.id));
       const known = Object.keys(prefs.ws ?? {});
@@ -307,34 +397,13 @@ export function mountHome(root) {
         prefs.ws = Object.fromEntries(known.filter((k) => ids.has(k)).map((k) => [k, prefs.ws[k]]));
         save();
       }
-
-      if (state.attention.length) {
-        out.push(
-          sectionHead({ label: 'Richiedono attenzione', count: state.attention.length, tone: 'danger' }),
-          h('div.list', null, state.attention.map((c) => swipeRow(c))),
-        );
-      }
-      if (state.pending.length) {
-        const open = Boolean(prefs.pendingOpen);
-        out.push(
-          sectionHead({
-            label: 'In sospeso',
-            count: state.pending.length,
-            iconName: 'clock',
-            expanded: open,
-            onToggle: () => {
-              prefs.pendingOpen = !open;
-              save();
-              render();
-            },
-          }),
-        );
-        if (open) out.push(h('div.list', null, state.pending.map((c) => chatRow(c, { showWorkspace: true }))));
-      }
-      for (const ws of state.workspaces) out.push(...workspaceBlock(ws));
+      body = mode === 'attention' ? attentionBody(state) : mode === 'chats' ? chatsBody(state) : favoritesBody(state);
     }
+    if (search) search.el.hidden = !state || state.counts.total === 0;
 
-    if (commit(root, h('div.screen', null, out))) window.scrollTo(0, y);
+    const headChanged = commit(headHost, top);
+    const bodyChanged = commit(bodyHost, body);
+    if (headChanged || bodyChanged) window.scrollTo(0, y);
   }
 
   render();

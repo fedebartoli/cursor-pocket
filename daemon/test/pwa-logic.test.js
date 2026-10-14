@@ -8,7 +8,7 @@ import {
   shouldRefreshAfter,
 } from '../../pwa/js/action-errors.js';
 import { AnswerState, FREEFORM_MAX, optionBadge } from '../../pwa/js/answers.js';
-import { classifyTap, keyboardHeight } from '../../pwa/js/viewport.js';
+import { bottomShift, classifyTap, keyboardHeight } from '../../pwa/js/viewport.js';
 
 const opts = (...ids) => ids.map((id) => ({ id, label: id }));
 const single = { questions: [{ id: 'q1', prompt: 'Scelta?', options: opts('a', 'b', 'c'), allowMultiple: false }] };
@@ -185,4 +185,13 @@ test('keyboardHeight: tastiera, barra del browser e pinch', () => {
   assert.equal(keyboardHeight({ ...base, vvHeight: 400, vvScale: 2 }), 0, 'pinch-zoom: non e\u2019 la tastiera');
   assert.equal(keyboardHeight({ ...base, vvHeight: 509, vvOffsetTop: 100 }), 191, 'con la pagina spostata si sottrae lo scostamento');
   assert.equal(keyboardHeight({ innerHeight: 800, vvHeight: 509, vvOffsetTop: 0 }), 291, 'senza scala si assume 1');
+});
+
+test('bottomShift: barra in basso incollata al fondo visibile solo se il visual viewport si e\' spostato', () => {
+  const base = { innerHeight: 800, vvHeight: 800, vvOffsetTop: 0, vvScale: 1 };
+  assert.equal(bottomShift(base), 0, 'allineato: nessuno spostamento');
+  assert.equal(bottomShift({ ...base, vvOffsetTop: 1 }), 0, 'tolleranza di 1 px');
+  assert.equal(bottomShift({ ...base, vvHeight: 700 }), -100, 'il visual viewport finisce prima: la barra sale');
+  assert.equal(bottomShift({ ...base, vvOffsetTop: 40, vvHeight: 800 }), 40, 'visual viewport oltre il layout: la barra scende');
+  assert.equal(bottomShift({ ...base, vvHeight: 400, vvScale: 2 }), 0, 'pinch-zoom: non si tocca');
 });

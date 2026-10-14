@@ -370,3 +370,29 @@ test('nessun segreto o contenuto di chat finisce nei log', async () => {
     await h.stop();
   }
 });
+
+test('preferenze per chat: preferita e silenziata si salvano nel daemon, compaiono nello stato e non toccano Cursor', async () => {
+  const h = await startHarness();
+  try {
+    const cookie = await h.pair();
+    h.fx.chat(ID, { name: 'Migrazione', lastUpdatedAt: T0 - 1000 });
+    h.tick();
+    const card = async () => (await h.req({ path: '/api/state', cookie })).json().state.workspaces[0].chats[0];
+    assert.equal((await card()).favorite, false);
+    const r = await h.req({ method: 'POST', path: `/api/chats/${ID}/prefs`, cookie, body: { favorite: true } });
+    assert.deepEqual(r.json(), { ok: true, favorite: true, muted: false });
+    h.tick();
+    assert.equal((await card()).favorite, true);
+    // un campo non indicato resta com'e'
+    const m = await h.req({ method: 'POST', path: `/api/chats/${ID}/prefs`, cookie, body: { muted: true } });
+    assert.deepEqual(m.json(), { ok: true, favorite: true, muted: true });
+    const off = await h.req({ method: 'POST', path: `/api/chats/${ID}/prefs`, cookie, body: { favorite: false } });
+    assert.deepEqual(off.json(), { ok: true, favorite: false, muted: true });
+    // validazione
+    assert.equal((await h.req({ method: 'POST', path: `/api/chats/${ID}/prefs`, cookie, body: { favorite: 'si' } })).json().error, 'bad_prefs');
+    assert.equal((await h.req({ method: 'POST', path: `/api/chats/${ID}/prefs`, cookie, body: {} })).json().error, 'bad_prefs');
+    assert.equal((await h.req({ method: 'POST', path: `/api/chats/chat-inesistente-9/prefs`, cookie, body: { favorite: true } })).status, 404);
+  } finally {
+    await h.stop();
+  }
+});

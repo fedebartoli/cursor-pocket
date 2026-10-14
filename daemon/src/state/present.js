@@ -145,6 +145,7 @@ export function stateOf(chat, { ignored, now, pendingAfterMs }) {
 
 function card(chat, label, ctx) {
   const { state, reason } = stateOf(chat, ctx);
+  const pref = ctx.prefs?.get(chat.id);
   const a = chat.attention;
   return {
     id: chat.id,
@@ -156,6 +157,8 @@ function card(chat, label, ctx) {
     running: chat.running,
     unread: chat.unread,
     mode: chat.mode,
+    favorite: pref?.favorite === true,
+    muted: pref?.muted === true,
     lastUpdatedAt: chat.lastUpdatedAt,
     attention: a
       ? {
@@ -178,11 +181,12 @@ function card(chat, label, ctx) {
  * @param {object[]} p.chats      chat del modello (buildChat + attention arricchita)
  * @param {object|null} p.settings impostazioni sidebar di Cursor (puo' essere null)
  * @param {Set<string>} p.ignored  coppie ignoreKey(chatId, key)
+ * @param {Map<string, {favorite: boolean, muted: boolean}>} [p.prefs] preferenze locali per chat
  * @param {number} p.now
  * @param {number} p.pendingAfterMs
  */
-export function presentState({ chats, settings, ignored, now, pendingAfterMs }) {
-  const ctx = { ignored, now, pendingAfterMs };
+export function presentState({ chats, settings, ignored, now, pendingAfterMs, prefs }) {
+  const ctx = { ignored, now, pendingAfterMs, prefs };
   const groupBy = 'workspace';
 
   // Sezioni per workspace.

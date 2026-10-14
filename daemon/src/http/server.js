@@ -133,7 +133,7 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
     }
 
     // --- chat ---
-    const m = /^\/api\/chats\/([^/]+)(?:\/(ignore|answer|message|skip|approval))?$/.exec(path);
+    const m = /^\/api\/chats\/([^/]+)(?:\/(ignore|answer|message|skip|approval|prefs))?$/.exec(path);
     if (m) {
       const id = m[1];
       const action = m[2];
@@ -162,6 +162,20 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
         }
         watcher.recompute();
         return sendJson(res, 200, { ok: true, version: hub.current?.version ?? 0 }, headers);
+      }
+      // Preferenze locali (preferita, silenziata): non toccano Cursor.
+      if (action === 'prefs' && method === 'POST') {
+        const body = await readJson(req);
+        const patch = {};
+        for (const k of ['favorite', 'muted']) {
+          if (body[k] === undefined) continue;
+          if (typeof body[k] !== 'boolean') throw new HttpError(400, 'bad_prefs', 'Preferenza non valida');
+          patch[k] = body[k];
+        }
+        if (!Object.keys(patch).length) throw new HttpError(400, 'bad_prefs', 'Nessuna preferenza indicata');
+        const prefs = store.setChatPrefs(id, patch, now());
+        watcher.recompute();
+        return sendJson(res, 200, { ok: true, ...prefs }, headers);
       }
       // Azioni verso Cursor (Fase 2): rispondere, saltare, scrivere un messaggio.
       if ((action === 'answer' || action === 'message' || action === 'skip' || action === 'approval') && method === 'POST') {

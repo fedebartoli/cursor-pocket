@@ -94,7 +94,6 @@ export function createQuestionForm({ key, question, onSubmit, onSkip, onIgnore }
     gapEl,
     noticeEl,
     h('div', { class: 'panel-actions' }, submitBtn, h('div.split', null, skipBtn, ignoreBtn)),
-    h('p.hint', null, 'La risposta viene data in Cursor sul Mac, come se la scegliessi l\u00ec. \u201cIgnora\u201d toglie solo il pallino da questa app.'),
   );
 
   // Il contenuto di un pulsante si rifa' solo se cambia davvero: durante un tocco i figli non devono sparire.

@@ -65,6 +65,16 @@ const ICONS = {
   trash: 'trash-2',
   user: 'user',
   xCircle: 'circle-x',
+  // Navigazione e preferite
+  inbox: 'inbox',
+  messages: 'messages-square',
+  heart: 'heart',
+  heartOff: 'heart-off',
+  plus: 'plus',
+  archive: 'archive',
+  archiveRestore: 'archive-restore',
+  stop: 'square',
+  volumeOff: 'volume-x',
 };
 
 const pkg = JSON.parse(fs.readFileSync(path.join(src, 'package.json'), 'utf8'));

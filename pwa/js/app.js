@@ -6,6 +6,7 @@ import { getLive, startLive, stopLive, subscribe } from './live.js';
 import { resyncPush } from './push.js';
 import { initViewport } from './viewport.js';
 import { mountChat } from './views/chat.js';
+import { mountHelp } from './views/help.js';
 import { mountHome } from './views/home.js';
 import { mountLogin, mountUnreachable } from './views/login.js';
 import { mountSettings } from './views/settings.js';
@@ -20,27 +21,36 @@ let navigated = false; // vero dopo la prima schermata: da li' in poi il focus s
 let unsubscribeLive = null;
 const scrollMemory = new Map();
 
-// Barra in basso (raggiungibile col pollice): Chat e Impostazioni. Si vede solo fuori dalle chat, dove in fondo c'e' il compositore.
+// Barra in basso (raggiungibile col pollice): Attenzione, Chat, Preferite, Impostazioni. Si vede solo fuori dalle chat,
+// dove in fondo c'e' il compositore.
 const tabBadge = h('span', { class: 'tab-badge', hidden: true });
-const tabHome = h('a', { class: 'tab', href: '#/' }, h('span.tab-icon', null, icon('home', { size: 24 }), tabBadge), h('span.tab-label', null, 'Chat'));
-const tabSettings = h('a', { class: 'tab', href: '#/impostazioni' }, h('span.tab-icon', null, icon('settings', { size: 24 })), h('span.tab-label', null, 'Impostazioni'));
-const tabbar = h('nav', { class: 'tabbar', 'aria-label': 'Navigazione principale', hidden: true }, h('div.tabbar-inner', null, tabHome, tabSettings));
+const tabDefs = [
+  { route: 'home', href: '#/', label: 'Attenzione', icon: 'inbox', badge: tabBadge },
+  { route: 'chats', href: '#/chat', label: 'Chat', icon: 'messages' },
+  { route: 'favorites', href: '#/preferite', label: 'Preferite', icon: 'heart' },
+  { route: 'settings', href: '#/impostazioni', label: 'Impostazioni', icon: 'settings' },
+];
+const tabEls = new Map(
+  tabDefs.map((t) => [t.route, h('a', { class: 'tab', href: t.href }, h('span.tab-icon', null, icon(t.icon, { size: 24 }), t.badge ?? null), h('span.tab-label', null, t.label))]),
+);
+const tabbar = h('nav', { class: 'tabbar', 'aria-label': 'Navigazione principale', hidden: true }, h('div.tabbar-inner', null, [...tabEls.values()]));
 document.body.append(tabbar);
 
 function updateTabbar(routeName) {
   const visible = mode === 'app' && routeName !== 'chat';
   tabbar.hidden = !visible;
   document.body.classList.toggle('has-tabbar', visible);
-  tabHome.toggleAttribute('aria-current', visible && routeName === 'home');
-  tabSettings.toggleAttribute('aria-current', visible && routeName === 'settings');
-  if (tabHome.hasAttribute('aria-current')) tabHome.setAttribute('aria-current', 'page');
-  if (tabSettings.hasAttribute('aria-current')) tabSettings.setAttribute('aria-current', 'page');
+  const active = routeName === 'help' ? 'settings' : routeName; // "Come funziona" sta sotto Impostazioni
+  for (const [route, el] of tabEls) {
+    if (visible && route === active) el.setAttribute('aria-current', 'page');
+    else el.removeAttribute('aria-current');
+  }
 }
 
 function updateBadge(n) {
   tabBadge.hidden = n <= 0;
   tabBadge.textContent = n > 99 ? '99+' : String(n);
-  tabHome.setAttribute('aria-label', n > 0 ? `Chat, ${n} richiedono attenzione` : 'Chat');
+  tabEls.get('home').setAttribute('aria-label', n > 0 ? `Attenzione, ${n} richieste da decidere` : 'Attenzione');
 }
 
 function parseRoute() {
@@ -55,6 +65,9 @@ function parseRoute() {
     }
   }
   if (hash === '#/impostazioni') return { name: 'settings', key: 'settings' };
+  if (hash === '#/come-funziona') return { name: 'help', key: 'help' };
+  if (hash === '#/chat') return { name: 'chats', key: 'chats' };
+  if (hash === '#/preferite') return { name: 'favorites', key: 'favorites' };
   return { name: 'home', key: 'home' };
 }
 
@@ -68,9 +81,11 @@ function mountRoute() {
   updateTabbar(route.name);
   if (route.name === 'chat') view = mountChat(root, route.id);
   else if (route.name === 'settings') view = mountSettings(root, { onLoggedOut: showLogin });
-  else view = mountHome(root);
-  // Si ripristina la posizione dell'elenco; le altre schermate partono dall'alto.
-  window.scrollTo(0, route.name === 'home' ? (scrollMemory.get('home') ?? 0) : 0);
+  else if (route.name === 'help') view = mountHelp(root);
+  else view = mountHome(root, route.name === 'home' ? 'attention' : route.name);
+  // Si ripristina la posizione degli elenchi; le altre schermate partono dall'alto.
+  const isList = ['home', 'chats', 'favorites'].includes(route.name);
+  window.scrollTo(0, isList ? (scrollMemory.get(route.key) ?? 0) : 0);
   // Accessibilita': dopo un cambio di schermata il lettore vocale parte dal titolo della nuova schermata.
   if (navigated) {
     root.querySelector('.appbar-title')?.focus({ preventScroll: true });

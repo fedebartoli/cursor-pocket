@@ -18,6 +18,9 @@ CREATE TABLE IF NOT EXISTS push_subscriptions (
 );
 CREATE TABLE IF NOT EXISTS notified (dedupe_key TEXT PRIMARY KEY, created_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS pairing_codes (code_hash TEXT PRIMARY KEY, expires_at INTEGER NOT NULL, used_at INTEGER);
+CREATE TABLE IF NOT EXISTS chat_prefs (
+  composer_id TEXT PRIMARY KEY, favorite INTEGER NOT NULL DEFAULT 0, muted INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL
+);
 CREATE TABLE IF NOT EXISTS sessions (
   token_hash TEXT PRIMARY KEY, label TEXT, created_at INTEGER NOT NULL, last_seen_at INTEGER NOT NULL
 );
@@ -57,6 +60,13 @@ export class Store {
       addIgnore: db.prepare('INSERT OR IGNORE INTO ignored (composer_id, tool_call_key, created_at) VALUES (?, ?, ?)'),
       delIgnore: db.prepare('DELETE FROM ignored WHERE composer_id = ? AND tool_call_key = ?'),
       listIgnore: db.prepare('SELECT composer_id, tool_call_key FROM ignored'),
+      getPrefs: db.prepare('SELECT favorite, muted FROM chat_prefs WHERE composer_id = ?'),
+      setPrefs: db.prepare(
+        `INSERT INTO chat_prefs (composer_id, favorite, muted, updated_at) VALUES (?, ?, ?, ?)
+         ON CONFLICT(composer_id) DO UPDATE SET favorite = excluded.favorite, muted = excluded.muted, updated_at = excluded.updated_at`,
+      ),
+      listPrefs: db.prepare('SELECT composer_id, favorite, muted FROM chat_prefs WHERE favorite = 1 OR muted = 1'),
+      prunePrefs: db.prepare('DELETE FROM chat_prefs WHERE favorite = 0 AND muted = 0'),
       pruneIgnore: db.prepare('DELETE FROM ignored WHERE created_at < ?'),
       upsertSub: db.prepare(
         `INSERT INTO push_subscriptions (endpoint, p256dh, auth, session_hash, created_at) VALUES (?, ?, ?, ?, ?)
@@ -109,8 +119,25 @@ export class Store {
   ignoredSet() {
     return new Set(this.#q.listIgnore.all().map((r) => ignoreKey(r.composer_id, r.tool_call_key)));
   }
+  prunePrefs() {
+    return this.#q.prunePrefs.run().changes;
+  }
   pruneIgnored(olderThan) {
     return this.#q.pruneIgnore.run(olderThan).changes;
+  }
+
+  // --- preferenze per chat (solo locali al daemon: Cursor non ne sa nulla) ---
+  /** Aggiorna `favorite` e/o `muted` di una chat (i campi non indicati restano come sono). */
+  setChatPrefs(composerId, patch, now) {
+    const cur = this.#q.getPrefs.get(composerId) ?? { favorite: 0, muted: 0 };
+    const favorite = typeof patch.favorite === 'boolean' ? Number(patch.favorite) : cur.favorite;
+    const muted = typeof patch.muted === 'boolean' ? Number(patch.muted) : cur.muted;
+    this.#q.setPrefs.run(composerId, favorite, muted, now);
+    return { favorite: favorite === 1, muted: muted === 1 };
+  }
+  /** @returns {Map<string, {favorite: boolean, muted: boolean}>} solo le chat con almeno un flag acceso */
+  chatPrefs() {
+    return new Map(this.#q.listPrefs.all().map((r) => [r.composer_id, { favorite: r.favorite === 1, muted: r.muted === 1 }]));
   }
 
   // --- sottoscrizioni push ---
