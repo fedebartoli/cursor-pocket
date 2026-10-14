@@ -66,7 +66,7 @@ clic con Cursor in secondo piano, interfaccia dalla PWA su iPhone.
   (`submitted`, bubble, coda del composer), endpoint `answer` / `skip` / `message`, stato `status.actions`, CLI `npm run cdp`.
 - [x] PWA: questionario interattivo, compositore dei messaggi, esiti, riquadro "Rispondere dal telefono" nelle Impostazioni.
 - [x] Safari/iOS: blocco del solo doppio tocco (pinch libero), campi a 16 px, margini di sicurezza, compositore sopra la
-  tastiera, logo di Cursor in alto a sinistra. Verificato in WebKit e Chromium (`tools/ui-check.mjs`, 130-132 controlli, tema
+  tastiera, logo di Cursor in alto a sinistra. Verificato in WebKit e Chromium (`tools/ui-check.mjs`, 135-137 controlli, tema
   chiaro e scuro).
 - [x] Attivita' recente nella chat (passi dell'agente, stato "in attesa" dopo una risposta) con aggiornamento ogni 1,5-4 s a schermata aperta e rilettura ogni secondo dopo un'azione (FINDINGS 10.4c).
 - [x] `tools/cursor-cdp.sh`: avvia Cursor con la porta di debug (solo a Cursor chiuso) e ne mostra lo stato.
@@ -102,12 +102,11 @@ clic con Cursor in secondo piano, interfaccia dalla PWA su iPhone.
 - ntfy come canale di notifica alternativo.
 - Vista live delle chat in esecuzione.
 
-## Idee rimandate (su richiesta dell'utente: prima rifinire il resto)
-- Archiviare/ripristinare chat e gestire i progetti rimossi dalla sidebar, creare nuove chat dall'iPhone. Nota di ricerca
-  (15/10, solo lettura del bundle): in Cursor l'archiviazione passa da `composerDataService` (campo `isArchived` + `lastUpdatedAt`
-  e salvataggio) e per le chat locali non c'e' una chiamata di rete da imitare. Poiche' il database di Cursor non si scrive
-  mai, la strada e' pilotare i pulsanti dell'Agents Window via CDP, come per le risposte (da provare con una chat di prova).
-- Sondaggio di sola lettura della finestra Agents (15/10, nessun clic): tra le etichette dei pulsanti compaiono "New Agent",
-  "New Project", "Pin", "Archive", "Stop generation" (con "Stop ^C"), "Attached image", "Add agents, context, tools" e campi di
-  ricerca. Quindi per fissare, archiviare, fermare e creare chat esistono controlli da pilotare via CDP; "Rename" non e' emerso
-  (probabile menu contestuale o doppio clic: da verificare). Nessuna di queste azioni e' ancora provata.
+## Fatto dopo la Fase 2 (15/10, esiti in FINDINGS 10.4a-10.4l)
+- [x] Barra a 4 voci, preferite, silenzia chat/progetti e orari, dispositivi abbinati, badge, ferma l'agente, conversazione intera,
+  Mac sveglio (livelli e luminosita').
+- [x] Rinomina, archivia e ripristina chat (menu della riga di Cursor via CDP; provato dal vivo).
+- [x] Allegare immagini ai messaggi (upload controllato, `DOM.setFileInputFiles`; provato dal vivo).
+- [x] Nuova chat locale dal telefono su un progetto, con testo e immagini (provata dal vivo con un messaggio vero).
+- [ ] Da provare su iPhone: tutte le novita' di questa lista (finora verificate in WebKit/Chromium e sul Cursor vero via CDP).
+- [ ] Idee ancora aperte: avviare chat su un progetto senza chat locali, scegliere ramo/modello della nuova chat, fissare (Pin) una chat.

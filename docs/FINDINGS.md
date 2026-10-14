@@ -629,7 +629,7 @@ viewport, che su iOS 10+ impedisce lo zoom automatico al focus ma lascia lo zoom
 - Prova dal vivo (Test Chat): rinomina e ritorno al nome originale; archivia -> `isArchived` true -> ripristina -> false, filtro spento.
 - NON provato: archiviare una chat con una domanda in attesa; non si archivia una chat in corso (409 `running`).
 
-### 10.4k Immagini allegate ai messaggi (15/10) [OK in test e dal vivo fino all'allegato; invio reale con immagine NON PROVATO; PWA NON PROVATA su iPhone]
+### 10.4k Immagini allegate ai messaggi (15/10) [PROVATO DAL VIVO fino all'invio reale con immagine; PWA NON PROVATA su iPhone]
 - Dal compositore della chat: pulsante "Allega immagini" (fino a 4). Ogni immagine si ridimensiona (lato lungo 2048) e si ricodifica in
   JPEG sul telefono (HEIC e foto grandi diventano leggere, via i metadati di posizione), poi `POST /api/uploads` (corpo = byte, tipo
   `image/*`); il daemon controlla il CONTENUTO (JPEG/PNG/GIF/WebP, max 8 MB, non il tipo dichiarato), salva in `daemon/data/uploads/`
@@ -641,7 +641,27 @@ viewport, che su iOS 10+ impedisce lo zoom automatico al focus ma lascia lo zoom
   il pulsante `aria-label="Remove image"`. Provato dal vivo sulla Test Chat: 1 e 2 immagini allegate, anteprime contate, rimosse una per
   una col pulsante, compositore tornato pulito. Se qualcosa va storto dopo l'allegato, le immagini si tolgono.
 - La bozza del Mac non si mescola mai: bozza di testo O immagini gia' presenti -> `draft_not_empty`.
-- Invio reale con immagine: NON provato (la Test Chat aveva una domanda in attesa e non si sono voluti spendere altri messaggi).
+- Invio reale con immagine: provato dal vivo insieme alla nuova chat (10.4l): il bubble utente ha `context.selectedImages` con 1 elemento
+  (Cursor copia il file nella sua cartella) e l'agente ha risposto.
+
+### 10.4l Nuova chat locale dal telefono (15/10) [PROVATO DAL VIVO con un messaggio vero; PWA NON PROVATA su iPhone]
+- Dalla scheda Chat, "+" in alto: si sceglie il progetto (elenco a scelta singola, non un `<select>`: WebKit ne inietta lo stile e la CSP
+  rigorosa lo segnala), si scrive il primo messaggio, si allegano immagini e "Avvia chat". `POST /api/chats {sectionId, text?, images?}`; il
+  daemon ricava il nome del progetto dal proprio stato (non dal client). Finita l'azione la PWA attende che la chat compaia nello stato e la apre.
+- In Cursor: ogni progetto della sidebar e' una testata `[data-section-head]` (testo = nome della cartella) con il pulsante
+  `button[aria-label="New Agent"]` (compare al passaggio del mouse: si fa prima `mouseMoved`). Il clic apre la schermata "nuova chat" (nessun
+  pannello di conversazione) con tre `.ui-select-trigger`: progetto (testo in minuscolo), ramo, ambiente. Opzioni dell'ambiente: "This Mac",
+  "This Mac (Self-Hosted Worker)", "Remote Machine", "New Worktree". Il daemon controlla che il progetto sia quello richiesto e che
+  l'ambiente sia "This Mac"; altrimenti NON invia (`wrong_project`, `not_local`, `project_not_found`, `project_ambiguous` se due testate
+  hanno lo stesso nome). Il compositore e' lo stesso (`.ui-prompt-input-editor__input`, invio "Send message").
+- ATTENZIONE: appena inviato Cursor crea una riga "bozza" (header con `isDraft: true`, `isArchived: 1`, workspace `empty-window`, nessun
+  bubble) e solo dopo la chat vera con un ALTRO id (`composerHeaders`: `isDraft` false, `agentLocation.type` local, nome generato da
+  Cursor). Il daemon aspetta che le righe nuove della sidebar siano stabili (1,2 s e una sola) e controlla `isDraft`/`isArchived`.
+  Sbaglio trovato e corretto nella prova dal vivo (prima restituiva l'id della bozza).
+- Prova dal vivo: nuova chat su cursor-pocket con testo e 1 immagine, 1 messaggio vero: chat creata, testo e immagine nel bubble, l'agente ha
+  risposto; selezione della chat che era aperta ripristinata; poi archiviata con la rinomina/archivia di 10.4j (verificata anche su una chat vera).
+- Progetti rimossi: il daemon non mostra le chat dei progetti rimossi; avviare una chat su un progetto che Cursor non mostra piu' risponde
+  `project_not_found`. Un progetto senza alcuna chat locale non si puo' scegliere dal telefono (il daemon conosce i progetti dalle chat).
 
 ### 10.5 Da verificare dal vivo, con Cursor riavviato con la porta di debug [NON PROVATO]
 Ogni punto ha una diagnostica pronta: `cd daemon && npm run cdp -- status | inspect | tray` (stampa la struttura della

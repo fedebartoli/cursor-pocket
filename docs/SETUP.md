@@ -61,7 +61,7 @@ la porta di debug chiusa.
 node tools/ui-check.mjs webkit            # il motore di Safari, viewport iPhone 14
 node tools/ui-check.mjs chromium --dark   # tema scuro; --shots salva gli screenshot
 ```
-Percorre l'app contro il server dimostrativo (130-132 controlli: logo, questionario, compositore, approvazione, doppio tocco, CSP...). Serve
+Percorre l'app contro il server dimostrativo (135-137 controlli: logo, questionario, compositore, approvazione, doppio tocco, CSP...). Serve
 `playwright-core` con i browser installati (`npx playwright install chromium webkit`), fuori dal repository, che non ne
 dipende: se non e' risolvibile imposta `PLAYWRIGHT_CORE=/percorso/node_modules/playwright-core/index.mjs`. Non sostituisce una
 prova su un iPhone vero (zoom con doppio tocco, tastiera, schermo intero).
