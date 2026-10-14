@@ -629,6 +629,20 @@ viewport, che su iOS 10+ impedisce lo zoom automatico al focus ma lascia lo zoom
 - Prova dal vivo (Test Chat): rinomina e ritorno al nome originale; archivia -> `isArchived` true -> ripristina -> false, filtro spento.
 - NON provato: archiviare una chat con una domanda in attesa; non si archivia una chat in corso (409 `running`).
 
+### 10.4k Immagini allegate ai messaggi (15/10) [OK in test e dal vivo fino all'allegato; invio reale con immagine NON PROVATO; PWA NON PROVATA su iPhone]
+- Dal compositore della chat: pulsante "Allega immagini" (fino a 4). Ogni immagine si ridimensiona (lato lungo 2048) e si ricodifica in
+  JPEG sul telefono (HEIC e foto grandi diventano leggere, via i metadati di posizione), poi `POST /api/uploads` (corpo = byte, tipo
+  `image/*`); il daemon controlla il CONTENUTO (JPEG/PNG/GIF/WebP, max 8 MB, non il tipo dichiarato), salva in `daemon/data/uploads/`
+  con nome casuale e permessi 600, massimo 12 in attesa, scadenza 30 minuti, pulizia a ogni avvio. `DELETE /api/uploads/:id`.
+- `POST /api/chats/:id/message {text?, images?: [id]}`: il testo diventa facoltativo se c'e' almeno un'immagine; dopo l'invio i file si
+  cancellano; se l'invio fallisce restano per il tentativo successivo (`image_expired` se scaduti). Nei log solo il numero di immagini.
+- In Cursor: il compositore ha un `input[type=file]` (accetta `image/*`, multiplo) nella barra sinistra; `DOM.setFileInputFiles` (con
+  l'input segnato per un attimo con `data-cp-file-target`, poi tolto) fa comparire l'anteprima `.ui-prompt-input-image-preview` con
+  il pulsante `aria-label="Remove image"`. Provato dal vivo sulla Test Chat: 1 e 2 immagini allegate, anteprime contate, rimosse una per
+  una col pulsante, compositore tornato pulito. Se qualcosa va storto dopo l'allegato, le immagini si tolgono.
+- La bozza del Mac non si mescola mai: bozza di testo O immagini gia' presenti -> `draft_not_empty`.
+- Invio reale con immagine: NON provato (la Test Chat aveva una domanda in attesa e non si sono voluti spendere altri messaggi).
+
 ### 10.5 Da verificare dal vivo, con Cursor riavviato con la porta di debug [NON PROVATO]
 Ogni punto ha una diagnostica pronta: `cd daemon && npm run cdp -- status | inspect | tray` (stampa la struttura della
 pagina e mai i testi).

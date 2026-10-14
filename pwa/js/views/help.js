@@ -23,6 +23,7 @@ const SECTIONS = [
     title: 'Gestire le chat',
     items: [
       'In fondo alla pagina di una chat puoi rinominarla o archiviarla. Un\u2019agente al lavoro non si archivia: fermalo prima.',
+      'Nel campo dei messaggi il pulsante con l\u2019immagine allega fino a 4 foto: vengono ridimensionate sul telefono e arrivano nel messaggio di Cursor.',
       'Le chat archiviate si ripristinano da Impostazioni, Chat archiviate. Sul Mac Cursor esegue le stesse azioni del menu della riga.',
     ],
   },
