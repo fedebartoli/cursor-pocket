@@ -681,6 +681,9 @@ viewport, che su iOS 10+ impedisce lo zoom automatico al focus ma lascia lo zoom
   Se la scelta o il ripristino falliscono la chat non parte e Cursor torna alla schermata di prima (provato con il mock).
 - API: `GET /api/projects/:sectionId/newchat-options` (apre e richiude i menu, non cambia nulla) e `POST /api/chats` con `branch`/`model` opzionali.
   Nella PWA il blocco "Scegli ramo e modello" legge le liste solo a richiesta; "Come in Cursor" e' la scelta di partenza.
+- Prova vera (15/10, con 1 messaggio): nuova chat su cursor-pocket con scelta ESPLICITA di ramo (master) e modello (quelli gia' attuali, su richiesta
+  dell'utente di non cambiare il modello): chat creata, messaggio nel database, risposta dell'agente "ok", ramo e modello invariati dopo,
+  chat selezionata ripristinata. Archiviazione della chat di prova: il flag `archived` nel database compare dopo qualche secondo (non subito).
 - Provato dal vivo: lettura delle liste e scelta + ripristino del modello senza inviare messaggi. Nel progetto di prova esiste un solo ramo (master),
   quindi la scelta del ramo e' provata solo col mock.
 
