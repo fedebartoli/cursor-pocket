@@ -37,15 +37,8 @@ Nome provvisorio: cursor-pocket. Possibile pubblicazione pubblica su GitHub.
 - Live view NON necessaria.
 
 ## Stato
-Vedi `docs/ROADMAP.md`. Fase 0 fatta; Fase 1 (daemon + PWA in sola lettura con push) scritta, testata e in uso su iPhone
-reale (push di domanda ricevute, latenza "subito" secondo l'utente); `tailscale serve` attivo; daemon con avvio automatico
-via launchd (`tools/launchd.sh`, con il consenso dell'utente). La lista delle chat segue l'Agents Window: esclude i progetti
-rimossi dalla sidebar (FINDINGS 8.2). Fase 2 (rispondere, saltare, scrivere messaggi via CDP) SCRITTA e provata solo su
-simulatori e browser (FINDINGS 10): manca la validazione su un Cursor vero, che richiede di riavviarlo con
-`--remote-debugging-port=9222` (`tools/cursor-cdp.sh`) e quindi di interrompere le chat in corso: chiedere SEMPRE prima.
-Il 12/10 l'utente ha acconsentito al riavvio e lo fa da solo (Cmd+Q, poi `tools/cursor-cdp.sh` da un terminale esterno a
-Cursor): se la porta 9222 e' attiva (`cd daemon && npm run cdp -- status`), riprendere dalla checklist "Ripresa dopo il
-riavvio" in `docs/ROADMAP.md` (Fase 2). Se la porta e' chiusa il riavvio non e' avvenuto: non riavviare Cursor da qui.
-Notifica di approvazione ("allow", anche da hook) implementata dal segnale `reviewData` (FINDINGS 11): NON provata su
-un'approvazione vera; alla prossima controllare nel log `approval_seen` e `push_sent kind=approvazione` (FINDINGS 11.4).
-Guida in `docs/SETUP.md`.
+Vedi `docs/ROADMAP.md` (fasi 0-2 fatte, piu' la sezione "Fatto dopo la Fase 2") e `docs/FINDINGS.md` per cio' che e' provato.
+Il daemon gira con avvio automatico (launchd, `tools/launchd.sh`) e l'app e' esposta solo con `tailscale serve` (mai Funnel: vedi
+`docs/SETUP.md`, sezione Tailscale). Le azioni su Cursor passano da CDP (Cursor avviato con `tools/cursor-cdp.sh`, porta 9222): non
+riavviare Cursor da qui, interrompe le chat in corso; chiedere sempre. Prove dal vivo: usare la chat "Test Chat" (id in
+`/tmp/cp-testchat.txt` se esiste) e mandare pochi messaggi veri (costano). Non provato su un iPhone vero: vedi ROADMAP.

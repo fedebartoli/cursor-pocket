@@ -1,15 +1,25 @@
 # cursor-pocket
 
-Controlla da iPhone le chat locali dell'Agents Window di Cursor: notifiche push per domande, approvazioni ("allow") e chat finite,
-elenco raggruppato per workspace come nella sidebar, pulsante "Ignora" per togliere il pallino rosso (solo nell'app) e,
-se Cursor e' avviato con una porta di debug locale, risposte alle domande, nuovi messaggi e approvazione o rifiuto dei
-comandi di terminale dal telefono.
+Controlla da iPhone le chat locali dell'Agents Window di Cursor (PWA + daemon Node 22 senza dipendenze, solo su macOS).
 
-Stato: daemon Node 22 senza dipendenze + PWA, in uso su un iPhone reale con avvio automatico (`tools/launchd.sh install`).
-Le azioni su Cursor (rispondere, saltare, scrivere, rifiutare un comando) sono state provate dal vivo su un Cursor vero
-(FINDINGS 10.6, 11.5); "Esegui" su un comando vero e' coperto solo da test e dal rifiuto, che usa lo stesso percorso.
-Ancora da verificare: zoom e tastiera su iPhone vero, push a schermo bloccato, tocco sulla notifica (anche da una chat
-diversa), badge, tenuta nei giorni. Vedi `docs/ROADMAP.md`.
+**English summary.** cursor-pocket is a small daemon plus an installable web app (PWA) that lets you follow and drive the
+*local* chats of Cursor 3.x's Agents Window from an iPhone: push notifications for questions, command approvals and finished
+chats; reply to questions, send messages (with images), stop an agent, start new chats, rename/pin/archive chats; keep the Mac
+awake while an agent works. It reads Cursor's local SQLite database read-only and acts on the UI through the Chrome DevTools
+Protocol (Cursor started with a local debug port). It is exposed only through `tailscale serve` (never Funnel) with mandatory
+pairing. Unofficial, depends on Cursor internals that may change. The documentation is written in Italian.
+
+Funzioni: notifiche push (domanda, approvazione "allow", chat finita), elenco raggruppato per progetto come nella sidebar,
+"Ignora" (solo nell'app), preferite, silenzia chat/progetti e orari, conversazione intera in sola lettura, dispositivi abbinati.
+Con Cursor avviato con una porta di debug locale: rispondere alle domande, approvare o rifiutare comandi, scrivere messaggi (anche con
+immagini), fermare l'agente, avviare una chat nuova su un progetto, rinominare, fissare e archiviare/ripristinare chat. Opzionale:
+Mac sveglio mentre un agente lavora (anche a schermo chiuso con una regola sudo limitata, `tools/mac/power-setup.sh`).
+
+Stato: in uso su un iPhone reale con avvio automatico (`tools/launchd.sh install`). Le azioni su Cursor sono state provate dal vivo su
+un Cursor vero (FINDINGS 10.x e 11.x); "Esegui" su un comando vero e' coperto solo da test e dal rifiuto, che usa lo stesso percorso.
+Test: `cd daemon && npm test` (248 test) e, facoltativi, 138-140 controlli nel browser (`tools/ui-check.mjs`, WebKit e Chromium).
+Ancora da verificare su iPhone vero: le novita' dopo la Fase 2 (barra, stop, nuova chat, allegati, rinomina/archivia/fissa), push a
+schermo bloccato, tocco sulla notifica, badge, tenuta nei giorni. Vedi `docs/ROADMAP.md`.
 
 Prova rapida senza toccare i dati reali (nessuna installazione necessaria, serve Node >= 22.13):
 ```
