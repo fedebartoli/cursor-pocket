@@ -548,7 +548,8 @@ try {
   // --- gestione chat: rinomina, archivia, ripristina ---
   await page.goto(CHAT(13));
   await page.waitForSelector('.manage');
-  check('gestione: in una chat ferma ci sono "Rinomina" e "Archivia" (con icone SVG)', (await page.locator('.manage .btn svg').count()) === 2 && (await page.locator('.manage .btn', { hasText: 'Archivia' }).isEnabled()));
+  check('gestione: in una chat ferma ci sono "Rinomina", "Fissa" e "Archivia" (con icone SVG)', (await page.locator('.manage .btn svg').count()) === 3 && (await page.locator('.manage .btn', { hasText: 'Fissa' }).count()) === 1 && (await page.locator('.manage .btn', { hasText: 'Archivia' }).isEnabled()));
+  await shot('17-manage');
   await page.locator('.manage .btn', { hasText: 'Rinomina' }).click();
   await page.waitForSelector('#rename-input');
   check('gestione: il campo del nome parte con il nome attuale e il focus', (await page.locator('#rename-input').inputValue()) === 'Testi della pagina iniziale' && (await page.evaluate(() => document.activeElement?.id)) === 'rename-input');
@@ -557,6 +558,12 @@ try {
   await page.locator('.rename-form .btn.primary').click();
   await page.waitForFunction(() => document.querySelector('.chat-name')?.textContent === 'Testi rivisti', null, { timeout: 10000 });
   check('gestione: dopo "Salva" il titolo della chat cambia e il campo si chiude', (await page.locator('#rename-input').count()) === 0 && (await page.locator('.manage', { hasText: 'Nome cambiato' }).count()) === 1);
+  await page.locator('.manage .btn', { hasText: 'Fissa' }).click();
+  await page.waitForSelector('.manage .btn:has-text("Togli")', { timeout: 8000 });
+  check('gestione: "Fissa" fissa la chat, compare l\'avviso e il pulsante diventa "Togli"', (await page.locator('.manage', { hasText: 'Chat fissata' }).count()) === 1);
+  await page.locator('.manage .btn', { hasText: 'Togli' }).click();
+  await page.waitForSelector('.manage .btn:has-text("Fissa")', { timeout: 8000 });
+  check('gestione: "Togli" la toglie dai fissati e il pulsante torna "Fissa"', (await page.locator('.manage', { hasText: 'Chat tolta dai fissati' }).count()) === 1);
   await page.locator('.manage .btn', { hasText: 'Archivia' }).click();
   check('gestione: "Archivia" chiede un secondo tocco', (await page.locator('.manage .btn.armed').innerText()).includes('Conferma'));
   await page.locator('.manage .btn.armed').click();

@@ -277,6 +277,17 @@ class FakeUi {
   async unarchive(args) {
     return this.#run('unarchive', args, this.onUnarchive);
   }
+  async pinState(args) {
+    this.calls.push(['pinState', args]);
+    if (this.fail) throw this.fail;
+    return { pinned: this.pinned === true };
+  }
+  async setPinned(args) {
+    this.calls.push(['setPinned', args]);
+    if (this.fail) throw this.fail;
+    this.pinned = args.pinned;
+    return { pinned: args.pinned, changed: true };
+  }
   async newChat(args) {
     this.calls.push(['newChat', args]);
     if (this.fail) throw this.fail;
@@ -761,6 +772,26 @@ test('rinomina via HTTP: nome ripulito e validato, clic sulla chat giusta, esito
     const nc = await post('rename', { name: 'Altro' });
     assert.equal(nc.json().verified, false);
     assert.ok(!h.logLines.join('').includes('Nuovo nome'), 'il nome non finisce nei log');
+  } finally {
+    await h.stop();
+  }
+});
+
+test('fissa chat via HTTP: stato letto da Cursor, valore booleano obbligatorio, richiede accesso', async () => {
+  const { h, ui, cookie, post } = await setup({ withQuestion: false });
+  try {
+    const get = await h.req({ path: `/api/chats/${ID}/pin`, cookie });
+    assert.equal(get.status, 200, get.text);
+    assert.equal(get.json().pinned, false);
+    assert.equal((await h.req({ path: `/api/chats/${ID}/pin` })).status, 401);
+    assert.equal((await post('pin', {})).status, 400);
+    assert.equal((await post('pin', { pinned: 'si' })).status, 400);
+    assert.equal(ui.calls.filter((c) => c[0] === 'setPinned').length, 0, 'nessuna azione con valori non validi');
+    const r = await post('pin', { pinned: true });
+    assert.equal(r.status, 200, r.text);
+    assert.equal(r.json().pinned, true);
+    assert.deepEqual(ui.calls.find((c) => c[0] === 'setPinned')[1], { composerId: ID, pinned: true });
+    assert.equal((await h.req({ path: `/api/chats/${ID}/pin`, cookie })).json().pinned, true);
   } finally {
     await h.stop();
   }

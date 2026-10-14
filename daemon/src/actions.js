@@ -80,6 +80,8 @@ const UI_ERRORS = {
   closed: [503, 'actions_unavailable', 'La connessione con Cursor si e\' interrotta. Riprova.'],
   no_window: [503, 'actions_unavailable', 'La finestra Agents di Cursor non e\' aperta.'],
   timeout: [504, 'timeout', 'Cursor non ha risposto in tempo. L\'operazione potrebbe essere andata a buon fine: controlla sul Mac prima di riprovare.'],
+  pin_failed: [409, 'pin_failed', 'Cursor non ha cambiato lo stato: controlla sul Mac.'],
+  bad_pin: [400, 'bad_pin', 'Valore non valido'],
   row_not_found: [409, 'chat_not_in_sidebar', 'La chat non e\' visibile nella sidebar di Cursor: aprila sul Mac.'],
   no_tray: [409, 'no_question', 'La domanda non risulta piu\' aperta in Cursor.'],
   tray_closed: [409, 'no_question', 'La domanda e\' stata chiusa in Cursor prima di completarla.'],
@@ -445,6 +447,30 @@ export class Actions extends EventEmitter {
       });
       ok = true;
       this.logger.info('archive_chat', { verified: res.verified === true });
+      return res;
+    } finally {
+      slot.done(ok);
+    }
+  }
+
+  /** La chat e' fissata in cima alla sidebar di Cursor? (letto dalla pagina, nessuna modifica) */
+  async pinState(chatId) {
+    this.#requireReady();
+    this.#chat(chatId);
+    return this.#run('pinstate', async () => ({ ok: true, ...(await this.ui.pinState({ composerId: chatId })) }));
+  }
+
+  /** Fissa o toglie dai fissati una chat (come "Pin" nel menu della sidebar di Cursor). */
+  async pin(chatId, { pinned } = {}) {
+    if (typeof pinned !== 'boolean') throw new ActionError(400, 'bad_pin', 'Indica se fissare o togliere');
+    this.#requireReady();
+    this.#chat(chatId);
+    const slot = this.#dedupe('pin', chatId, String(pinned), 3_000);
+    let ok = false;
+    try {
+      const res = await this.#run('pin', async () => ({ ok: true, verified: true, ...(await this.ui.setPinned({ composerId: chatId, pinned })) }));
+      ok = true;
+      this.logger.info('pin_chat', { pinned, changed: res.changed === true });
       return res;
     } finally {
       slot.done(ok);

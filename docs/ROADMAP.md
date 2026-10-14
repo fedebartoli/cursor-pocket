@@ -66,7 +66,7 @@ clic con Cursor in secondo piano, interfaccia dalla PWA su iPhone.
   (`submitted`, bubble, coda del composer), endpoint `answer` / `skip` / `message`, stato `status.actions`, CLI `npm run cdp`.
 - [x] PWA: questionario interattivo, compositore dei messaggi, esiti, riquadro "Rispondere dal telefono" nelle Impostazioni.
 - [x] Safari/iOS: blocco del solo doppio tocco (pinch libero), campi a 16 px, margini di sicurezza, compositore sopra la
-  tastiera, logo di Cursor in alto a sinistra. Verificato in WebKit e Chromium (`tools/ui-check.mjs`, 135-137 controlli, tema
+  tastiera, logo di Cursor in alto a sinistra. Verificato in WebKit e Chromium (`tools/ui-check.mjs`, 138-140 controlli, tema
   chiaro e scuro).
 - [x] Attivita' recente nella chat (passi dell'agente, stato "in attesa" dopo una risposta) con aggiornamento ogni 1,5-4 s a schermata aperta e rilettura ogni secondo dopo un'azione (FINDINGS 10.4c).
 - [x] `tools/cursor-cdp.sh`: avvia Cursor con la porta di debug (solo a Cursor chiuso) e ne mostra lo stato.
@@ -102,11 +102,12 @@ clic con Cursor in secondo piano, interfaccia dalla PWA su iPhone.
 - ntfy come canale di notifica alternativo.
 - Vista live delle chat in esecuzione.
 
-## Fatto dopo la Fase 2 (15/10, esiti in FINDINGS 10.4a-10.4l)
+## Fatto dopo la Fase 2 (15/10, esiti in FINDINGS 10.4a-10.4m)
 - [x] Barra a 4 voci, preferite, silenzia chat/progetti e orari, dispositivi abbinati, badge, ferma l'agente, conversazione intera,
   Mac sveglio (livelli e luminosita').
 - [x] Rinomina, archivia e ripristina chat (menu della riga di Cursor via CDP; provato dal vivo).
 - [x] Allegare immagini ai messaggi (upload controllato, `DOM.setFileInputFiles`; provato dal vivo).
 - [x] Nuova chat locale dal telefono su un progetto, con testo e immagini (provata dal vivo con un messaggio vero).
+- [x] Fissa/Togli chat (Pin) dal telefono (provato dal vivo).
 - [ ] Da provare su iPhone: tutte le novita' di questa lista (finora verificate in WebKit/Chromium e sul Cursor vero via CDP).
-- [ ] Idee ancora aperte: avviare chat su un progetto senza chat locali, scegliere ramo/modello della nuova chat, fissare (Pin) una chat.
+- [ ] Idee ancora aperte: avviare chat su un progetto senza chat locali, scegliere ramo/modello della nuova chat.

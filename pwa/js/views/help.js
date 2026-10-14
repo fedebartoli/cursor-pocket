@@ -23,7 +23,7 @@ const SECTIONS = [
     title: 'Gestire le chat',
     items: [
       'Nella scheda Chat il + in alto avvia una nuova chat locale su un progetto. Parte su This Mac: se Cursor non \u00e8 impostato cos\u00ec, non viene inviato nulla.',
-      'In fondo alla pagina di una chat puoi rinominarla o archiviarla. Un\u2019agente al lavoro non si archivia: fermalo prima.',
+      'In fondo alla pagina di una chat puoi rinominarla, fissarla in cima alla sidebar di Cursor (Fissa/Togli) o archiviarla. Un\u2019agente al lavoro non si archivia: fermalo prima.',
       'Nel campo dei messaggi il pulsante con l\u2019immagine allega fino a 4 foto: vengono ridimensionate sul telefono e arrivano nel messaggio di Cursor.',
       'Le chat archiviate si ripristinano da Impostazioni, Chat archiviate. Sul Mac Cursor esegue le stesse azioni del menu della riga.',
     ],

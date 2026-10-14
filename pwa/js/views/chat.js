@@ -111,6 +111,8 @@ export function mountChat(root, id) {
   let manageNote = null; // { text, error }
   let archiveArmed = false;
   let archiveTimer = null;
+  let pinned = null; // la chat e' fissata in cima alla sidebar di Cursor? (null = non ancora letto)
+  let pinTried = false;
   let sentKey = null; // domanda (o approvazione) a cui si e' appena risposto
   let sentAt = 0;
   let actedAt = 0; // ultima risposta o messaggio inviati da questa schermata (orologio del telefono)
@@ -305,6 +307,38 @@ export function mountChat(root, id) {
     render();
   }
 
+  // Lo stato "fissata" si legge da Cursor una sola volta per schermata; se non si riesce, il pulsante semplicemente non c'e'.
+  function loadPin() {
+    if (pinTried) return;
+    pinTried = true;
+    api
+      .get(`/api/chats/${enc}/pin`)
+      .then((r) => {
+        if (typeof r?.pinned === 'boolean') pinned = r.pinned;
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (alive) renderManage();
+      });
+  }
+
+  async function togglePin() {
+    const next = !pinned;
+    manageBusy = true;
+    manageNote = null;
+    renderManage();
+    try {
+      const res = await api.post(`/api/chats/${enc}/pin`, { pinned: next });
+      pinned = res?.pinned === next ? next : pinned;
+      manageNote = { text: pinned ? 'Chat fissata in cima alla sidebar di Cursor.' : 'Chat tolta dai fissati.', error: false };
+    } catch (err) {
+      manageNote = { text: describeActionError(err), error: true };
+      if (shouldRefreshAfter(err)) refresh().catch(() => {});
+    }
+    manageBusy = false;
+    renderManage();
+  }
+
   async function archiveChat() {
     manageBusy = true;
     archiveArmed = false;
@@ -346,6 +380,7 @@ export function mountChat(root, id) {
       return;
     }
     const running = card.state === STATE.RUNNING;
+    loadPin();
     const nodes = [];
     if (manageNote) nodes.push(h('p', { class: `hint${manageNote.error ? ' error-text' : ''}`, role: 'status' }, manageNote.text));
     if (renaming) {
@@ -373,6 +408,7 @@ export function mountChat(root, id) {
           'div',
           { class: 'panel-actions' },
           h('button', { class: 'btn', type: 'button', disabled: manageBusy, onClick: () => { renaming = true; manageNote = null; renderManage(true); setTimeout(() => { const i = document.getElementById('rename-input'); i?.focus(); i?.select(); }, 0); } }, icon('pencil', { size: 18 }), 'Rinomina'),
+          pinned === null ? null : h('button', { class: 'btn', type: 'button', disabled: manageBusy, onClick: togglePin }, icon(pinned ? 'pinOff' : 'pin', { size: 18 }), pinned ? 'Togli' : 'Fissa'),
           h('button', { class: `btn${archiveArmed ? ' armed' : ''}`, type: 'button', disabled: manageBusy || running, onClick: archiveTap }, icon('archive', { size: 18 }), archiveArmed ? 'Conferma' : 'Archivia'),
         ),
       );

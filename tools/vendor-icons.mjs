@@ -75,6 +75,8 @@ const ICONS = {
   heartOff: 'heart-off',
   plus: 'plus',
   image: 'image',
+  pin: 'pin',
+  pinOff: 'pin-off',
   archive: 'archive',
   archiveRestore: 'archive-restore',
   stop: 'square',

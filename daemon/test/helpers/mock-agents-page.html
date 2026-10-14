@@ -34,6 +34,7 @@
 <div>
   <div id="newchat-bar" hidden><button class="ui-select-trigger" type="button"></button><button class="ui-select-trigger" type="button">main</button><button class="ui-select-trigger" type="button"></button></div>
   <button type="button" aria-label="Customize Sidebar" id="customize">Filtri</button>
+  <nav id="pinned"></nav>
   <div id="heads"></div>
   <nav id="sidebar"></nav>
 </div>
@@ -91,6 +92,8 @@
   function sidebar() {
     const nav = $('#sidebar');
     nav.replaceChildren();
+    const pinnedNav = $('#pinned');
+    pinnedNav.replaceChildren();
     const heads = $('#heads');
     heads.replaceChildren();
     for (const name of S.projects) {
@@ -136,12 +139,12 @@
         ev.preventDefault();
         const archived = S.chats[id].archived === true;
         menu([
-          { label: 'Pin', run: () => {} },
+          { label: S.chats[id].pinned ? 'Unpin' : 'Pin', run: () => { S.chats[id].pinned = !S.chats[id].pinned; S.pins.push({ id, pinned: S.chats[id].pinned }); sidebar(); } },
           { label: 'Rename', run: () => { S.renaming = id; sidebar(); } },
           { label: archived ? 'Unarchive' : 'Archive', run: () => { S.chats[id].archived = !archived; (archived ? S.unarchived : S.archived).push(id); sidebar(); } },
         ]);
       });
-      nav.append(b);
+      (S.chats[id].pinned ? pinnedNav : nav).append(b);
     }
   }
 
@@ -354,7 +357,7 @@
   window.__mock = {
     reset(cfg) {
       document.querySelector('#previews').replaceChildren();
-      S = { current: cfg.current ?? null, chats: cfg.chats, qstate: {}, done: {}, submitted: [], skipped: [], sent: [], clicks: 0, log: [], decided: {}, stopped: [], renamed: [], archived: [], unarchived: [], showArchived: false, renaming: null, noPreview: cfg.noPreview === true, projects: cfg.projects ?? [], env: cfg.env ?? null, newChat: null, newChats: [] };
+      S = { current: cfg.current ?? null, chats: cfg.chats, qstate: {}, done: {}, submitted: [], skipped: [], sent: [], clicks: 0, log: [], decided: {}, stopped: [], renamed: [], archived: [], unarchived: [], pins: [], showArchived: false, renaming: null, noPreview: cfg.noPreview === true, projects: cfg.projects ?? [], env: cfg.env ?? null, newChat: null, newChats: [] };
       for (const [id, c] of Object.entries(S.chats)) {
         S.qstate[id] = { step: 0, selections: JSON.parse(JSON.stringify(cfg.initialSelections?.[id] ?? {})), freeform: { ...(cfg.initialFreeform?.[id] ?? {}) } };
         if (c.questions) {
@@ -367,7 +370,7 @@
       refreshSend();
       render();
     },
-    state() { return JSON.stringify({ current: S.current, submitted: S.submitted, skipped: S.skipped, sent: S.sent, clicks: S.clicks, log: S.log, decided: S.decided, stopped: S.stopped, renamed: S.renamed, archived: S.archived, unarchived: S.unarchived, showArchived: S.showArchived, renaming: S.renaming, newChats: S.newChats, newChat: S.newChat }); },
+    state() { return JSON.stringify({ current: S.current, submitted: S.submitted, skipped: S.skipped, sent: S.sent, clicks: S.clicks, log: S.log, decided: S.decided, stopped: S.stopped, renamed: S.renamed, archived: S.archived, unarchived: S.unarchived, pins: S.pins, showArchived: S.showArchived, renaming: S.renaming, newChats: S.newChats, newChat: S.newChat }); },
   };
 })();
 </script>

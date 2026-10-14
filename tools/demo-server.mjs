@@ -223,6 +223,7 @@ let newChats = 0;
 
 // "Cursor" finto per le azioni dal telefono: scrive nel database sintetico quello che scriverebbe Cursor vero.
 const numOf = (composerId) => Number(composerId.slice(-12));
+const pinnedDemo = new Set();
 const demoUi = {
   async probe() {
     return { up: true, browser: 'Demo/1.0' };
@@ -303,6 +304,17 @@ const demoUi = {
     await new Promise((r) => setTimeout(r, 400));
     fx.chat(composerId, { archived: true });
     return { clicked: true };
+  },
+  async pinState({ composerId }) {
+    if (!chatSpecs.get(numOf(composerId))) throw Object.assign(new Error('demo'), { code: 'row_not_found' });
+    return { pinned: pinnedDemo.has(composerId) };
+  },
+  async setPinned({ composerId, pinned }) {
+    if (!chatSpecs.get(numOf(composerId))) throw Object.assign(new Error('demo'), { code: 'row_not_found' });
+    await new Promise((r) => setTimeout(r, 300));
+    if (pinned) pinnedDemo.add(composerId);
+    else pinnedDemo.delete(composerId);
+    return { pinned, changed: true };
   },
   async unarchive({ composerId }) {
     if (!chatSpecs.get(numOf(composerId))) throw Object.assign(new Error('demo'), { code: 'row_not_found' });

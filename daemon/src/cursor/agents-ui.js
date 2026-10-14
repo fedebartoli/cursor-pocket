@@ -74,6 +74,8 @@ const REJECT_LABEL = '^(skip|salta)$';
 // Voci del menu di una riga (inglese; italiano per le interfacce localizzate).
 const MENU = Object.freeze({
   rename: '^(rename|rinomina)$',
+  pin: '^(pin|fissa)$',
+  unpin: '^(unpin|rimuovi.*fissat.*|togli.*fissat.*)$',
   archive: '^(archive|archivia)$',
   unarchive: '^(unarchive|restore|ripristina|dearchivia)$',
   archivedFilter: '^(archived|archiviat[eio])$',
@@ -313,6 +315,13 @@ function pageDo(a, K) {
     }
     case 'sectionCount':
       return K.sectionHeads(a.name).length;
+    case 'pinState': {
+      // Le chat fissate stanno in cima alla sidebar, PRIMA della prima intestazione di progetto.
+      const row = K.findRow(a.id);
+      if (!row) return { found: false, pinned: false };
+      const head = document.querySelector(SEL.sectionHead);
+      return { found: true, pinned: !!head && !!(row.compareDocumentPosition(head) & Node.DOCUMENT_POSITION_FOLLOWING) };
+    }
     case 'rowKeys':
       return K.rows().map((r) => K.rowKey(r));
     case 'newChatState': {
@@ -886,6 +895,33 @@ export class AgentsUi {
         throw new UiError('rename_failed', 'rinomina non confermata');
       }
       return { clicked: true };
+    });
+  }
+
+  /** La chat e' fissata in cima alla sidebar? (sola lettura della pagina). */
+  async pinState({ composerId }) {
+    return this.withSession(async (ctx) => {
+      const st = await ctx.page({ op: 'pinState', id: composerId });
+      if (!st.found) throw new UiError('row_not_found', 'chat non trovata nella sidebar di Cursor');
+      return { pinned: st.pinned };
+    });
+  }
+
+  /** Fissa o toglie dai fissati (menu della riga, voce "Pin"/"Unpin"). Non fa nulla se la chat e' gia' nello stato richiesto. */
+  async setPinned({ composerId, pinned }) {
+    if (typeof pinned !== 'boolean') throw new UiError('bad_pin', 'valore non valido');
+    return this.withSession(async (ctx) => {
+      const before = await ctx.page({ op: 'pinState', id: composerId });
+      if (!before.found) throw new UiError('row_not_found', 'chat non trovata nella sidebar di Cursor');
+      if (before.pinned === pinned) return { pinned, changed: false };
+      // Si cerca SOLO la voce dello stato voluto: se il menu mostra quella opposta non si clicca nulla (mai un'inversione per errore).
+      await this.#rowMenu(ctx, composerId, pinned ? MENU.pin : MENU.unpin);
+      const now = await waitFor(async () => {
+        const st = await ctx.page({ op: 'pinState', id: composerId });
+        return st.found && st.pinned === pinned ? st : null;
+      }, { timeoutMs: 3000, sleep: this.sleep });
+      if (!now) throw new UiError('pin_failed', 'Cursor non ha cambiato lo stato di fissaggio');
+      return { pinned, changed: true };
     });
   }
 

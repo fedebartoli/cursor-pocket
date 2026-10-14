@@ -188,7 +188,7 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
     }
 
     // --- chat ---
-    const m = /^\/api\/chats\/([^/]+)(?:\/(ignore|answer|message|skip|approval|stop|rename|archive|prefs|history))?$/.exec(path);
+    const m = /^\/api\/chats\/([^/]+)(?:\/(ignore|answer|message|skip|approval|stop|rename|archive|pin|prefs|history))?$/.exec(path);
     if (m) {
       const id = m[1];
       const action = m[2];
@@ -214,6 +214,7 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
         if (!page) throw new HttpError(503, 'unavailable', 'La conversazione non e\' leggibile adesso');
         return sendJson(res, 200, page, headers);
       }
+      if (action === 'pin' && method === 'GET') return sendJson(res, 200, await actions.pinState(id), headers);
       if (action === 'ignore' && (method === 'POST' || method === 'DELETE')) {
         const body = await readJson(req);
         const key = typeof body.key === 'string' ? body.key : '';
@@ -245,7 +246,7 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
         return sendJson(res, 200, { ok: true, ...prefs }, headers);
       }
       // Azioni verso Cursor (Fase 2): rispondere, saltare, scrivere un messaggio.
-      if ((action === 'answer' || action === 'message' || action === 'skip' || action === 'approval' || action === 'stop' || action === 'rename' || action === 'archive') && method === 'POST') {
+      if ((action === 'answer' || action === 'message' || action === 'skip' || action === 'approval' || action === 'stop' || action === 'rename' || action === 'archive' || action === 'pin') && method === 'POST') {
         const body = await readJson(req, MAX_ACTION_BODY_BYTES);
         let result;
         if (action === 'answer') result = await actions.answer(id, { key: body.key, answers: body.answers });
@@ -253,6 +254,7 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
         else if (action === 'stop') result = await actions.stopAgent(id);
         else if (action === 'rename') result = await actions.rename(id, { name: body.name });
         else if (action === 'archive') result = await actions.archive(id);
+        else if (action === 'pin') result = await actions.pin(id, { pinned: body.pinned });
         else if (action === 'approval') result = await actions.approval(id, { key: body.key, decision: body.decision });
         else result = await actions.sendMessage(id, { text: body.text, images: body.images });
         return sendJson(res, 200, result, headers);

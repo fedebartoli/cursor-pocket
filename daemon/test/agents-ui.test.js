@@ -338,6 +338,31 @@ describe('AgentsUi su Chromium con la pagina finta', { skip }, () => {
     });
   });
 
+  describe('fissa chat (Pin)', () => {
+    const cfg = (extra = {}) => ({ current: 'chat-b', projects: ['Progetto A'], chats: { 'chat-a': { name: 'Chat A' }, 'chat-b': { name: 'Chat B', pinned: true } }, ...extra });
+
+    it('legge se la chat e\' fissata (sta prima delle intestazioni dei progetti)', async () => {
+      await reset(cfg());
+      assert.deepEqual(await ui.pinState({ composerId: 'chat-a' }), { pinned: false });
+      assert.deepEqual(await ui.pinState({ composerId: 'chat-b' }), { pinned: true });
+      await assert.rejects(() => ui.pinState({ composerId: 'chat-nope' }), (e) => e.code === 'row_not_found');
+    });
+
+    it('fissa e toglie dai fissati usando la voce giusta del menu, e non fa nulla se e\' gia\' cosi\'', async () => {
+      await reset(cfg());
+      assert.deepEqual(await ui.setPinned({ composerId: 'chat-a', pinned: true }), { pinned: true, changed: true });
+      assert.deepEqual(await ui.pinState({ composerId: 'chat-a' }), { pinned: true });
+      assert.deepEqual(await ui.setPinned({ composerId: 'chat-a', pinned: true }), { pinned: true, changed: false });
+      assert.deepEqual(await ui.setPinned({ composerId: 'chat-b', pinned: false }), { pinned: false, changed: true });
+      assert.deepEqual((await state()).pins, [{ id: 'chat-a', pinned: true }, { id: 'chat-b', pinned: false }]);
+    });
+
+    it('rifiuta un valore non booleano', async () => {
+      await reset(cfg());
+      await assert.rejects(() => ui.setPinned({ composerId: 'chat-a', pinned: 'si' }), (e) => e.code === 'bad_pin');
+    });
+  });
+
   describe('nuova chat su un progetto', () => {
     const cfg = (extra = {}) => ({ current: 'chat-b', projects: ['Progetto A', 'Progetto B'], chats: { 'chat-a': { name: 'Chat A' }, 'chat-b': { name: 'Chat B' } }, ...extra });
 

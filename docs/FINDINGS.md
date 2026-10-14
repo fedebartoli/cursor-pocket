@@ -663,6 +663,16 @@ viewport, che su iOS 10+ impedisce lo zoom automatico al focus ma lascia lo zoom
 - Progetti rimossi: il daemon non mostra le chat dei progetti rimossi; avviare una chat su un progetto che Cursor non mostra piu' risponde
   `project_not_found`. Un progetto senza alcuna chat locale non si puo' scegliere dal telefono (il daemon conosce i progetti dalle chat).
 
+### 10.4m Fissa chat (Pin) (15/10) [PROVATO DAL VIVO su Cursor con la chat di test; PWA NON PROVATA su iPhone]
+- Menu della riga (tasto destro): Pin/Unpin, Rename, Edit Icon, Mark as Unread, Fork, Move to, Copy, Archive, Archive All Below. La voce cambia
+  tra "Pin" e "Unpin" secondo lo stato.
+- Lo stato NON e' in `composerHeaders` (nessun campo) ne' in `ItemTable` (nessuna chiave dedicata): si legge dalla pagina. Le chat fissate
+  stanno in cima alla sidebar, PRIMA della prima testata `[data-section-head]`; quella fissata esce dal suo progetto.
+- Il daemon cerca nel menu SOLO la voce dello stato voluto ("Pin" per fissare, "Unpin" per togliere): se il menu mostra l'opposta non clicca nulla.
+  `GET /api/chats/:id/pin` legge lo stato (sola lettura della pagina), `POST /api/chats/:id/pin {pinned}` lo cambia. Nella PWA il pulsante
+  Fissa/Togli compare nel pannello di gestione della chat dopo aver letto lo stato una volta.
+- Prova dal vivo: stato iniziale non fissata, fissa, stato fissata, ripetere e' un no-op, togli, stato finale non fissata (chat di test ripristinata).
+
 ### 10.5 Da verificare dal vivo, con Cursor riavviato con la porta di debug [NON PROVATO]
 Ogni punto ha una diagnostica pronta: `cd daemon && npm run cdp -- status | inspect | tray` (stampa la struttura della
 pagina e mai i testi).
