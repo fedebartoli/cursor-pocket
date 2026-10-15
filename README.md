@@ -1,7 +1,7 @@
 <h1 align="center">cursor-pocket</h1>
 
 <p align="center">
-  Follow and drive the <strong>local</strong> chats of Cursor's Agents Window from your iPhone.<br>
+  Manage the <strong>local</strong> chats of Cursor's Agents Window from your phone: read them, answer, approve, start new ones.<br>
   A small Node daemon on your Mac and an installable web app. No dependencies, no build step.
 </p>
 
@@ -35,10 +35,15 @@
 ## Why
 
 Agents are most useful when you can leave them working. The catch is that they stop and wait: a question to answer, a command to
-approve, a plan to read. Cursor shows a red dot for those moments, but only on the Mac.
+approve, a plan to read. Cursor shows a red dot for those moments, but only on the Mac, and Cursor's own mobile experience did not
+cover local chats well enough for me.
 
-cursor-pocket sends you a push notification when that happens and lets you handle it from the phone, wherever you are, hours or
-days later if you want. Everything stays on your machine and your private network: there is no cloud service and no account.
+cursor-pocket gives you all your local chats on the phone, grouped by project: read them, send messages, start new chats, answer
+and approve. It sends a push notification when an agent needs you, so you can handle it wherever you are, hours or days later if
+you want. Everything stays on your machine and your private network: there is no cloud service and no account.
+
+It is built and tested on iPhone. It is a standard web app, so it should work on other phones too, but push notifications are only
+verified on iOS.
 
 ## What you can do
 
