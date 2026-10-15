@@ -215,6 +215,7 @@ export default {
     "error.branch_failed": "Cursor did not change the branch: check on your Mac.",
     "error.branch_not_found": "That branch is no longer in Cursor’s list: refresh your choices.",
     "error.chat_not_in_sidebar": "The chat is not visible in Cursor’s sidebar: open it on your Mac.",
+    "error.chat_not_open": "Cursor did not open this chat: nothing was typed. Try again.",
     "error.click_failed": "Cursor did not run the action (click_failed). Check on your Mac.",
     "error.closed": "The connection to Cursor was lost. Try again.",
     "error.command_too_long": "The command is too long to read in full here: run it in Cursor on your Mac (you can still reject it).",

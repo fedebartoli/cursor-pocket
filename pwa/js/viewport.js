@@ -43,11 +43,26 @@ export function bottomShift({ innerHeight, vvHeight, vvOffsetTop, vvScale = 1 })
   return Math.abs(shift) <= 1 ? 0 : shift;
 }
 
-/** Height covered by the keyboard, given the visual viewport (0 if none). Pure function. */
-export function keyboardHeight({ innerHeight, vvHeight, vvOffsetTop, vvScale = 1 }) {
+/**
+ * Height covered by the keyboard, given the visual viewport (0 if none). Pure function.
+ * `extra` is added when the keyboard is open: iOS 26 floats the field's accessory pill (arrows and checkmark) OVER the page,
+ * above the keyboard, and the visual viewport does not account for it: without the extra the send button ends up under it.
+ */
+export function keyboardHeight({ innerHeight, vvHeight, vvOffsetTop, vvScale = 1 }, extra = 0) {
   if (vvScale > 1.01) return 0; // pinch-zoom active: visual viewport is smaller, but it is not the keyboard
   const covered = Math.round(innerHeight - vvHeight - vvOffsetTop);
-  return covered >= KEYBOARD_MIN_PX ? covered : 0;
+  return covered >= KEYBOARD_MIN_PX ? covered + extra : 0;
+}
+
+/** Space the iOS 26 accessory pill takes above the keyboard (px). Tune here if it looks too tight or too loose. */
+export const ACCESSORY_PILL_PX = 56;
+
+/**
+ * Does this browser float the accessory pill over the page? iPhone with Safari 26+, detected by a feature that shipped in the
+ * same release (CSS anchor positioning), because the user agent still reports an old iOS version. Pure function.
+ */
+export function accessoryExtra({ userAgent = '', supportsAnchor = false } = {}) {
+  return /iPhone/.test(userAgent) && supportsAnchor ? ACCESSORY_PILL_PX : 0;
 }
 
 function guardDoubleTap(doc = document) {
@@ -97,13 +112,14 @@ function trackKeyboard(win = window, doc = document) {
   const vv = win.visualViewport;
   if (!vv) return;
   const root = doc.documentElement;
+  const extra = accessoryExtra({ userAgent: win.navigator?.userAgent ?? '', supportsAnchor: Boolean(win.CSS?.supports?.('anchor-name', '--cp')) });
   let frame = 0;
   let current = -1;
   let currentShift = 0;
   const apply = () => {
     frame = 0;
     const m = { innerHeight: win.innerHeight, vvHeight: vv.height, vvOffsetTop: vv.offsetTop, vvScale: vv.scale };
-    const kb = keyboardHeight(m);
+    const kb = keyboardHeight(m, extra);
     // With keyboard open the bottom bar is hidden (CSS): do not shift above the keyboard.
     const shift = kb > 0 ? 0 : bottomShift(m);
     if (shift !== currentShift) {

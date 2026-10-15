@@ -41,6 +41,8 @@ export function createComposer({ chatId, onSend, onStop }) {
     enterkeyhint: 'enter',
   });
   const sendBtn = h('button', { class: 'send', type: 'submit', 'aria-label': t('composer.sendMessage') }, icon('arrowUp', { size: 22 }));
+  // Tapping the button must not take focus from the field (iOS would close the keyboard and move the button before the click).
+  sendBtn.addEventListener('mousedown', (ev) => ev.preventDefault());
   const sendIcon = sendBtn.firstChild;
   const stopIcon = icon('stop', { size: 18 });
   const files = createAttachments({ onChange: () => sync(), onError: (t) => showStatus(t, true), onNote: (t) => showStatus(t) });
@@ -63,7 +65,9 @@ export function createComposer({ chatId, onSend, onStop }) {
 
   function sync() {
     const locked = busy || mode !== 'ready';
-    area.disabled = locked;
+    // While sending, read-only (not disabled): disabling a focused field makes iOS drop the keyboard and the layout jumps.
+    area.disabled = mode !== 'ready';
+    area.readOnly = busy;
     files.setLocked(locked);
     const stop = stopping();
     if (!stop) disarm();

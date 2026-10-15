@@ -85,6 +85,7 @@ export async function listPageTargets(port, { timeoutMs = 2000 } = {}) {
 export const KEYS = Object.freeze({
   enter: { key: 'Enter', code: 'Enter', windowsVirtualKeyCode: 13, nativeVirtualKeyCode: 13, text: '\r' },
   escape: { key: 'Escape', code: 'Escape', windowsVirtualKeyCode: 27, nativeVirtualKeyCode: 27 },
+  backspace: { key: 'Backspace', code: 'Backspace', windowsVirtualKeyCode: 8, nativeVirtualKeyCode: 8 },
 });
 export const MODIFIER = Object.freeze({ alt: 1, ctrl: 2, meta: 4, shift: 8 });
 

@@ -53,6 +53,9 @@ export const SEL = Object.freeze({
   menuItem: '[role="menuitem"],[role="menuitemcheckbox"]',
   renameInput: 'input.ui-text-editable',
   customize: 'button[aria-label="Customize Sidebar"]',
+  // Sidebar toggle: while hidden the rows stay in the DOM but have no size.
+  showSidebar: 'button[aria-label="Show Sidebar"]',
+  hideSidebar: 'button[aria-label="Hide Sidebar"]',
   // Composer attachments: file input (accepts image/*) is in the composer bar; each image preview has its own
   // "Remove image" button. Search only in the foreground panel.
   fileInput: 'input[type="file"]',
@@ -191,6 +194,7 @@ function pageKit(SEL, APPROVE_LABEL, REJECT_LABEL) {
   K.menuItems = () => [...document.querySelectorAll(SEL.menuItem)].filter(K.visible);
   K.menuItem = (re) => K.menuItems().find((m) => new RegExp(re, 'i').test(K.text(m))) || null;
   K.renameInput = () => [...document.querySelectorAll(SEL.renameInput)].find(K.visible) || null;
+  K.sidebarButton = (sel) => [...document.querySelectorAll(sel)].find(K.visible) || null;
   K.customize = () => [...document.querySelectorAll(SEL.customize)].find(K.visible) || null;
   K.stop = () => [...K.scope().querySelectorAll(SEL.stop)].find(K.visible) || null;
   K.sectionHeads = (name) => [...document.querySelectorAll(SEL.sectionHead)].filter((e) => K.text(e).trim() === name);
@@ -267,6 +271,10 @@ function pageDo(a, K) {
         return K.renameInput();
       case 'customize':
         return K.customize();
+      case 'showSidebar':
+        return K.sidebarButton(SEL.showSidebar);
+      case 'hideSidebar':
+        return K.sidebarButton(SEL.hideSidebar);
       case 'removeImage':
         return K.imageRemove();
       case 'newAgent':
@@ -331,10 +339,15 @@ function pageDo(a, K) {
       const agent = K.panelAgent();
       return agent ? `row:${agent}` : null;
     }
+    case 'sidebarState': {
+      const rows = K.rows();
+      return { rows: rows.length, visible: rows.filter(K.visible).length, canShow: !!K.sidebarButton(SEL.showSidebar) };
+    }
     case 'composerInfo': {
       const c = K.composer();
       const s = K.send();
       return {
+        panel: K.panelAgent(),
         composer: c ? { text: K.editorText(c), empty: K.editorText(c) === '' } : null,
         send: s ? { disabled: K.isDisabled(s) } : null,
         stop: !!K.stop(),
@@ -562,6 +575,38 @@ class Ctx {
     }
   }
 
+  /**
+   * If Cursor's sidebar is hidden (rows exist but have no size), show it so rows can be found and clicked.
+   * `restoreSidebar()` hides it again at the end of the session, leaving the Mac as it was.
+   */
+  async ensureSidebar() {
+    const st = await this.page({ op: 'sidebarState' });
+    if (st.visible > 0 || !st.canShow) return false;
+    await this.clickTarget({ target: 'showSidebar' });
+    const shown = await waitFor(async () => ((await this.page({ op: 'sidebarState' })).visible > 0 ? true : null), { timeoutMs: 2500, sleep: this.sleep });
+    if (!shown) return false;
+    this.sidebarOpenedByUs = true;
+    // Let the sidebar finish its animation before clicking rows: wait until the number of visible rows stops changing.
+    let last = -1;
+    await waitFor(async () => {
+      const n = (await this.page({ op: 'sidebarState' })).visible;
+      const stable = n === last;
+      last = n;
+      return stable ? true : null;
+    }, { timeoutMs: 1500, intervalMs: 150, sleep: this.sleep });
+    return true;
+  }
+
+  async restoreSidebar() {
+    if (!this.sidebarOpenedByUs) return;
+    this.sidebarOpenedByUs = false;
+    try {
+      await this.clickTarget({ target: 'hideSidebar' });
+    } catch {
+      // best-effort: must never fail the action
+    }
+  }
+
   /** Type text with focus already on the element; `\n` becomes Shift+Enter (newline without sending). */
   async typeText(text) {
     const lines = String(text).replace(/\r\n?/g, '\n').split('\n');
@@ -577,6 +622,9 @@ class Ctx {
 }
 
 export class AgentsUi {
+  // composerId -> normalized text this daemon typed in that chat's composer and has not seen sent. Memory only.
+  #typed = new Map();
+
   /**
    * @param {{ port: number, restoreSelection?: boolean, sleep?: Function, WebSocketImpl?: Function }} opts
    */
@@ -619,7 +667,12 @@ export class AgentsUi {
     try {
       // Page behaves as if focused even when Cursor is in the background (this session only).
       await session.send('Emulation.setFocusEmulationEnabled', { enabled: true }).catch(() => {});
-      return await fn(new Ctx(session, { sleep: this.sleep }));
+      const ctx = new Ctx(session, { sleep: this.sleep });
+      try {
+        return await fn(ctx);
+      } finally {
+        await ctx.restoreSidebar();
+      }
     } finally {
       session.close();
     }
@@ -645,15 +698,18 @@ export class AgentsUi {
   }
 
   async #openChat(ctx, composerId) {
+    await ctx.ensureSidebar();
     const previous = await ctx.page({ op: 'selectedKey' }).catch(() => null);
     const loc = await ctx.locate({ target: 'row', id: composerId });
     if (!loc.found) throw new UiError('row_not_found', 'chat not found in Cursor sidebar');
     if (previous && previous === loc.key) return previous; // already open: nothing to do
-    await ctx.clickTarget({ target: 'row', id: composerId });
-    // [TO VERIFY] selected-row marker; if missing, wait briefly.
-    const selected = await waitFor(async () => (await ctx.page({ op: 'selectedKey' }).catch(() => null)) === loc.key, { timeoutMs: 1500, sleep: this.sleep });
-    if (!selected) await this.sleep(500);
-    return previous;
+    // Never go on with the wrong chat open: a message typed there would end up in a different conversation.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await ctx.clickTarget({ target: 'row', id: composerId });
+      const selected = await waitFor(async () => (await ctx.page({ op: 'selectedKey' }).catch(() => null)) === loc.key, { timeoutMs: 1500, sleep: this.sleep });
+      if (selected) return previous;
+    }
+    throw new UiError('chat_not_open', 'Cursor did not open the chat');
   }
 
   async #restore(ctx, previous, composerId) {
@@ -879,6 +935,7 @@ export class AgentsUi {
 
   /** Right-click the row and click menu entry `label` (regex). */
   async #rowMenu(ctx, composerId, label) {
+    await ctx.ensureSidebar();
     const loc = await ctx.locate({ target: 'row', id: composerId });
     if (!loc.found) throw new UiError('row_not_found', 'chat not found in Cursor sidebar');
     await ctx.rightClick({ target: 'row', id: composerId });
@@ -940,6 +997,7 @@ export class AgentsUi {
   /** Is the chat pinned at the top of the sidebar? (read-only page probe). */
   async pinState({ composerId }) {
     return this.withSession(async (ctx) => {
+      // Read-only probe run often from the phone: it never opens the sidebar (would flicker the Mac window).
       const st = await ctx.page({ op: 'pinState', id: composerId });
       if (!st.found) throw new UiError('row_not_found', 'chat not found in Cursor sidebar');
       return { pinned: st.pinned };
@@ -950,6 +1008,7 @@ export class AgentsUi {
   async setPinned({ composerId, pinned }) {
     if (typeof pinned !== 'boolean') throw new UiError('bad_pin', 'invalid value');
     return this.withSession(async (ctx) => {
+      await ctx.ensureSidebar();
       const before = await ctx.page({ op: 'pinState', id: composerId });
       if (!before.found) throw new UiError('row_not_found', 'chat not found in Cursor sidebar');
       if (before.pinned === pinned) return { pinned, changed: false };
@@ -978,6 +1037,7 @@ export class AgentsUi {
    */
   async unarchive({ composerId }) {
     return this.withSession(async (ctx) => {
+      await ctx.ensureSidebar();
       const filterIs = async () => {
         await ctx.clickTarget({ target: 'customize' });
         const st = await waitFor(async () => {
@@ -1021,6 +1081,32 @@ export class AgentsUi {
     });
   }
 
+  /** Select everything in the (foreground) composer and delete it. Used only on text that this daemon typed itself. */
+  async #clearComposer(ctx) {
+    await ctx.clickTarget({ target: 'composer' });
+    const f = await ctx.focusState('composer');
+    if (!f.found || !f.focused) return false;
+    // `commands` makes the editing command run even where the synthesized shortcut would not (e.g. headless).
+    await ctx.s.pressKey({ key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, nativeVirtualKeyCode: 65, commands: ['selectAll'] }, { modifiers: MODIFIER.meta });
+    await ctx.s.pressKey({ ...KEYS.backspace, commands: ['deleteBackward'] });
+    return Boolean(await waitFor(async () => ((await ctx.focusState('composer')).empty ? true : null), { timeoutMs: 1500, sleep: this.sleep }));
+  }
+
+  /**
+   * After a failed send: if the composer still holds exactly the text WE typed, remove it, so no stray draft is left
+   * behind (and the next attempt does not trip over it). Anything else in the field is the user's own: never touched.
+   */
+  async #discardOwnText(ctx, composerId, text) {
+    try {
+      const f = await ctx.focusState('composer');
+      if (f.found && !f.empty && norm(f.text) === norm(text)) await this.#clearComposer(ctx);
+      const after = await ctx.focusState('composer');
+      if (!after.found || after.empty) this.#typed.delete(composerId);
+    } catch {
+      // best-effort: the original error is what the caller needs to see
+    }
+  }
+
   /** Type a message in the chat composer and send (like Enter in Cursor). */
   async sendMessage({ composerId, text, files = [] }) {
     return this.withSession(async (ctx) => {
@@ -1032,8 +1118,22 @@ export class AgentsUi {
         }, { timeoutMs: 3500, sleep: this.sleep });
         if (!info) throw new UiError('no_composer', 'composer field not found');
         if (info.tray) throw new UiError('question_pending', 'chat has a pending question');
-        // Never mix the message with a draft the user typed on the Mac.
-        if (!info.composer.empty || info.images > 0) throw new UiError('draft_not_empty', 'the composer already has a draft');
+        // The composer on screen must belong to the requested chat: never type into another conversation.
+        if (info.panel && info.panel !== composerId) throw new UiError('chat_not_open', 'the open chat is not the requested one');
+        // Never mix the message with a draft the user typed on the Mac. A draft that is exactly what this daemon typed
+        // earlier (a failed attempt) or the very same text being sent is ours: clear it and carry on.
+        let draftText = info.composer.text;
+        if (!info.composer.empty) {
+          const mine = this.#typed.get(composerId);
+          if (info.images === 0 && (norm(draftText) === norm(text) || (mine && norm(draftText) === mine))) {
+            if (!(await this.#clearComposer(ctx))) throw new UiError('draft_not_empty', 'the composer already has a draft');
+            this.#typed.delete(composerId);
+            draftText = '';
+          } else {
+            throw new UiError('draft_not_empty', 'the composer already has a draft');
+          }
+        }
+        if (info.images > 0) throw new UiError('draft_not_empty', 'the composer already has a draft');
 
         let attached = false;
         try {
@@ -1045,6 +1145,7 @@ export class AgentsUi {
             await ctx.clickTarget({ target: 'composer' });
             const focus = await ctx.focusState('composer');
             if (!focus.found || !focus.focused) throw new UiError('focus_failed', 'composer field not focused');
+            this.#typed.set(composerId, norm(text));
             await ctx.typeText(text);
             const typed = await waitFor(async () => {
               const f = await ctx.focusState('composer');
@@ -1054,6 +1155,7 @@ export class AgentsUi {
           }
         } catch (e) {
           if (attached) await ctx.clearImages().catch(() => {});
+          if (text) await this.#discardOwnText(ctx, composerId, text);
           throw e;
         }
 
@@ -1063,6 +1165,7 @@ export class AgentsUi {
         }, { timeoutMs: 3000, sleep: this.sleep });
         if (!enabled) {
           if (attached) await ctx.clearImages().catch(() => {});
+          if (text) await this.#discardOwnText(ctx, composerId, text);
           throw new UiError('send_disabled', 'send button not available');
         }
         await ctx.clickTarget({ target: 'send' });
@@ -1073,7 +1176,11 @@ export class AgentsUi {
           const i = await ctx.page({ op: 'composerInfo' });
           return (!f.found || f.empty) && !(i.images > 0) ? true : null;
         }, { timeoutMs: 5000, sleep: this.sleep });
-        if (!cleared) throw new UiError('send_failed', 'message does not appear sent');
+        if (!cleared) {
+          if (text) await this.#discardOwnText(ctx, composerId, text);
+          throw new UiError('send_failed', 'message does not appear sent');
+        }
+        this.#typed.delete(composerId);
         return { sent: true };
       } finally {
         await this.#restore(ctx, previous, composerId);
@@ -1230,6 +1337,7 @@ export class AgentsUi {
    * `st` receives prior selection and row keys: caller restores them on error.
    */
   async #openNewChat(ctx, project, st) {
+      await ctx.ensureSidebar();
       st.previous = await ctx.page({ op: 'selectedKey' }).catch(() => null);
       st.before = new Set(await ctx.page({ op: 'rowKeys' }));
       const count = await ctx.page({ op: 'sectionCount', name: project });

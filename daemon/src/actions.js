@@ -92,6 +92,7 @@ const UI_ERRORS = {
   model_failed: [409, 'model_failed', 'Cursor did not change the model: check on your Mac.'],
   pin_failed: [409, 'pin_failed', 'Cursor did not change the pin state: check on your Mac.'],
   bad_pin: [400, 'bad_pin', 'Invalid value.'],
+  chat_not_open: [409, 'ui_changed', 'Cursor did not open this chat: nothing was typed. Try again.'],
   row_not_found: [409, 'chat_not_in_sidebar', 'The chat is not visible in Cursor\u2019s sidebar: open it on your Mac.'],
   no_tray: [409, 'no_question', 'The question is no longer open in Cursor.'],
   tray_closed: [409, 'no_question', 'The question was closed in Cursor before it was completed.'],

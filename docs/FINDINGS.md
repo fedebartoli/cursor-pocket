@@ -683,6 +683,22 @@ Live measurement on the test chat (read-only observer every 0.5 s, after an answ
   (`pwa/js/scroll.js` picks the right container); document never scrolls, so no bounce that could move the bar.
   In chats (composer and keyboard) the window still scrolls. `--vv-shift` realignment remains as safety net.
 
+### 10.4p Sending to the wrong chat, stray drafts, hidden sidebar, keyboard (Oct 15) [daemon part VERIFIED in tests and live for the sidebar; iPhone part NOT VERIFIED]
+- Report: a message sent to chat 2 was typed into chat 1; the retry then failed with "draft not empty" because the draft WAS the message
+  just typed. Daemon log: `send_disabled` followed by `draft_not_empty` seconds later. Cause: `#openChat` clicked the row but, if the
+  selection did not change within ~2 s, went on anyway; and a failed send left the typed text in the composer.
+- Fixes (`daemon/src/cursor/agents-ui.js`): the chat must really be open (2 click attempts, then `chat_not_open`, nothing typed);
+  before typing, the foreground panel's `data-glass-agent-id` must equal the requested chat; after any failure the text THIS daemon typed
+  is removed (Cmd+A, Backspace, only if the field still holds exactly that text); a leftover draft equal to the message or to what the
+  daemon last typed in that chat is cleared automatically, anything else is the user's and still blocks (`draft_not_empty`).
+- Hidden sidebar: the rows stay in the DOM with no size, and the toolbar button is `aria-label="Show Sidebar"` / `"Hide Sidebar"`.
+  Actions that need rows now show it, and hide it again at the end (VERIFIED LIVE, state restored). The read-only pin probe never opens
+  it, to avoid flicker on the Mac.
+- Phone: the screenshot shows the iOS 26 floating accessory pill (arrows and checkmark) covering the bottom of the composer: the visual
+  viewport does not include it. `viewport.js` adds `ACCESSORY_PILL_PX` (56) to the keyboard height on iPhone with Safari 26 features
+  (CSS anchor positioning), a heuristic to confirm on the device and tune. The field is read-only (not disabled) while sending, and the
+  send button does not take focus on press, so iOS does not drop the keyboard and move the button before the tap lands.
+
 ### 10.5 To verify live, with Cursor restarted with debug port [NOT VERIFIED]
 Each item has ready diagnostics: `cd daemon && npm run cdp -- status | inspect | tray` (prints page structure
 and never text).

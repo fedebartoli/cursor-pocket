@@ -28,10 +28,12 @@
   .composer { position: absolute; left: 10px; right: 10px; bottom: 10px; display: flex; gap: 8px; align-items: flex-end; border: 1px solid #888; padding: 6px; background: #fff; }
   .ui-prompt-input-editor__input, .decoy-input { flex: 1; min-height: 40px; max-height: 120px; overflow: auto; outline: none; }
   button[disabled] { opacity: .5; }
+  #sidebar-box.hidden { display: none; }
 </style>
 </head>
 <body>
-<div>
+<button type="button" id="sbtoggle" aria-label="Hide Sidebar" style="position:absolute;right:4px;top:4px;z-index:5">Barra</button>
+<div id="sidebar-box">
   <div id="newchat-bar" hidden><button class="ui-select-trigger" type="button"></button><button class="ui-select-trigger" type="button">main</button><button class="ui-select-trigger" type="button"></button></div>
   <button type="button" aria-label="Customize Sidebar" id="customize">Filtri</button>
   <nav id="pinned"></nav>
@@ -137,7 +139,7 @@
         setTimeout(() => { input.focus(); input.select(); }, 0);
       } else {
         b.textContent = S.chats[id].name || id;
-        b.addEventListener('click', () => { S.current = id; S.log.push(`open:${id}`); render(); });
+        b.addEventListener('click', () => { if (S.stuckOpen) { S.log.push(`stuck:${id}`); return; } S.current = id; S.log.push(`open:${id}`); render(); });
       }
       b.addEventListener('contextmenu', (ev) => {
         ev.preventDefault();
@@ -330,7 +332,7 @@
   const comp = $('#composer');
   const send = $('#send');
   const previews = $('#previews');
-  const refreshSend = () => { send.disabled = comp.innerText.trim() === '' && previews.children.length === 0; };
+  const refreshSend = () => { send.disabled = S.sendDisabled === true || (comp.innerText.trim() === '' && previews.children.length === 0); };
   comp.addEventListener('input', refreshSend);
   // Attachments: like Cursor, each image has a `.ui-prompt-input-image-preview` preview with "Remove image".
   $('#files').addEventListener('change', (ev) => {
@@ -413,12 +415,21 @@
   function running() { stopBtn.hidden = !(S.chats[S.current]?.running && !S.stopped.includes(S.current)); }
   stopBtn.addEventListener('click', () => { S.stopped.push(S.current); S.log.push(`stop:${S.current}`); running(); });
 
-  function render() { sidebar(); tray(); approvals(); running(); }
+  // Cursor's panel for the open chat carries the composerId; the sidebar can be hidden (rows stay in the DOM, without size).
+  function render() {
+    $('#main').setAttribute('data-glass-agent-id', S.current || 'live');
+    sidebar(); tray(); approvals(); running();
+  }
+  function sidebarToggle() {
+    $('#sidebar-box').classList.toggle('hidden', S.sidebarHidden);
+    $('#sbtoggle').setAttribute('aria-label', S.sidebarHidden ? 'Show Sidebar' : 'Hide Sidebar');
+  }
+  $('#sbtoggle').addEventListener('click', () => { S.sidebarHidden = !S.sidebarHidden; S.log.push(S.sidebarHidden ? 'sidebar:hide' : 'sidebar:show'); sidebarToggle(); });
 
   window.__mock = {
     reset(cfg) {
       document.querySelector('#previews').replaceChildren();
-      S = { current: cfg.current ?? null, chats: cfg.chats, qstate: {}, done: {}, submitted: [], skipped: [], sent: [], clicks: 0, log: [], decided: {}, stopped: [], renamed: [], archived: [], unarchived: [], pins: [], showArchived: false, renaming: null, noPreview: cfg.noPreview === true, projects: cfg.projects ?? [], env: cfg.env ?? null, newChat: null, newChats: [], branches: cfg.branches ?? ['main'], branch: cfg.branch ?? (cfg.branches ?? ['main'])[0], model: cfg.model ?? 'Claude Sonnet 5.5 High', models: cfg.models ?? ['Auto', 'Composer 2.5', 'Claude Sonnet 5.5 High', 'Claude Opus 4.6 High'], picks: [], choices: [] };
+      S = { current: cfg.current ?? null, chats: cfg.chats, qstate: {}, done: {}, submitted: [], skipped: [], sent: [], clicks: 0, log: [], decided: {}, stopped: [], renamed: [], archived: [], unarchived: [], pins: [], showArchived: false, renaming: null, noPreview: cfg.noPreview === true, sendDisabled: cfg.sendDisabled === true, sidebarHidden: cfg.sidebarHidden === true, stuckOpen: cfg.stuckOpen === true, projects: cfg.projects ?? [], env: cfg.env ?? null, newChat: null, newChats: [], branches: cfg.branches ?? ['main'], branch: cfg.branch ?? (cfg.branches ?? ['main'])[0], model: cfg.model ?? 'Claude Sonnet 5.5 High', models: cfg.models ?? ['Auto', 'Composer 2.5', 'Claude Sonnet 5.5 High', 'Claude Opus 4.6 High'], picks: [], choices: [] };
       for (const [id, c] of Object.entries(S.chats)) {
         S.qstate[id] = { step: 0, selections: JSON.parse(JSON.stringify(cfg.initialSelections?.[id] ?? {})), freeform: { ...(cfg.initialFreeform?.[id] ?? {}) } };
         if (c.questions) {
@@ -430,8 +441,9 @@
       if (cfg.draft) comp.textContent = cfg.draft;
       refreshSend();
       render();
+      sidebarToggle();
     },
-    state() { return JSON.stringify({ current: S.current, submitted: S.submitted, skipped: S.skipped, sent: S.sent, clicks: S.clicks, log: S.log, decided: S.decided, stopped: S.stopped, renamed: S.renamed, archived: S.archived, unarchived: S.unarchived, pins: S.pins, showArchived: S.showArchived, renaming: S.renaming, newChats: S.newChats, newChat: S.newChat, picks: S.picks, choices: S.choices, branch: S.branch, model: S.model }); },
+    state() { return JSON.stringify({ current: S.current, submitted: S.submitted, skipped: S.skipped, sent: S.sent, clicks: S.clicks, log: S.log, decided: S.decided, stopped: S.stopped, renamed: S.renamed, archived: S.archived, unarchived: S.unarchived, pins: S.pins, showArchived: S.showArchived, renaming: S.renaming, newChats: S.newChats, newChat: S.newChat, picks: S.picks, choices: S.choices, branch: S.branch, model: S.model, sidebarHidden: S.sidebarHidden, draft: comp.innerText }); },
   };
 })();
 </script>

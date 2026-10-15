@@ -222,6 +222,51 @@ describe('AgentsUi on Chromium with the fake page', { skip }, () => {
     assert.deepEqual((await state()).sent, []);
   });
 
+  it('sendMessage: a failed send leaves no draft behind, so the next attempt works', async () => {
+    await reset({ ...withQ([RAW_Q1]), sendDisabled: true });
+    await assert.rejects(ui.sendMessage({ composerId: 'chat-c', text: 'messaggio da telefono' }), (e) => e.code === 'send_disabled');
+    let s = await state();
+    assert.equal(s.draft.trim(), '', 'the text typed by the daemon was removed');
+    assert.deepEqual(s.sent, []);
+    await reset(withQ([RAW_Q1]));
+    assert.deepEqual(await ui.sendMessage({ composerId: 'chat-c', text: 'secondo tentativo' }), { sent: true });
+    s = await state();
+    assert.deepEqual(s.sent, [{ chat: 'chat-c', text: 'secondo tentativo' }]);
+  });
+
+  it('sendMessage: a leftover draft equal to the message (or to what the daemon typed) is cleared; others are never touched', async () => {
+    await reset({ ...withQ([RAW_Q1]), draft: 'stesso testo' });
+    assert.deepEqual(await ui.sendMessage({ composerId: 'chat-c', text: 'stesso testo' }), { sent: true });
+    assert.deepEqual((await state()).sent, [{ chat: 'chat-c', text: 'stesso testo' }]);
+    await reset({ ...withQ([RAW_Q1]), draft: 'bozza vera scritta a mano' });
+    await assert.rejects(ui.sendMessage({ composerId: 'chat-c', text: 'altro testo' }), (e) => e.code === 'draft_not_empty');
+    assert.equal((await state()).draft, 'bozza vera scritta a mano');
+  });
+
+  it('sendMessage: if Cursor does not switch to the chat, nothing is typed (chat_not_open)', async () => {
+    await reset({ ...withQ([RAW_Q1]), stuckOpen: true });
+    await assert.rejects(ui.sendMessage({ composerId: 'chat-c', text: 'x' }), (e) => e.code === 'chat_not_open');
+    const s = await state();
+    assert.deepEqual(s.sent, []);
+    assert.equal(s.draft.trim(), '');
+  });
+
+  it('hidden sidebar: it is shown for the action and hidden again afterwards', async () => {
+    await reset({ ...withQ([RAW_Q1]), sidebarHidden: true });
+    assert.deepEqual(await ui.sendMessage({ composerId: 'chat-c', text: 'con barra chiusa' }), { sent: true });
+    const s = await state();
+    assert.deepEqual(s.sent, [{ chat: 'chat-c', text: 'con barra chiusa' }]);
+    assert.deepEqual(s.log.filter((l) => l.startsWith('sidebar:')), ['sidebar:show', 'sidebar:hide']);
+    assert.equal(s.sidebarHidden, true);
+    assert.equal(s.current, 'chat-b', 'previous chat restored too');
+  });
+
+  it('visible sidebar: it is not touched', async () => {
+    await reset(withQ([RAW_Q1]));
+    await ui.sendMessage({ composerId: 'chat-c', text: 'ciao' });
+    assert.deepEqual((await state()).log.filter((l) => l.startsWith('sidebar:')), []);
+  });
+
   it('sendMessage: with pending question does not write (question_pending)', async () => {
     await reset(withQ([RAW_Q1]));
     await assert.rejects(ui.sendMessage({ composerId: 'chat-a', text: 'x' }), (e) => e.code === 'question_pending');

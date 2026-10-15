@@ -215,6 +215,7 @@ export default {
     "error.branch_failed": "Cursor no cambió la rama: revísalo en tu Mac.",
     "error.branch_not_found": "Esa rama ya no está en la lista de Cursor: actualiza las opciones.",
     "error.chat_not_in_sidebar": "El chat no aparece en la barra lateral de Cursor: ábrela en tu Mac.",
+    "error.chat_not_open": "Cursor no abrió este chat: no se escribió nada. Inténtalo de nuevo.",
     "error.click_failed": "Cursor no ejecutó la acción (click_failed). Revísalo en tu Mac.",
     "error.closed": "Se perdió la conexión con Cursor. Inténtalo de nuevo.",
     "error.command_too_long": "El comando es demasiado largo para leerlo completo aquí: ejecútalo en Cursor en tu Mac (aún puedes rechazarlo).",

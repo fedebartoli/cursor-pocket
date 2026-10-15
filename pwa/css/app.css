@@ -573,7 +573,7 @@ button.section-head { cursor: pointer; }
   resize: none;
 }
 .composer-input:focus { outline: 2px solid var(--accent); outline-offset: 0; border-color: var(--accent); }
-.composer-input:disabled { opacity: 0.6; }
+.composer-input:disabled, .composer-input[readonly] { opacity: 0.6; }
 .send { flex: none; display: grid; place-items: center; width: 44px; height: 44px; border: 0; border-radius: 50%; background: var(--accent); color: var(--on-accent); cursor: pointer; }
 .send:active { transform: scale(0.96); }
 .send:disabled { background: var(--surface-2); color: var(--text-3); }

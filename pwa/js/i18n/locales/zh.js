@@ -215,6 +215,7 @@ export default {
     "error.branch_failed": "Cursor 未切换分支：请在 Mac 上查看。",
     "error.branch_not_found": "该分支已不在 Cursor 列表中：请刷新选项。",
     "error.chat_not_in_sidebar": "聊天未在 Cursor 侧栏中显示：请在 Mac 上打开。",
+    "error.chat_not_open": "Cursor 未打开此聊天：未输入任何内容。请重试。",
     "error.click_failed": "Cursor 未执行操作（click_failed）。请在 Mac 上查看。",
     "error.closed": "与 Cursor 的连接已断开。请重试。",
     "error.command_too_long": "命令过长无法在此完整读取：请在 Mac 的 Cursor 中运行（仍可拒绝）。",

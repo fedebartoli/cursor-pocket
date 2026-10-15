@@ -215,6 +215,7 @@ export default {
     "error.branch_failed": "Cursorでブランチを変更できませんでした。Macで確認してください。",
     "error.branch_not_found": "そのブランチはCursorの一覧にありません。選択肢を更新してください。",
     "error.chat_not_in_sidebar": "チャットがCursorのサイドバーに表示されていません。Macで開いてください。",
+    "error.chat_not_open": "Cursorがこのチャットを開きませんでした。何も入力されていません。もう一度お試しください。",
     "error.click_failed": "Cursorが操作を実行しませんでした（click_failed）。Macで確認してください。",
     "error.closed": "Cursorとの接続が切れました。もう一度お試しください。",
     "error.command_too_long": "コマンドが長すぎてここでは全文読めません。MacのCursorで実行してください（拒否は可能です）。",

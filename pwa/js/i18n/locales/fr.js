@@ -215,6 +215,7 @@ export default {
     "error.branch_failed": "Cursor n’a pas changé la branche : vérifiez sur votre Mac.",
     "error.branch_not_found": "Cette branche n’est plus dans la liste Cursor : actualisez vos choix.",
     "error.chat_not_in_sidebar": "Le chat n’est pas visible dans la barre latérale Cursor : ouvrez-le sur votre Mac.",
+    "error.chat_not_open": "Cursor n’a pas ouvert ce chat : rien n’a été saisi. Réessayez.",
     "error.click_failed": "Cursor n’a pas exécuté l’action (click_failed). Vérifiez sur votre Mac.",
     "error.closed": "La connexion à Cursor a été perdue. Réessayez.",
     "error.command_too_long": "La commande est trop longue pour être lue entièrement ici : exécutez-la dans Cursor sur votre Mac (vous pouvez toujours la refuser).",

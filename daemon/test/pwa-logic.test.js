@@ -9,7 +9,7 @@ import {
 } from '../../pwa/js/action-errors.js';
 import { AnswerState, FREEFORM_MAX, optionBadge } from '../../pwa/js/answers.js';
 import { initI18n } from '../../pwa/js/i18n/index.js';
-import { bottomShift, classifyTap, keyboardHeight } from '../../pwa/js/viewport.js';
+import { ACCESSORY_PILL_PX, accessoryExtra, bottomShift, classifyTap, keyboardHeight } from '../../pwa/js/viewport.js';
 
 await initI18n({ preference: 'en', browserLanguages: [] });
 
@@ -224,4 +224,20 @@ test('quiet hours: normal window, crossing midnight, empty and invalid values', 
   assert.equal(normalizeQuiet({ enabled: true, from: '7:00', to: '07:00' }), null);
   assert.equal(normalizeQuiet({ enabled: 1 }), null);
   assert.equal(normalizeQuiet('x'), null);
+});
+
+test('keyboardHeight: the iOS 26 accessory pill is added only while the keyboard is open', () => {
+  const m = { innerHeight: 800, vvHeight: 500, vvOffsetTop: 0 };
+  assert.equal(keyboardHeight(m), 300);
+  assert.equal(keyboardHeight(m, 56), 356);
+  assert.equal(keyboardHeight({ ...m, vvHeight: 790 }, 56), 0); // no keyboard: no extra
+  assert.equal(keyboardHeight({ ...m, vvScale: 2 }, 56), 0);
+});
+
+test('accessoryExtra: only iPhone with Safari 26 features', () => {
+  const iphone = 'Mozilla/5.0 (iPhone; CPU iPhone OS 18_6 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Mobile/15E148';
+  assert.equal(accessoryExtra({ userAgent: iphone, supportsAnchor: true }), ACCESSORY_PILL_PX);
+  assert.equal(accessoryExtra({ userAgent: iphone, supportsAnchor: false }), 0);
+  assert.equal(accessoryExtra({ userAgent: 'Mozilla/5.0 (Macintosh)', supportsAnchor: true }), 0);
+  assert.equal(accessoryExtra(), 0);
 });
