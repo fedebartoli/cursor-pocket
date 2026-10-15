@@ -66,7 +66,7 @@ click with Cursor in the background, interface from the PWA on iPhone.
   (`submitted`, bubble, composer queue), `answer` / `skip` / `message` endpoints, `status.actions` state, `npm run cdp` CLI.
 - [x] PWA: interactive questionnaire, message composer, outcomes, “Answer from phone” panel in “Settings”.
 - [x] Safari/iOS: block double-tap only (pinch free), 16 px fields, safe margins, composer above
-  keyboard, Cursor logo top left. Verified in WebKit and Chromium (`tools/ui-check.mjs`, 138-140 checks, light
+  keyboard, app logo top left. Verified in WebKit and Chromium (`tools/ui-check.mjs`, 138-140 checks, light
   and dark theme).
 - [x] Recent activity in chat (agent steps, “waiting” state after a reply) with refresh every 1.5-4 s with screen open and re-read every second after an action (FINDINGS 10.4c).
 - [x] `tools/cursor-cdp.sh`: starts Cursor with debug port (only when Cursor is closed) and shows its status.
@@ -88,8 +88,8 @@ click with Cursor in the background, interface from the PWA on iPhone.
 - [ ] Handle dead questions after Cursor restart (today 409 `no_question`; evaluate fallback to new message).
 - [ ] Test on real iPhone: no zoom on double tap, composer above keyboard, full-screen PWA.
 - [ ] Permanent Cursor launcher with the flag (app or Quick Command): only with user consent.
-- [x] App icon on Home screen and favicon with Cursor logo (user choice, Oct 12): `tools/make-icons.mjs`
-  derives it from `pwa/icons/cursor-logo.svg`. On Home it will show only after removing and re-adding the app (iOS caches the old
+- [x] App icon on Home screen and favicon (own mark, replaced the Cursor logo before going public): `tools/make-icons.mjs`
+  derives it from `pwa/icons/app-logo.svg`. On Home it will show only after removing and re-adding the app (iOS caches the old
   icon).
 
 ## Phase 3 - Polish and publication

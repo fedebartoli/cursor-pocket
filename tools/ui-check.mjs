@@ -93,7 +93,7 @@ try {
   // --- pairing ---
   await page.goto(`${BASE}/`);
   await page.waitForSelector('#code');
-  check('login: Cursor logo present', (await page.locator('.brand img[src="/icons/cursor-logo.svg"]').count()) === 1);
+  check('login: app logo present', (await page.locator('.brand img[src="/icons/app-logo.svg"]').count()) === 1);
   await shot('00-login');
   await page.fill('#code', code);
   await page.click('button[type=submit]');
@@ -103,7 +103,7 @@ try {
   await page.waitForSelector('.row');
   const logoBox = await page.locator('.appbar .appbar-logo').boundingBox();
   const titleBox = await page.locator('.appbar .appbar-title').boundingBox();
-  check('home: Cursor logo top left', logoBox && logoBox.x < 24 && logoBox.y < 40 && logoBox.x + logoBox.width < titleBox.x + 4, JSON.stringify(logoBox));
+  check('home: logo top left', logoBox && logoBox.x < 24 && logoBox.y < 40 && logoBox.x + logoBox.width < titleBox.x + 4, JSON.stringify(logoBox));
   check('home: logo loaded (SVG decoded)', await page.evaluate(() => { const i = document.querySelector('.appbar-logo'); return i.complete && i.naturalWidth > 0; }));
   await shot('01-home');
 

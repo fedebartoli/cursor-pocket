@@ -478,10 +478,9 @@ Read `out/vs/workbench/workbench.glass.main.js` (never modified). Beyond the sel
   phone numbers or addresses, text selection disabled on controls only.
 - [NOT VERIFIED] On a real iPhone: effective double-tap zoom blocking, composer above the keyboard, full-screen PWA and
   status bar. Logic, CSS, and DOM are verified in engines, not iOS behavior.
-- Branding: the Cursor logo is a trademark of Anysphere. It lives in a separate file (`pwa/icons/cursor-logo.svg`, flat
-  reproduction) for easy replacement; see `docs/SETUP.md`. By user choice (Oct 12) it is also the Home screen icon and
-  favicon: `tools/make-icons.mjs` reads polygons from the SVG and generates PNGs (180, 192, 512 px, full bleed: iOS rounds the corners)
-  with no dependencies; change the SVG and rerun it.
+- Branding: the app uses its own mark (`pwa/icons/app-logo.svg`: a phone with a red dot), also as Home screen icon and favicon. It replaced
+  the Cursor logo (a trademark of Anysphere) before the project went public. `tools/make-icons.mjs` reads polygons from the SVG and
+  generates PNGs (180, 192, 512 px, full bleed: iOS rounds the corners) with no dependencies; change the SVG and rerun it.
 
 ### 10.4b Revised iOS interface (Oct 14) [OK in browser, NOT VERIFIED on iPhone]
 User-selected package: (1) bottom bar Chat / “Settings” with badge for requests that need attention, hidden

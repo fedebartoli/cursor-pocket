@@ -196,5 +196,5 @@ Working rules for contributors and AI agents are in [AGENTS.md](AGENTS.md); see 
 
 ## License
 
-MIT, see [LICENSE](LICENSE). Icons come from [Lucide](https://lucide.dev) (ISC, `pwa/icons/LICENSE-lucide.txt`). The Cursor logo in
-the app is a trademark of Anysphere and lives in a replaceable file (see "Cursor branding" in [docs/SETUP.md](docs/SETUP.md)).
+MIT, see [LICENSE](LICENSE). Icons come from [Lucide](https://lucide.dev) (ISC, `pwa/icons/LICENSE-lucide.txt`). "Cursor" is a trademark of Anysphere; this project
+is not affiliated with it and does not use its logo.

@@ -30,7 +30,7 @@ export function iconButton({ label, name, onClick, href, pip = false, spin = fal
 }
 
 /** Cursor brand top-left (separate file, replaceable: see docs/SETUP.md, "Cursor brand"). */
-export const logoImg = (size = 28) => h('img', { class: 'appbar-logo', src: '/icons/cursor-logo.svg', alt: '', width: size, height: size, decoding: 'async' });
+export const logoImg = (size = 28) => h('img', { class: 'appbar-logo', src: '/icons/app-logo.svg', alt: '', width: size, height: size, decoding: 'async' });
 
 export function appbar({ title, backHref, actions = [], logo = false }) {
   return h(

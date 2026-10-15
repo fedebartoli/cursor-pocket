@@ -179,9 +179,8 @@ POST /api/chats/:id/message  { text }
   instructions to enable it.
 - Safari/iOS: `touch-action: manipulation` and block ONLY the second tap of a double-tap (pinch free, text fields
   excluded), 16 px fields, `viewport-fit=cover` with safe margins and `100dvh`, composer follows the keyboard
-  (`visualViewport` -> `--kb`), `format-detection` off, `-webkit-text-size-adjust`. Cursor logo top left on
-  home and pairing screen, and as Home screen icon (`pwa/icons/cursor-logo.svg`, separate replaceable file:
-  Anysphere trademark; `tools/make-icons.mjs` derives PNGs from it).
+  (`visualViewport` -> `--kb`), `format-detection` off, `-webkit-text-size-adjust`. App logo top left on
+  home and pairing screen, and as Home screen icon (`pwa/icons/app-logo.svg`; `tools/make-icons.mjs` derives the PNGs from it).
 - Markers: red dot (attention), spinner (running), blue dot (unread), clock (pending).
 - No emoji, SVG icons (Lucide, ISC, vendored); no gradients, glow, or purple/indigo; single blue accent and red
   only as semantic color; automatic light/dark theme; WCAG AA contrast verified.

@@ -1,10 +1,10 @@
 #!/usr/bin/env node
-// Generate Home screen icons (PNG for iOS and the manifest) from the `pwa/icons/cursor-logo.svg` logo,
+// Generate Home screen icons (PNG for iOS and the manifest) from the `pwa/icons/app-logo.svg` logo,
 // with no dependencies: reads background and polygons from the SVG (straight segments only: M L H V and lowercase, Z) and
 // rasterizes with multisampling (anti-alias). PNGs are full-bleed, no rounded corners: iOS applies those itself.
 //
 // The mark is owned by Anysphere (see docs/SETUP.md, "Cursor branding"). To use another image, replace
-// `cursor-logo.svg` with an SVG of the same kind (one background <rect>, a <g transform="translate/scale"> with
+// `app-logo.svg` with an SVG of the same kind (one background <rect>, a <g transform="translate/scale"> with
 // straight-line <path>s with hex fill/stroke) and run this script again.
 //
 // Usage:  node tools/make-icons.mjs
@@ -15,7 +15,7 @@ import { fileURLToPath } from 'node:url';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = path.join(root, 'pwa', 'icons');
-const logoFile = path.join(outDir, 'cursor-logo.svg');
+const logoFile = path.join(outDir, 'app-logo.svg');
 
 // --- logo read ---------------------------------------------------------------------------------------------------
 
@@ -235,4 +235,4 @@ const targets = { 'apple-touch-icon.png': 180, 'icon-192.png': 192, 'icon-512.pn
 for (const [name, size] of Object.entries(targets)) {
   fs.writeFileSync(path.join(outDir, name), png(size, render(logo, size)));
 }
-console.log('Icons written to pwa/icons/ from cursor-logo.svg:', Object.keys(targets).join(', '));
+console.log('Icons written to pwa/icons/ from app-logo.svg:', Object.keys(targets).join(', '));

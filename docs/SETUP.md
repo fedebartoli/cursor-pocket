@@ -218,13 +218,9 @@ risolta” and lets you ignore them.
   database: they drive the UI like a user and read the database in read-only mode to verify. The per-request limit
   rises to 64 KB only for actions (long text).
 
-## 12. Cursor branding
-The logo at top left and on the pairing screen (`pwa/icons/cursor-logo.svg`) is a flat reproduction
-of the Cursor icon, a trademark of Anysphere: it helps recognize the app at a glance, not an affiliation.
-It lives in a separate file (used only by `pwa/js/components.js`, function `logoImg`) so it can be replaced or removed:
-if you publish the project consider whether to keep it and replace it with your own icon by changing only that file. The same logo
-is the app icon on the Home screen and the favicon: the PNGs (`pwa/icons/icon-192.png`, `icon-512.png`,
-`apple-touch-icon.png`) are derived from `cursor-logo.svg` with `node tools/make-icons.mjs` (no dependencies; the SVG must
-have a background `<rect>` and straight-line `<path>` elements, like the included one). After a change iOS keeps the old icon: remove
+## 12. App logo
+The logo at top left, on the pairing screen, on the Home screen and in the favicon is `pwa/icons/app-logo.svg`: a phone with a red
+attention dot, drawn for this project. The PNGs (`pwa/icons/icon-192.png`, `icon-512.png`, `apple-touch-icon.png`) are derived from
+it with `node tools/make-icons.mjs` (no dependencies; the SVG must have a background `<rect>` and straight-line `<path>` elements,
+like the included one). To use your own icon, replace that file and run the script. After a change iOS keeps the old icon: remove
 the app from Home and add it again.
-
