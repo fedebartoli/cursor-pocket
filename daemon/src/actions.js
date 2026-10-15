@@ -142,6 +142,9 @@ function mapUiError(err) {
 // After a timeout with the action still in progress, the same send stays blocked for this long past when the error was returned.
 const ORPHAN_HOLD_MS = 30_000;
 
+// Circuit breaker: `uiPauseFailures` "Cursor's interface changed" failures within this window (and no success in between) pause actions.
+const UI_FAILURE_WINDOW_MS = 10 * 60_000;
+
 export class Actions extends EventEmitter {
   #chain = Promise.resolve();
   #inFlight = new Set();
@@ -149,6 +152,11 @@ export class Actions extends EventEmitter {
   #recent = new Map(); // `kind:chat:key` -> timestamp, to avoid sending the same answer twice
   #state = { available: false, reason: 'off' };
   #timer = null;
+  // Circuit breaker for UI changes (see `#noteUiFailure`).
+  #uiFailures = [];
+  #paused = false;
+  #pausedAt = 0;
+  #halfOpen = false;
 
   /**
    * @param {{ ui: object, db: object, watcher: object, config: object, logger: object, now?: Function, sleep?: Function }} deps
@@ -166,7 +174,7 @@ export class Actions extends EventEmitter {
     if (!config.actionsEnabled) this.#state = { available: false, reason: 'disabled' };
   }
 
-  /** `{available, reason}`; reason: ok | off (debug port closed) | no_window | disabled. */
+  /** `{available, reason}`; reason: ok | off (debug port closed) | no_window | disabled | ui_changed (paused, see `#pause`). */
   get status() {
     return this.#state;
   }
@@ -187,8 +195,60 @@ export class Actions extends EventEmitter {
     } catch {
       reason = 'off';
     }
+    if (this.#paused) {
+      if (reason === 'off') this.#resume('restart'); // Cursor closed or restarted (an update is applied that way): start fresh
+      else if (reason === 'ok' && this.now() - this.#pausedAt >= (this.config.uiPauseMs ?? 300_000) && (await this.#pageHealthy())) this.#resume('page_check');
+      else if (reason === 'ok') reason = 'ui_changed';
+    }
     this.#setState({ available: reason === 'ok', reason });
     return this.#state;
+  }
+
+  /** Do the page elements the actions rely on look right again? (same check as `npm run doctor`) */
+  async #pageHealthy() {
+    if (typeof this.ui.selfTest !== 'function') return true;
+    try {
+      const t = await this.ui.selfTest();
+      return t.rows > 0 && (!t.panel || (t.composer && t.send));
+    } catch {
+      return false;
+    }
+  }
+
+  /**
+   * Circuit breaker. Every action drives Cursor's real interface, so when Cursor changes it the same failure repeats on
+   * every try. After `uiPauseFailures` of them in a row (any success clears the count) actions pause: the phone stays
+   * read-only and says why, instead of clicking at things that are not there. After `uiPauseMs` the page check runs; once
+   * it passes, ONE failure is enough to pause again (half-open), so a real change never causes a long series of attempts.
+   */
+  #noteUiFailure() {
+    const limit = this.config.uiPauseFailures ?? 3;
+    if (!limit || this.#paused) return;
+    const t = this.now();
+    this.#uiFailures = this.#uiFailures.filter((x) => t - x < UI_FAILURE_WINDOW_MS);
+    this.#uiFailures.push(t);
+    if (this.#halfOpen || this.#uiFailures.length >= limit) this.#pause();
+  }
+
+  #noteSuccess() {
+    this.#uiFailures = [];
+    this.#halfOpen = false;
+  }
+
+  #pause() {
+    this.#paused = true;
+    this.#pausedAt = this.now();
+    this.#uiFailures = [];
+    this.#halfOpen = false;
+    this.logger.warn('actions_paused', { reason: 'ui_changed' });
+    this.#setState({ available: false, reason: 'ui_changed' });
+  }
+
+  #resume(why) {
+    this.#paused = false;
+    this.#halfOpen = why === 'page_check';
+    this.#uiFailures = [];
+    this.logger.info('actions_resumed', { reason: why });
   }
 
   start() {
@@ -246,11 +306,13 @@ export class Actions extends EventEmitter {
     return task.then(
       (res) => {
         this.logger.info('action_ok', { kind, ms: this.now() - start, verified: res.verified === true });
+        this.#noteSuccess();
         return res;
       },
       (err) => {
         const mapped = mapUiError(err);
         this.logger.warn('action_failed', { kind, errcode: mapped.code, ...(err instanceof ActionError ? {} : errorFields(err)) });
+        if (mapped.code === 'ui_changed') this.#noteUiFailure();
         throw mapped;
       },
     );
@@ -264,6 +326,9 @@ export class Actions extends EventEmitter {
 
   #requireReady() {
     if (!this.config.actionsEnabled) throw new ActionError(503, 'actions_disabled', 'Actions are disabled in the daemon configuration.');
+    if (this.#paused) {
+      throw new ActionError(503, 'actions_paused', 'Actions are paused: Cursor\u2019s interface seems to have changed. Reading still works; check on your Mac.');
+    }
     if (!this.#state.available) {
       throw new ActionError(503, 'actions_unavailable', 'Cursor is not reachable on the debug port: start it as explained in Settings.', {
         detail: 'unavailable',

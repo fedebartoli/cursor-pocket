@@ -985,3 +985,122 @@ test('HTTP new chat: project resolved by daemon, checks, attachments, new chat c
     await h.stop();
   }
 });
+
+// ----------------------------------------------------------------------------------------------------------------
+// circuit breaker: Cursor's interface changed
+// ----------------------------------------------------------------------------------------------------------------
+
+const uiError = (code) => Object.assign(new Error(code), { code });
+
+function breaker({ fail = 'no_composer', config = {}, ui = {} } = {}) {
+  const calls = { send: 0 };
+  const ctl = { fail, health: { rows: 3, panel: true, composer: true, send: true }, up: true };
+  const { a, logs, state } = service({
+    config: { uiPauseFailures: 3, uiPauseMs: 0, ...config },
+    ui: {
+      probe: async () => ({ up: ctl.up }),
+      hasWindow: async () => true,
+      selfTest: async () => ctl.health,
+      async sendMessage() {
+        calls.send++;
+        if (ctl.fail) throw uiError(ctl.fail);
+        state.count++;
+      },
+      ...ui,
+    },
+  });
+  return { a, ctl, calls, logs };
+}
+
+const send = (a, i = 0) => a.sendMessage('c1', { text: `m${i}` });
+
+test('breaker: three "interface changed" failures in a row pause actions, and the phone is told why', async () => {
+  const { a, calls } = breaker();
+  await a.refresh();
+  const seen = [];
+  a.on('change', (s) => seen.push(s.reason));
+  for (let i = 0; i < 3; i++) await assert.rejects(send(a, i), (e) => e.code === 'ui_changed');
+  assert.deepEqual(a.status, { available: false, reason: 'ui_changed' });
+  assert.deepEqual(seen, ['ui_changed']);
+  await assert.rejects(send(a, 9), (e) => e.status === 503 && e.code === 'actions_paused');
+  assert.equal(calls.send, 3, 'while paused nothing is sent to Cursor');
+});
+
+test('breaker: a success in between clears the count; other kinds of failure never count', async () => {
+  const { a, ctl } = breaker();
+  await a.refresh();
+  await assert.rejects(send(a, 1));
+  await assert.rejects(send(a, 2));
+  ctl.fail = null;
+  await send(a, 3);
+  ctl.fail = 'no_composer';
+  await assert.rejects(send(a, 4));
+  await assert.rejects(send(a, 5));
+  assert.equal(a.status.reason, 'ok', 'two failures after a success: not paused');
+
+  ctl.fail = 'click_failed'; // maps to ui_failed: not an interface change
+  for (let i = 0; i < 6; i++) await assert.rejects(send(a, 10 + i), (e) => e.code === 'ui_failed');
+  assert.equal(a.status.reason, 'ok');
+});
+
+test('breaker: can be turned off (CP_UI_PAUSE_FAILURES=0)', async () => {
+  const { a } = breaker({ config: { uiPauseFailures: 0 } });
+  await a.refresh();
+  for (let i = 0; i < 5; i++) await assert.rejects(send(a, i), (e) => e.code === 'ui_changed');
+  assert.equal(a.status.reason, 'ok');
+});
+
+test('breaker: stays paused for the minimum time, then resumes only when the page check passes', async () => {
+  const { a } = breaker({ config: { uiPauseMs: 60_000 } });
+  await a.refresh();
+  for (let i = 0; i < 3; i++) await assert.rejects(send(a, i));
+  await a.refresh();
+  assert.equal(a.status.reason, 'ui_changed', 'too early to look again');
+
+  const { a: b, ctl: ctlB } = breaker();
+  await b.refresh();
+  for (let i = 0; i < 3; i++) await assert.rejects(send(b, i));
+  ctlB.health = { rows: 3, panel: true, composer: false, send: true };
+  await b.refresh();
+  assert.equal(b.status.reason, 'ui_changed', 'composer missing: still paused');
+  ctlB.health = { rows: 0, panel: false, composer: false, send: false };
+  await b.refresh();
+  assert.equal(b.status.reason, 'ui_changed', 'no sidebar rows: still paused');
+  ctlB.health = { rows: 3, panel: false, composer: false, send: false };
+  await b.refresh();
+  assert.deepEqual(b.status, { available: true, reason: 'ok' }, 'rows found and no chat open: nothing wrong visible');
+});
+
+test('breaker: after resuming, ONE more failure pauses again; a success makes it normal', async () => {
+  const { a, ctl, calls } = breaker();
+  await a.refresh();
+  for (let i = 0; i < 3; i++) await assert.rejects(send(a, i));
+  await a.refresh();
+  assert.equal(a.status.reason, 'ok');
+  await assert.rejects(send(a, 4), (e) => e.code === 'ui_changed');
+  assert.equal(a.status.reason, 'ui_changed', 'half-open: a single failure is enough');
+  assert.equal(calls.send, 4);
+
+  await a.refresh();
+  ctl.fail = null;
+  await send(a, 5);
+  ctl.fail = 'no_composer';
+  await assert.rejects(send(a, 6));
+  assert.equal(a.status.reason, 'ok', 'after a success the full count applies again');
+});
+
+test('breaker: closing Cursor clears the pause (an update is applied by restarting it)', async () => {
+  const { a, ctl, logs } = breaker({ config: { uiPauseMs: 60_000 } });
+  await a.refresh();
+  for (let i = 0; i < 3; i++) await assert.rejects(send(a, i));
+  ctl.up = false;
+  await a.refresh();
+  assert.deepEqual(a.status, { available: false, reason: 'off' });
+  ctl.up = true;
+  ctl.fail = null;
+  await a.refresh();
+  assert.deepEqual(a.status, { available: true, reason: 'ok' });
+  await send(a, 7);
+  assert.ok(logs.some(([, m, f]) => m === 'actions_resumed' && f.reason === 'restart'));
+  assert.ok(logs.some(([, m]) => m === 'actions_paused'));
+});

@@ -4,25 +4,17 @@
 // Every check is a small function returning { level: 'ok' | 'warn' | 'fail', text, hint? }; `runDoctor` collects them so the
 // whole thing can be tested with fake dependencies.
 import fs from 'node:fs';
-import os from 'node:os';
-import path from 'node:path';
 import { execFile } from 'node:child_process';
+import { evaluateDbCompat } from './cursor/compat.js';
 import { CursorDb } from './cursor/db.js';
+import { TESTED_CURSOR, isTestedVersion, parseVersion, readCursorVersion } from './cursor/version.js';
 
-/** Cursor versions (major.minor) the selectors were verified against. */
-export const TESTED_CURSOR = ['3.24', '3.25'];
+export { TESTED_CURSOR, parseVersion };
 export const MIN_NODE = [22, 13];
-
-const APP_CANDIDATES = ['/Applications/Cursor.app', path.join(os.homedir(), 'Applications', 'Cursor.app')];
 
 const ok = (text) => ({ level: 'ok', text });
 const warn = (text, hint) => ({ level: 'warn', text, hint });
 const fail = (text, hint) => ({ level: 'fail', text, hint });
-
-export function parseVersion(v) {
-  const m = /^(\d+)\.(\d+)(?:\.(\d+))?/.exec(String(v ?? ''));
-  return m ? [Number(m[1]), Number(m[2]), Number(m[3] ?? 0)] : null;
-}
 
 export function checkNode(version = process.versions.node) {
   const v = parseVersion(version);
@@ -31,23 +23,16 @@ export function checkNode(version = process.versions.node) {
   return good ? ok(`Node ${version}`) : fail(`Node ${version} is too old`, `Install Node ${MIN_NODE.join('.')} or newer.`);
 }
 
-export function checkCursorVersion({ readFile = (p) => fs.readFileSync(p, 'utf8'), candidates = APP_CANDIDATES } = {}) {
-  for (const app of candidates) {
-    let version = null;
-    try {
-      version = JSON.parse(readFile(path.join(app, 'Contents', 'Resources', 'app', 'package.json'))).version;
-    } catch {
-      continue;
-    }
-    const v = parseVersion(version);
-    if (!v) return warn(`Cursor: unreadable version (${version})`);
-    if (TESTED_CURSOR.includes(`${v[0]}.${v[1]}`)) return ok(`Cursor ${version} (a version the selectors were tested on)`);
-    return warn(
-      `Cursor ${version}: this release was tested on ${TESTED_CURSOR.map((x) => `${x}.x`).join(' and ')}`,
-      'It may still work. If an action fails, run this command again and report the lines marked FAIL (see the Troubleshooting section of the README).',
-    );
-  }
-  return warn('Cursor app not found in /Applications or ~/Applications: version unknown');
+export function checkCursorVersion(opts = {}) {
+  const { found, version } = readCursorVersion(opts);
+  if (!found) return warn('Cursor app not found in /Applications or ~/Applications: version unknown');
+  const tested = isTestedVersion(version);
+  if (tested === null) return warn(`Cursor: unreadable version (${version})`);
+  if (tested) return ok(`Cursor ${version} (a version the selectors were tested on)`);
+  return warn(
+    `Cursor ${version}: this release was tested on ${TESTED_CURSOR.map((x) => `${x}.x`).join(' and ')}`,
+    'It may still work. If an action fails, run this command again and report the lines marked FAIL (see the Troubleshooting section of the README).',
+  );
 }
 
 export function checkDatabase(config, { open = (p) => new CursorDb(p) } = {}) {
@@ -69,6 +54,40 @@ export function checkDatabase(config, { open = (p) => new CursorDb(p) } = {}) {
     db.close();
   }
   return out;
+}
+
+const COMPAT_TEXT = {
+  schema_missing: 'A table or column the daemon reads is missing from Cursor\u2019s database',
+  no_visible_chats: 'The database has chats, but none is recognized as a visible local chat',
+  composer_data_missing: 'Recent chats were found, but their conversation data was not',
+  bubble_list_changed: 'Conversations no longer have their message list where the daemon looks for it',
+  bubble_rows_missing: 'The last message of recent chats was not found',
+  bubble_type_changed: 'Messages no longer have the type field the daemon reads',
+  tool_fields_changed: 'Tool calls lost the name or id fields the daemon reads',
+};
+
+/**
+ * Does the layout of Cursor's database still match what the daemon reads? Structure only (column names and JSON field types of
+ * a few recent chats), never content. A moved field would otherwise stop detection silently.
+ */
+export function checkCompat(config, { open = (p) => new CursorDb(p), evaluate = evaluateDbCompat } = {}) {
+  const db = open(config.cursorDbPath);
+  try {
+    db.open();
+  } catch {
+    return []; // `checkDatabase` already reports an unreadable database
+  }
+  try {
+    const { reasons, examined } = evaluate(db);
+    if (reasons.length === 0) {
+      return [ok(examined > 0 ? `Chat data layout looks as expected (${examined} recent chats checked)` : 'Chat data layout: no chats to check yet')];
+    }
+    return reasons.map((r) => fail(COMPAT_TEXT[r] ?? `Compatibility problem (${r})`, 'Cursor probably changed how it stores chats: the code that reads it lives in daemon/src/cursor/db.js. Please report it (see Troubleshooting in the README).'));
+  } catch (err) {
+    return [warn(`Chat data layout could not be checked (${err.code || err.name || 'error'})`)];
+  } finally {
+    db.close();
+  }
 }
 
 export async function checkDaemon(config, { fetchImpl = fetch } = {}) {
@@ -140,6 +159,7 @@ export async function runDoctor(config, { ui, deps = {} } = {}) {
   add(checkNode(deps.nodeVersion));
   add(checkCursorVersion(deps.cursorVersion));
   add(checkDatabase(config, deps.database));
+  add(checkCompat(config, deps.compat));
   add(await checkDaemon(config, deps.daemon));
   add(await checkActions(config, ui));
   add(await checkTailscale(config, deps.tailscale));

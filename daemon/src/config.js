@@ -76,6 +76,14 @@ export function loadConfig(env = process.env) {
     // On battery below this level the Mac may sleep again even with "lid closed" enabled.
     keepAwakeMinBattery: int(env, 'CP_KEEP_AWAKE_MIN_BATTERY', 20, { min: 0, max: 100 }),
     keepAwakeBrightnessCmd: env.CP_BRIGHTNESS_CMD ?? path.join(env.CP_DATA_DIR || path.join(repoRoot, 'daemon', 'data'), 'bin', 'cp-brightness'),
+    // Compatibility with Cursor: how often the daemon re-checks the database layout and the installed version (read-only).
+    compatCheckMs: int(env, 'CP_COMPAT_CHECK_SECONDS', 300, { min: 5, max: 86_400 }) * 1000,
+    // Where to look for the Cursor app to read its version (empty = the usual /Applications locations).
+    cursorAppDirs: list(env, 'CP_CURSOR_APP'),
+    // Phone actions pause themselves after this many consecutive "Cursor's interface changed" failures (0 = never pause)...
+    uiPauseFailures: int(env, 'CP_UI_PAUSE_FAILURES', 3, { min: 0, max: 50 }),
+    // ...for at least this long; they resume when the page check passes again or Cursor is restarted.
+    uiPauseMs: int(env, 'CP_UI_PAUSE_MINUTES', 5, { min: 1, max: 1440 }) * 60_000,
     cdpPort: int(env, 'CP_CDP_PORT', 9222, { min: 1, max: 65535 }),
     cdpPollMs: int(env, 'CP_CDP_POLL_MS', 5000, { min: 500, max: 600_000 }),
     actionTimeoutMs: int(env, 'CP_ACTION_TIMEOUT_SECONDS', 45, { min: 5, max: 300 }) * 1000,

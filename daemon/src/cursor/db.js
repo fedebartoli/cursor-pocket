@@ -116,6 +116,21 @@ export class CursorDb {
           ORDER BY j.key`,
       ),
       item: db.prepare('SELECT value FROM ItemTable WHERE key = ?'),
+      // Compatibility probes (src/cursor/compat.js): column names and JSON field TYPES only, never any content.
+      columns: db.prepare('SELECT name FROM pragma_table_info(?)'),
+      composerShape: db.prepare(
+        `SELECT json_type(value, '$.fullConversationHeadersOnly') AS headersType,
+                json_array_length(value, '$.fullConversationHeadersOnly') AS bubbleCount,
+                json_extract(value, '$.fullConversationHeadersOnly[#-1].bubbleId') AS lastBubbleId
+           FROM cursorDiskKV WHERE key = ?`,
+      ),
+      bubbleShape: db.prepare(
+        `SELECT json_type(value, '$.type') AS typeType,
+                json_type(value, '$.toolFormerData') AS toolType,
+                json_type(value, '$.toolFormerData.name') AS toolNameType,
+                json_type(value, '$.toolFormerData.toolCallId') AS toolCallIdType
+           FROM cursorDiskKV WHERE key = ?`,
+      ),
     };
   }
 
@@ -323,6 +338,26 @@ export class CursorDb {
       });
     }
     return { total, from, items };
+  }
+
+  /** Column names of the tables the daemon reads: `{ composerHeaders: [...], cursorDiskKV: [...], ItemTable: [...] }`. */
+  schemaColumns() {
+    const st = this.#need();
+    const out = {};
+    for (const table of ['composerHeaders', 'cursorDiskKV', 'ItemTable']) out[table] = st.columns.all(table).map((r) => r.name);
+    return out;
+  }
+
+  /** Shape of a chat's `composerData` (JSON types, no content), or null when the row is missing. */
+  composerShape(composerId) {
+    const r = this.#need().composerShape.get(`composerData:${composerId}`);
+    return r ? { headersType: r.headersType ?? null, bubbleCount: r.bubbleCount ?? 0, lastBubbleId: r.lastBubbleId ?? null } : null;
+  }
+
+  /** Shape of one bubble (JSON types, no content), or null when the row is missing. */
+  bubbleShape(composerId, bubbleId) {
+    const r = this.#need().bubbleShape.get(`bubbleId:${composerId}:${bubbleId}`);
+    return r ? { typeType: r.typeType ?? null, toolType: r.toolType ?? null, toolNameType: r.toolNameType ?? null, toolCallIdType: r.toolCallIdType ?? null } : null;
   }
 
   /** Agents Window sidebar settings (group order, grouping). */

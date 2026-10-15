@@ -188,7 +188,8 @@ export function testConfig(fx, overrides = {}) {
     CP_PWA_DIR: path.join(fx.dir, 'pwa'),
     CP_DONE_SETTLE_MS: '0',
   });
-  return Object.freeze({ ...base, doneSettleMs: 0, minRunMs: 20_000, fullScanMs: 0, startupGraceMs: 300_000, ...overrides });
+  // `cursorAppDirs` points nowhere: tests must not depend on the Cursor installed on the machine running them.
+  return Object.freeze({ ...base, doneSettleMs: 0, minRunMs: 20_000, fullScanMs: 0, startupGraceMs: 300_000, cursorAppDirs: [path.join(fx.dir, 'no-cursor-app')], ...overrides });
 }
 
 export { nullLogger };

@@ -77,7 +77,7 @@ function validSubscription(sub) {
  * @param {object} deps
  * @returns {{server: http.Server, listen: () => Promise<void>, close: () => Promise<void>}}
  */
-export function createHttpServer({ config, store, auth, hub, watcher, notifier, actions, awake, uploads = null, logger, now = Date.now }) {
+export function createHttpServer({ config, store, auth, hub, watcher, notifier, actions, awake, compat, uploads = null, logger, now = Date.now }) {
   let lastTestAt = 0;
 
   async function api(req, res, path, headers, secure) {
@@ -128,6 +128,8 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
           subscriptions: store.countSubscriptions(),
           lastScanAt: watcher.status.lastScanAt,
           actions: { ...actions.status, port: config.cdpPort },
+          // Codes only (no content): why the database layout looks different, and which Cursor release is installed.
+          compat: { reasons: compat.status.reasons, version: compat.status.version, versionStatus: compat.status.versionStatus },
         },
         headers,
       );

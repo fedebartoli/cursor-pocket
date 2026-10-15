@@ -164,7 +164,8 @@ to paste in an issue.
 - **No notifications on the iPhone:** iOS 16.4 or newer, the app must be opened from the Home Screen, and the permission must be
   granted in Settings. The address must be HTTPS (`tailscale serve`).
 - **Something broke after a Cursor update:** run the doctor and open an issue with its output and your Cursor version. The code
-  that touches Cursor is in `daemon/src/cursor/`.
+  that touches Cursor is in `daemon/src/cursor/`. The daemon also watches for this by itself: if Cursor changes how it stores
+  chats the app shows a banner, and if its interface changes the phone actions pause (reading keeps working) and resume on their own.
 - **Old icon after an update:** remove the app from the Home Screen and add it again.
 
 More cases are in [docs/SETUP.md](docs/SETUP.md#10-troubleshooting).

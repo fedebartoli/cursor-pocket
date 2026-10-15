@@ -574,3 +574,30 @@ test('conversation: pages from bottom, tools as rows without params, truncated t
     await h.stop();
   }
 });
+
+test('compatibility: the state and /api/info carry codes only; a broken layout reaches clients', async () => {
+  const h = await startHarness({ configOverrides: { cursorAppDirs: [] } });
+  try {
+    const cookie = await h.pair();
+    h.tick();
+    withQuestion(h);
+    h.tick();
+    // The harness does not start the periodic check: run it by hand. The Cursor app is not installed under the fixture.
+    h.app.compat.check();
+    const st = (await h.req({ path: '/api/state', cookie })).json().status;
+    assert.equal(st.compat, 'ok');
+    assert.ok(['tested', 'untested', 'unknown'].includes(st.cursor));
+
+    // Cursor "moves" a field: every tool bubble loses its call id.
+    h.fx.db.exec(`UPDATE cursorDiskKV SET value = replace(value, '"toolCallId":', '"callId":') WHERE key LIKE 'bubbleId:%'`);
+    h.app.compat.check();
+    const bad = (await h.req({ path: '/api/state', cookie })).json().status;
+    assert.equal(bad.compat, 'degraded', 'published to clients as soon as the check notices');
+    const info = (await h.req({ path: '/api/info', cookie })).json();
+    assert.deepEqual(info.compat.reasons, ['tool_fields_changed']);
+    assert.deepEqual(Object.keys(info.compat).sort(), ['reasons', 'version', 'versionStatus']);
+    assert.doesNotMatch(JSON.stringify(info), /Fai una cosa|Quale approccio/, 'no chat content');
+  } finally {
+    await h.stop();
+  }
+});

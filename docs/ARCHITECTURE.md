@@ -133,6 +133,14 @@ POST /api/chats/:id/message  { text }
   longer composer queue. If Cursor does not write it in time: `verified: false`, never a fabricated success.
 - If Cursor was restarted and the question is dead (flag on and `pending` bubble but no questionnaire) today the response is
   409 `no_question`. To verify live whether the questionnaire survives restart and whether degrading to a new message is needed.
+- When Cursor changes: (1) database layout, `compat.js` + `cursor/compat.js`: column names and JSON field types of a few recent
+  chats are checked every `CP_COMPAT_CHECK_SECONDS` (a `json_extract` on a moved field returns NULL and would otherwise stop
+  detection silently); a reason is raised only when EVERY sample fails the same check; result in `status.compat`
+  (`ok | degraded`), `/api/info` and the doctor. (2) interface, circuit breaker in `actions.js`: three consecutive
+  `ui_changed` failures (no success in between, 10-minute window) pause actions (`status.actions: 'ui_changed'`, 503
+  `actions_paused`); after `CP_UI_PAUSE_MINUTES` the page check (`selftest`) decides whether to resume; Cursor closing clears
+  the pause; once resumed a single failure pauses again. (3) release, `cursor/version.js`: installed version vs the tested
+  list, notice only (`status.cursor: tested | untested | unknown`).
 - All selectors are in `cursor/agents-ui.js` (single file to update when Cursor changes) with diagnostics
   (`npm run cdp -- inspect`) that prints page structure and never the text.
 

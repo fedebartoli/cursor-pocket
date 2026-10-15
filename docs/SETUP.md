@@ -164,6 +164,10 @@ Good to know:
 | `CP_CDP_PORT` | `9222` | Cursor debug port (loopback only) |
 | `CP_CDP_POLL_MS` | `5000` | How often the debug port and Agents window are checked |
 | `CP_ACTION_TIMEOUT_SECONDS` | `45` | Maximum time for an action before replying “timeout” to the phone |
+| `CP_UI_PAUSE_FAILURES` | `3` | Consecutive “Cursor's interface changed” failures that pause phone actions (`0` = never pause) |
+| `CP_UI_PAUSE_MINUTES` | `5` | Minimum pause; afterwards actions resume when the page check passes or Cursor restarts |
+| `CP_COMPAT_CHECK_SECONDS` | `300` | How often the database layout and the installed Cursor release are re-checked (read-only) |
+| `CP_CURSOR_APP` | (usual locations) | Comma-separated Cursor.app paths to read the version from |
 | `CP_RESTORE_SELECTION` | `true` | After an action reopens the chat you had open in Cursor |
 | `CP_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 
@@ -204,6 +208,12 @@ keys, so its output is safe to paste in an issue. Lines marked WARN are worth a 
   considers it when the chat is idle.
 - Port already in use: another instance is running, or change `CP_PORT`.
 - Session expired or revoked: the app goes back to the pairing screen on its own; generate a new code with `npm run pair`.
+- Banner "Cursor changed how it stores chats": the layout check found that a field the daemon reads is no longer where it was
+  (Settings > Daemon shows "Cursor data format"). Reading and notifications may be incomplete. Run `npm run doctor`: it lists the
+  reason in plain words. Update cursor-pocket, or open an issue with the doctor output and your Cursor version.
+- "Actions are paused": three actions in a row found Cursor's interface different from what they expect, so the daemon stopped
+  clicking. Reading still works. It resumes by itself after at least `CP_UI_PAUSE_MINUTES` once the page check passes, or when you
+  restart Cursor. `npm run doctor` shows which page element is missing.
 - "Reply from your phone" is not active: Cursor was not started with the debug port (section 6). "The Cursor Agents window is not
   open": Cursor answers but the Agents Window is closed.
 - "The question changed or was already resolved": meanwhile you answered on the Mac or the agent asked something else; the app

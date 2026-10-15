@@ -252,7 +252,8 @@ export function mountNewChat(root) {
       formHost.replaceChildren(node);
     };
     if (!actionsOk) {
-      show('noactions', emptyState({ iconName: 'plug', title: t('newchat.noActionsTitle'), text: t('newchat.noActionsText') }));
+      const paused = lv.payload?.status?.actions === 'ui_changed';
+      show('noactions', emptyState({ iconName: 'plug', title: t('newchat.noActionsTitle'), text: paused ? t('settings.actionsPaused') : t('newchat.noActionsText') }));
       return;
     }
     if (!workspaces.length) {

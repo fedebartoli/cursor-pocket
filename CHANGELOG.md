@@ -3,6 +3,19 @@
 All notable changes. The format follows [Keep a Changelog](https://keepachangelog.com), and the project uses
 [Semantic Versioning](https://semver.org) while it is below 1.0: minor versions may change behavior.
 
+## [Unreleased]
+
+### Added
+- Compatibility check with Cursor. A moved field inside Cursor's database used to stop detection without any error (no red dot,
+  no push). The daemon now checks, every few minutes and read-only, that column names and JSON field types of a few recent chats
+  are what it reads (never content). When they are not, the home screen shows a banner, Settings says so, `/api/info` and
+  `npm run doctor` list the reason codes.
+- Phone actions pause themselves after three consecutive "Cursor's interface changed" failures: the app stays read-only and says
+  why, instead of clicking at things that are not there. They resume when the page check passes again or Cursor restarts; after
+  resuming, one more failure pauses them again. `CP_UI_PAUSE_FAILURES=0` turns this off.
+- The installed Cursor release is read automatically (Settings shows it, with "not tested yet" for a release outside the tested
+  list). It is only a notice: nothing is disabled because of a version.
+
 ## [0.1.0] - 2026-10-15
 
 First tagged version, prepared for a public release.

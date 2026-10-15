@@ -31,6 +31,7 @@ export function mountSettings(root, { onLoggedOut }) {
       off: t('settings.actionStatusOff'),
       no_window: t('settings.actionStatusNoWindow'),
       disabled: t('settings.actionStatusDisabled'),
+      ui_changed: t('settings.actionStatusPaused'),
     };
     return labels[reason] ?? reason;
   }
@@ -381,6 +382,9 @@ export function mountSettings(root, { onLoggedOut }) {
       case 'disabled':
         body.push(h('p.panel-note', null, t('settings.actionsDisabled')));
         break;
+      case 'ui_changed':
+        body.push(h('p.panel-note', null, t('settings.actionsPaused')));
+        break;
       default:
         body.push(
           h('p.panel-note', null, t('settings.actionsSetupIntro')),
@@ -412,6 +416,19 @@ export function mountSettings(root, { onLoggedOut }) {
     }
     const act = lv.payload?.status?.actions ?? info?.actions?.reason;
     if (act) rows.push([t('settings.daemonPhoneReplies'), actionStatusLabel(act)]);
+    const cursorState = lv.payload?.status?.cursor ?? info?.compat?.versionStatus;
+    const cursorVersion = info?.compat?.version;
+    if (cursorState) {
+      const value =
+        cursorState === 'tested' && cursorVersion
+          ? t('settings.cursorTested', { version: cursorVersion })
+          : cursorState === 'untested' && cursorVersion
+            ? t('settings.cursorUntested', { version: cursorVersion })
+            : t('settings.cursorUnknown');
+      rows.push([t('settings.daemonCursor'), value]);
+    }
+    const compat = lv.payload?.status?.compat;
+    if (compat) rows.push([t('settings.daemonCompat'), compat === 'degraded' ? t('settings.compatDegraded') : t('settings.compatOk')]);
     rows.push([
       t('settings.daemonConnection'),
       lv.offline ? t('settings.connectionOffline') : lv.connection === 'ok' ? t('settings.connectionOk') : t('settings.connectionPending'),

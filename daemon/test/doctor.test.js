@@ -1,7 +1,7 @@
 // `npm run doctor`: each check against fake dependencies (no Cursor, no network, no Tailscale needed).
 import assert from 'node:assert/strict';
 import { describe, it } from 'node:test';
-import { checkActions, checkCursorVersion, checkDatabase, checkNode, checkTailscale, formatReport, parseVersion, runDoctor } from '../src/doctor.js';
+import { checkActions, checkCompat, checkCursorVersion, checkDatabase, checkNode, checkTailscale, formatReport, parseVersion, runDoctor } from '../src/doctor.js';
 
 const config = { host: '127.0.0.1', port: 8787, cdpPort: 9222, cursorDbPath: '/x/state.vscdb' };
 
@@ -98,6 +98,30 @@ describe('tailscale', () => {
   it('no tailscale binary: warning', async () => {
     const r = await checkTailscale(config, { bins: ['/definitely/not/here'] });
     assert.equal(r[0].level, 'warn');
+  });
+});
+
+describe('compatibility of the database layout', () => {
+  const open = () => ({ open() {}, close() {} });
+  it('as expected: one ok line', () => {
+    const r = checkCompat(config, { open, evaluate: () => ({ reasons: [], examined: 4 }) });
+    assert.deepEqual(r.map((x) => x.level), ['ok']);
+    assert.match(r[0].text, /4 recent chats/);
+  });
+  it('nothing to check yet: ok, not a problem', () => {
+    assert.match(checkCompat(config, { open, evaluate: () => ({ reasons: [], examined: 0 }) })[0].text, /no chats to check/);
+  });
+  it('a moved field: one fail line per reason, with a hint', () => {
+    const r = checkCompat(config, { open, evaluate: () => ({ reasons: ['tool_fields_changed', 'bubble_type_changed'], examined: 5 }) });
+    assert.deepEqual(r.map((x) => x.level), ['fail', 'fail']);
+    assert.match(r[0].hint, /daemon\/src\/cursor\/db\.js/);
+  });
+  it('database unreadable: silent here (the database check reports it); a crashing check only warns; always closed', () => {
+    assert.deepEqual(checkCompat(config, { open: () => ({ open() { throw new Error('x'); }, close() {} }) }), []);
+    let closed = false;
+    const r = checkCompat(config, { open: () => ({ open() {}, close() { closed = true; } }), evaluate: () => { throw Object.assign(new Error('x'), { code: 'BOOM' }); } });
+    assert.equal(r[0].level, 'warn');
+    assert.equal(closed, true);
   });
 });
 

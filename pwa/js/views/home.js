@@ -389,6 +389,7 @@ export function mountHome(root, mode = 'attention') {
         }),
       );
     }
+    if (!lv.offline && status?.compat === 'degraded') top.push(banner({ text: t('home.compatTitle'), detail: t('home.compatDetail') }));
     const hint = mode === 'attention' ? pushHint() : null;
     if (hint) top.push(hint);
 

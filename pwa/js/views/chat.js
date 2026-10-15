@@ -68,6 +68,8 @@ function unavailableReason(actions, offline) {
       return { text: t('chat.phoneActionsDisabled') };
     case 'no_window':
       return { text: t('chat.agentsWindowClosed') };
+    case 'ui_changed':
+      return { text: t('settings.actionsPaused') };
     default:
       return { text: t('chat.debugPortRequired'), link: { href: '#/impostazioni', label: t('chat.howToEnable') } };
   }

@@ -766,6 +766,21 @@ removed afterwards) and a throwaway chat on the cheapest model ("Auto"):
   `draft_not_empty` (the daemon correctly refused to overwrite it). The origin is NOT known (nothing the daemon did types that
   text); I cleared it in that throwaway chat and the next sends worked. Worth watching.
 
+### 10.4r Compatibility with Cursor updates (Oct 16) [OK in test; real database checked read-only]
+Prompted by a question from a user: how do writes reach Cursor, and what happens when an update moves the schema?
+- Writes drive the real UI through CDP (not Cursor's IPC); the database (read-only) confirms afterwards. Without the debug port
+  the app is read-only. This was already the case; what was missing were two things below.
+- Gap 1, silent: a renamed column makes the queries throw (`db_unreadable`, already visible), but a MOVED JSON field makes
+  `json_extract` return NULL and detection stops with no error. `cursor/compat.js` now looks at structure only: required columns,
+  `composerData` bubble list type, the last bubble's `type`, and `toolFormerData.name`/`toolCallId` of tool bubbles, over the 5 most
+  recent chats, by composerId. A reason needs EVERY sample to fail the same check. Checked against the real database on Cursor
+  3.25.6: no reason raised (5 chats examined). Observed there: `agentLocation` is absent (not null) on classic chats, so it is
+  NOT used as a canary.
+- Gap 2: actions only found out about interface changes one failure at a time. Circuit breaker described in ARCHITECTURE.
+- Release: `cursor/version.js` reads `Cursor.app/Contents/Resources/app/package.json`; outside the tested list is a notice.
+- NOT verified: behavior against a REAL Cursor update (the breaker and the layout check are tested with fakes and a synthetic
+  database, and the layout check against the current real one).
+
 ## 11. Tool approvals (“Allow”/“Run”): signal, rules, and what is NOT verified
 User request (Oct 12): in one of their projects a chat had stopped waiting for an “allow” (because of a hook) and no
 notification had arrived: can this be notified too?
