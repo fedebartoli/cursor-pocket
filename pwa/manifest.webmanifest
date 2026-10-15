@@ -1,7 +1,7 @@
 {
   "name": "Cursor Pocket",
   "short_name": "Pocket",
-  "description": "Controlla da iPhone le chat locali di Cursor.",
+  "description": "Control the local chats of Cursor from your iPhone.",
   "lang": "it",
   "start_url": "/",
   "scope": "/",
