@@ -10,6 +10,7 @@ import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
 import { pathToFileURL, fileURLToPath } from 'node:url';
+import { framePhone, newPhoneContext } from './device-frame.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const outDir = path.resolve(process.argv[2] ?? path.join(HERE, '..', 'docs', 'screenshots'));
@@ -43,14 +44,16 @@ try {
     // Fresh demo server per pass: answering the question changes its state, and pairing codes are single-use.
     const { server, code } = await startServer();
     const suffix = scheme === 'dark' ? '-dark' : '';
-    const ctx = await browser.newContext({ ...devices['iPhone 14'], deviceScaleFactor: 2, locale: 'en-US', colorScheme: scheme });
+    const ctx = await newPhoneContext(browser, devices, { scheme });
     const page = await ctx.newPage();
     const frames = []; // { file, caption, ms }
     const snap = async (caption, ms = 1800) => {
       await sleep(450);
       const file = path.join(tmp, `${scheme}-${frames.length}.png`);
       await page.screenshot({ path: file });
-      frames.push({ file, caption, ms });
+      const framed = path.join(tmp, `${scheme}-framed-${frames.length}.png`);
+      await framePhone(browser, { src: file, out: framed, scheme, fs });
+      frames.push({ file: framed, caption, ms });
     };
 
     await page.goto(`${BASE}/`);
@@ -83,15 +86,14 @@ try {
     // Compose each frame: caption on top, phone below, flat background.
     const bg = scheme === 'dark' ? '#0d1117' : '#f3f4f6';
     const fg = scheme === 'dark' ? '#e6edf3' : '#1f2328';
-    const edge = scheme === 'dark' ? '#30363d' : '#d0d5dd';
-    const cctx = await browser.newContext({ viewport: { width: 420, height: 725 }, deviceScaleFactor: 1.5 });
+    const cctx = await browser.newContext({ viewport: { width: 420, height: 700 }, deviceScaleFactor: 1.5 });
     const cpage = await cctx.newPage();
     const list = [];
     for (const [i, f] of frames.entries()) {
       const uri = `data:image/png;base64,${fs.readFileSync(f.file).toString('base64')}`;
-      await cpage.setContent(`<!doctype html><body style="margin:0;background:${bg};width:420px;height:725px;display:flex;flex-direction:column;align-items:center;font:600 17px -apple-system,Helvetica,Arial,sans-serif;color:${fg}">
+      await cpage.setContent(`<!doctype html><body style="margin:0;background:${bg};width:420px;height:700px;display:flex;flex-direction:column;align-items:center;font:600 17px -apple-system,Helvetica,Arial,sans-serif;color:${fg}">
         <div style="height:64px;display:flex;align-items:center;text-align:center;padding:0 24px;box-sizing:border-box">${f.caption}</div>
-        <img src="${uri}" style="width:300px;border-radius:30px;border:2px solid ${edge};display:block"></body>`);
+        <img src="${uri}" style="width:300px;display:block"></body>`);
       await sleep(200);
       const out = path.join(tmp, `${scheme}-frame-${String(i).padStart(2, '0')}.png`);
       await cpage.screenshot({ path: out });

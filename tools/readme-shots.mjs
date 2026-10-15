@@ -3,11 +3,13 @@
 //
 //   PLAYWRIGHT_CORE=/path/to/playwright-core/index.mjs node tools/readme-shots.mjs [outDir]
 //
-// Default output: docs/screenshots. Needs WebKit installed for playwright-core.
+// Default output: docs/screenshots (each screen inside a phone frame, transparent corners). Needs WebKit installed for playwright-core.
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import path from 'node:path';
+import os from 'node:os';
 import { pathToFileURL, fileURLToPath } from 'node:url';
+import { framePhone, newPhoneContext } from './device-frame.mjs';
 
 const HERE = path.dirname(fileURLToPath(import.meta.url));
 const outDir = path.resolve(process.argv[2] ?? path.join(HERE, '..', 'docs', 'screenshots'));
@@ -31,16 +33,19 @@ if (!code) {
   process.exit(1);
 }
 
+const tmp = fs.mkdtempSync(path.join(os.tmpdir(), 'cp-shots-'));
 const browser = await webkit.launch();
 let session = null; // the pairing code is single-use: the dark pass reuses the light pass session
 try {
   for (const scheme of ['light', 'dark']) {
-    const ctx = await browser.newContext({ ...devices['iPhone 14'], deviceScaleFactor: 2, locale: 'en-US', colorScheme: scheme, ...(session ? { storageState: session } : {}) });
+    const ctx = await newPhoneContext(browser, devices, { scheme, storageState: session ?? undefined });
     const page = await ctx.newPage();
     const suffix = scheme === 'dark' ? '-dark' : '';
     const shot = async (name) => {
       await sleep(400);
-      await page.screenshot({ path: path.join(outDir, `${name}${suffix}.png`) });
+      const raw = path.join(tmp, `${name}${suffix}.png`);
+      await page.screenshot({ path: raw });
+      await framePhone(browser, { src: raw, out: path.join(outDir, `${name}${suffix}.png`), scheme, fs });
       console.log('shot', `${name}${suffix}`);
     };
 
@@ -107,9 +112,8 @@ try {
     const suffix = scheme === 'dark' ? '-dark' : '';
     const uri = (n) => `data:image/png;base64,${fs.readFileSync(path.join(outDir, `${n}${suffix}.png`)).toString('base64')}`;
     const bg = scheme === 'dark' ? '#0d1117' : '#f3f4f6';
-    const edge = scheme === 'dark' ? '#30363d' : '#d0d5dd';
-    const html = `<!doctype html><body style="margin:0;background:${bg};display:flex;gap:28px;padding:40px;width:max-content">${['home', 'question', 'approval', 'new-chat']
-      .map((n) => `<img src="${uri(n)}" style="width:300px;border-radius:30px;border:2px solid ${edge};display:block">`)
+    const html = `<!doctype html><body style="margin:0;background:${bg};display:flex;gap:28px;padding:48px 40px;width:max-content">${['home', 'question', 'approval', 'new-chat']
+      .map((n) => `<img src="${uri(n)}" style="width:300px;display:block">`)
       .join('')}</body>`;
     const ctx = await browser.newContext({ viewport: { width: 1400, height: 800 }, deviceScaleFactor: 2 });
     const page = await ctx.newPage();
@@ -123,5 +127,6 @@ try {
   }
 } finally {
   await browser.close();
+  fs.rmSync(tmp, { recursive: true, force: true });
   server.kill();
 }
