@@ -413,6 +413,18 @@ function pageDo(a, K) {
       const i = K.renameInput();
       return { editing: !!i, focused: !!i && document.activeElement === i, value: i ? String(i.value || '') : '' };
     }
+    case 'selftest': {
+      // Counts only: which of the elements the actions rely on exist right now (used by `npm run doctor`).
+      const c = K.composer();
+      return {
+        rows: K.rows().length,
+        panel: K.panel() ? 1 : 0,
+        composer: c ? 1 : 0,
+        send: c && (K.send() || K.stop()) ? 1 : 0,
+        customize: K.customize() ? 1 : 0,
+        sidebarToggle: K.sidebarButton(SEL.showSidebar) || K.sidebarButton(SEL.hideSidebar) ? 1 : 0,
+      };
+    }
     case 'outline': {
       // Structure only: attribute and class names, never text content.
       const attrNames = (el) => (el ? [...el.attributes].map((x) => x.name).filter((n) => n !== 'style').slice(0, 14) : null);
@@ -690,6 +702,11 @@ export class AgentsUi {
       out.pageError = err.code || 'error';
     }
     return out;
+  }
+
+  /** Which page elements the actions rely on are present right now (counts only, no clicks). */
+  selfTest() {
+    return this.withSession((ctx) => ctx.page({ op: 'selftest' }));
   }
 
   /** Visible questionnaire state (or null). */

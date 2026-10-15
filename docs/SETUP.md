@@ -19,7 +19,7 @@ npm start
 - Reads the Cursor database in read-only mode (`mode=ro`, `query_only`): never writes to that database.
 - Stores its own data in `daemon/data/` (permissions 0700): ignored items, sessions, push subscriptions, VAPID keys.
   Deleting the folder means starting from scratch (sessions and notifications must be re-enabled).
-- Quick checks: `npm run status` (daemon running or not, “Paired devices”, push subscriptions, ignored requests),
+- Quick checks: `npm run doctor` (is everything in place? read-only, prints no chat content), `npm run status` (daemon running or not, “Paired devices”, push subscriptions, ignored requests),
   `npm run probe` (reads the Cursor database and summarizes chats and groups anonymously; with `-- --names` shows
   workspace names, useful for comparing order with the Cursor sidebar).
 
@@ -188,24 +188,34 @@ Cursor often leaves the dot on even for requests already closed (“leftovers”
 risolta” and lets you ignore them.
 
 ## 10. Troubleshooting
-- “Daemon non raggiungibile”: the daemon is not running or Tailscale is off on one of the devices.
-- Error 421 / “Host non consentito”: you are using a name other than localhost or `*.ts.net`; add it with `CP_ALLOWED_HOSTS`.
-- No notifications: the app is not installed from Home, permission denied (iOS Settings, Notifications), the address is not
-  HTTPS, or the test from the app’s “Settings” fails. Also check `npm run status`.
-- “Database di Cursor non leggibile”: check `CP_CURSOR_DB`; if Cursor is open the database is still readable.
-- Missing chats you had in Cursor, or fewer: the app shows only those in the Agents Window, so
-  it hides chats from projects you REMOVED from the sidebar (even if you did not archive them). `npm run probe` reports how many
-  are hidden for this reason.
-- A working chat is “In progress” even if Cursor shows the orange dot: Cursor’s dot stays on for
-  old questions; the app considers it only when the chat is idle.
-- “Porta gia' in uso”: another instance is active, or change `CP_PORT`.
-- Session expired or revoked: the app returns to the pairing screen on its own; generate a new code with `npm run pair`.
-- “Risposte dal telefono: non attive”: Cursor was not started with the debug port (section 6). “Finestra Agents
-  chiusa”: Cursor responds but the Agents window is not open.
-- “La domanda e' cambiata o e' gia' stata risolta”: meanwhile you answered on the Mac or the agent asked another question;
-  the app refreshes on its own. “La chat non e' visibile nella sidebar”: open it or expand the group in Cursor.
-- “Non riesco ancora a confermare...”: the action started but Cursor has not written it to the database yet; check on the Mac
-  before retrying (retrying the same thing within a few seconds is rejected to avoid double sends).
+Start with `cd daemon && npm run doctor`: it checks Node, the Cursor version, the database, the daemon, the debug port, the page
+elements the actions rely on, and Tailscale (including that Funnel is off). It is read-only and prints no chat titles, texts or
+keys, so its output is safe to paste in an issue. Lines marked WARN are worth a look, lines marked FAIL must be fixed.
+
+- "Daemon unreachable": the daemon is not running (`tools/launchd.sh status`, or `npm start`), or Tailscale is off on the Mac or
+  the iPhone.
+- Error 421 or a rejected host: you are using a name other than localhost or `*.ts.net`; add it with `CP_ALLOWED_HOSTS`.
+- No notifications: the app is not installed from the Home Screen, permission is denied (iOS Settings, Notifications), the
+  address is not HTTPS, or the test in the app's Settings fails. Also check `npm run status`. iOS 16.4 or newer is required.
+- "Cursor database not readable": check `CP_CURSOR_DB`. If Cursor is open the database is still readable.
+- Missing chats you had in Cursor, or fewer: the app shows only those in the Agents Window, so it hides chats from projects you
+  REMOVED from the sidebar (even if you did not archive them). `npm run probe` reports how many are hidden for this reason.
+- A working chat is "In progress" even if Cursor shows the orange dot: Cursor's dot stays on for old questions; the app only
+  considers it when the chat is idle.
+- Port already in use: another instance is running, or change `CP_PORT`.
+- Session expired or revoked: the app goes back to the pairing screen on its own; generate a new code with `npm run pair`.
+- "Reply from your phone" is not active: Cursor was not started with the debug port (section 6). "The Cursor Agents window is not
+  open": Cursor answers but the Agents Window is closed.
+- "The question changed or was already resolved": meanwhile you answered on the Mac or the agent asked something else; the app
+  refreshes on its own. "The chat is not visible in Cursor's sidebar": open it or expand its group in Cursor.
+- "I cannot confirm yet that Cursor registered it": the action started but Cursor has not written it to the database yet; check on
+  the Mac before retrying (retrying the same thing within a few seconds is rejected to avoid double sends).
+- "Cursor did not open this chat: nothing was typed": the daemon could not select the chat in the sidebar, so it typed nothing.
+  Try again.
+- "This chat already has a draft in the composer on your Mac": send or clear the draft in Cursor first. The daemon never
+  overwrites a draft you wrote yourself (it does clean up text it typed itself after a failure).
+- After a Cursor update an action stops working: run `npm run doctor`. Lines marked FAIL name the selector to look at in
+  `daemon/src/cursor/agents-ui.js`. Please open an issue with the output and your Cursor version.
 
 ## 11. Security in brief
 - The daemon listens only on loopback; validates `Host` (anti DNS rebinding), `Origin` on requests that modify data,

@@ -141,10 +141,28 @@ npm run pair                    # prints a one-time pairing code
 tailscale serve --bg 8787       # HTTPS inside your tailnet (never use Funnel)
 tools/launchd.sh install        # optional: start at login
 tools/cursor-cdp.sh             # optional: start Cursor with the debug port, to act from the phone
+npm run doctor                  # checks that everything is in place and says what to fix
 ```
 
 On the iPhone, open the HTTPS address in Safari, choose Share, Add to Home Screen, open the app from the Home Screen and enter the
 pairing code.
+
+## Troubleshooting
+
+Run `npm run doctor` in `daemon/` first. It checks Node, the Cursor version, the database, the daemon, the debug port, the page
+elements the actions need and Tailscale, then says what to fix. It is read-only and prints no chat content, so its output is safe
+to paste in an issue.
+
+- **Phone actions do nothing:** Cursor was not started with the debug port. Quit it and start it with `tools/cursor-cdp.sh`,
+  with the Agents Window open.
+- **"Daemon unreachable":** the daemon is not running (`tools/launchd.sh status`) or Tailscale is off on the Mac or the iPhone.
+- **No notifications on the iPhone:** iOS 16.4 or newer, the app must be opened from the Home Screen, and the permission must be
+  granted in Settings. The address must be HTTPS (`tailscale serve`).
+- **Something broke after a Cursor update:** run the doctor and open an issue with its output and your Cursor version. The code
+  that touches Cursor is in `daemon/src/cursor/`.
+- **Old icon after an update:** remove the app from the Home Screen and add it again.
+
+More cases are in [docs/SETUP.md](docs/SETUP.md#10-troubleshooting).
 
 ## Security
 
@@ -175,7 +193,7 @@ Known limits:
 ## Development
 
 ```sh
-cd daemon && npm test           # 268 tests, Node's built-in runner
+cd daemon && npm test           # 286 tests, Node's built-in runner
 npm run demo                    # synthetic data and a fake Cursor
 node tools/ui-check.mjs webkit  # optional browser checks, about 160 (also chromium, --dark)
 node tools/readme-shots.mjs     # regenerates the screenshots above

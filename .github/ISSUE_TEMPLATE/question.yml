@@ -1,0 +1,18 @@
+name: Question or help with setup
+description: You are stuck installing or using it
+labels: [question]
+body:
+  - type: markdown
+    attributes:
+      value: Please read the Troubleshooting section of the README and run `npm run doctor` first. Never paste keys, tokens or pairing codes.
+  - type: textarea
+    id: question
+    attributes:
+      label: What are you trying to do, and where are you stuck?
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `npm run doctor`
+      render: text

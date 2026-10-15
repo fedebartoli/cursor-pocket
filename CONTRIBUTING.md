@@ -22,6 +22,7 @@ Thanks for looking. Pull requests, bug reports and translation fixes are welcome
 
 ```sh
 cd daemon && npm test                 # must pass
+cd daemon && npm run doctor           # read-only health check of your setup; paste its output in bug reports
 node tools/ui-check.mjs webkit        # optional, needs playwright-core (PLAYWRIGHT_CORE=/path/to/index.mjs)
 ```
 
@@ -31,6 +32,11 @@ If you change what the app looks like, regenerate the screenshots with `node too
 
 The six non-English, non-Italian catalogs are machine-translated. If you read one of those languages natively, fixing the wording
 is the most useful contribution. Keep placeholders such as `{count}` untouched and keep labels short: the bottom bar is narrow.
+
+## Bug reports
+
+Use the issue templates. The most useful report has the output of `npm run doctor` and your Cursor version: the daemon depends
+on Cursor's interface, so most breakages come from a Cursor update.
 
 ## Security issues
 

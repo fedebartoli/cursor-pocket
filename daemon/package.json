@@ -12,6 +12,7 @@
     "pair": "node --disable-warning=ExperimentalWarning src/cli.js pair",
     "status": "node --disable-warning=ExperimentalWarning src/cli.js status",
     "probe": "node --disable-warning=ExperimentalWarning src/cli.js probe",
+    "doctor": "node --disable-warning=ExperimentalWarning src/cli.js doctor",
     "cdp": "node --disable-warning=ExperimentalWarning src/cli.js cdp",
     "demo": "node --disable-warning=ExperimentalWarning ../tools/demo-server.mjs",
     "test": "node --disable-warning=ExperimentalWarning --test \"test/**/*.test.js\""

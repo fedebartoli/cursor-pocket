@@ -1,9 +1,10 @@
-// Service CLI: `npm run pair | status | probe | cdp` (from daemon/).
+// Service CLI: `npm run pair | status | probe | cdp | doctor` (from daemon/).
 //
 //   pair    generate a one-time pairing code to enter in the PWA on iPhone
 //   status  check if the daemon responds and summarize sessions/subscriptions (no chat content)
 //   probe   read Cursor database (read-only) and summarize what the daemon would see.
 //           By default does NOT print titles or folder names; --names shows workspace names.
+//   doctor  check that this Mac, Cursor and the daemon fit together and say what to fix (read-only)
 //   cdp     action diagnostics (Phase 2): `npm run cdp -- status | inspect | tray [--names|--texts]`.
 //           Read-only page inspection: no clicks and no writes to Cursor.
 import path from 'node:path';
@@ -11,6 +12,7 @@ import { Auth } from './auth.js';
 import { loadConfig } from './config.js';
 import { AgentsUi } from './cursor/agents-ui.js';
 import { CursorDb } from './cursor/db.js';
+import { formatReport, runDoctor } from './doctor.js';
 import { classifyAttention, buildChat, isVisibleLocalChat } from './cursor/model.js';
 import { WorkspaceResolver } from './cursor/workspaces.js';
 import { presentState } from './state/present.js';
@@ -153,9 +155,15 @@ async function cdp() {
   process.exitCode = 2;
 }
 
-const commands = { pair, status, probe, cdp };
+async function doctor() {
+  const report = await runDoctor(config, { ui: new AgentsUi({ port: config.cdpPort }) });
+  console.log(formatReport(report));
+  process.exitCode = report.failed ? 1 : 0;
+}
+
+const commands = { pair, status, probe, cdp, doctor };
 if (!commands[cmd]) {
-  console.error('Usage: node src/cli.js <pair|status|probe|cdp> [--names]');
+  console.error('Usage: node src/cli.js <pair|status|probe|cdp|doctor> [--names]');
   process.exit(2);
 }
 await commands[cmd]();

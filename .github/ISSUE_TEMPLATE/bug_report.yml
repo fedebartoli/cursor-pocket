@@ -1,0 +1,59 @@
+name: Bug report
+description: Something does not work, or stopped working after a Cursor update
+labels: [bug]
+body:
+  - type: markdown
+    attributes:
+      value: |
+        Thanks for taking the time. Please do not paste chat contents, API keys, tokens or pairing codes.
+        Do not paste raw `ps` output either: the command line of some Cursor processes contains a key.
+  - type: textarea
+    id: what
+    attributes:
+      label: What happened, and what did you expect?
+    validations:
+      required: true
+  - type: textarea
+    id: doctor
+    attributes:
+      label: Output of `npm run doctor`
+      description: Run it from the `daemon/` folder on the Mac. It prints no chat titles, texts or keys.
+      render: text
+    validations:
+      required: true
+  - type: input
+    id: cursor
+    attributes:
+      label: Cursor version
+      placeholder: "3.25.6"
+    validations:
+      required: true
+  - type: input
+    id: macos
+    attributes:
+      label: macOS version
+      placeholder: "26.0"
+  - type: input
+    id: ios
+    attributes:
+      label: iPhone model and iOS version (if the problem is on the phone)
+      placeholder: "iPhone 15, iOS 26.0"
+  - type: dropdown
+    id: where
+    attributes:
+      label: Where does it happen?
+      options:
+        - Notifications
+        - Reading chats (list, conversation)
+        - Actions (answer, approve, send, stop)
+        - New chat
+        - Installing or pairing
+        - Other
+    validations:
+      required: true
+  - type: textarea
+    id: log
+    attributes:
+      label: Relevant lines of the daemon log
+      description: "`~/Library/Logs/cursor-pocket/daemon.log` holds counters and event types only. Paste only the lines around the problem."
+      render: text

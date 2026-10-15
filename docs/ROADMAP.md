@@ -116,3 +116,4 @@ click with Cursor in the background, interface from the PWA on iPhone.
 - [ ] To try on iPhone: all items new in this list (so far verified in WebKit/Chromium and on real Cursor via CDP).
 - [x] Branch and model choice for new chat (VERIFIED LIVE without sending; real send not verified).
 - [ ] Ideas still open: start chat on a project with no local chats (not verifiable: daemon knows projects from chats).
+- [x] `npm run doctor` (Oct 15): read-only health check (Node, Cursor version, database, daemon, debug port, page elements, Tailscale and Funnel), GitHub issue templates, `CHANGELOG.md`, README Troubleshooting.

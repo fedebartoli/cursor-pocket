@@ -80,6 +80,16 @@ describe('AgentsUi on Chromium with the fake page', { skip }, () => {
     assert.ok(!JSON.stringify(r).includes('PostgreSQL'), 'diagnostics must not contain chat text');
   });
 
+  it('selfTest: reports which elements exist, as counts only', async () => {
+    await reset({ ...withQ([RAW_Q1]), current: 'chat-a' });
+    const t = await ui.selfTest();
+    assert.equal(t.rows, 3);
+    assert.equal(t.panel, 1);
+    assert.equal(t.composer, 1);
+    assert.equal(t.send, 1);
+    assert.ok(Object.values(t).every((v) => typeof v === 'number'), 'counts only: no text from the page');
+  });
+
   it('readTray: options (without "Other"), selection, primary button disabled until answered', async () => {
     await reset({ ...withQ([RAW_Q1]), current: 'chat-a', initialSelections: { 'chat-a': {} } });
     const v = await ui.readTray();
