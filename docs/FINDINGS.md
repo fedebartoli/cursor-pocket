@@ -1,4 +1,4 @@
-# Findings (verified on Cursor 3.24.6, macOS 26.5, Electron 42.10 / Chrome 148)
+# Findings (verified on Cursor 3.24.6, macOS 26.5, Electron 42.10 / Chrome 148; live recheck on 3.25.6 in 10.4q)
 
 Legend: [OK] verified live - [CODE] read in the bundle, not verified live - [NO] discarded.
 
@@ -748,6 +748,24 @@ Test on a test chat created on purpose by the user (no work chats touched), with
   stayed clickable and reply arrived).
 - To understand: right after a reply the chat still shows a “live” question for a few seconds and its parameters cannot
   be read (next bubble not complete yet): harmless (409 `stale`/`no_question`), but PWA may show it briefly.
+
+### 10.4q Live check on Cursor 3.25.6 (Oct 15) [VERIFIED LIVE except approving a command and answering a question]
+Cursor on this Mac updated from 3.24.6 to 3.25.6. With the debug port open, through the real daemon API (a temporary paired session,
+removed afterwards) and a throwaway chat on the cheapest model ("Auto"):
+- `npm run doctor`: sidebar rows, sidebar toggle, customize button, composer, send/stop button all found.
+- New chat on a project (`POST /api/chats`, model "Auto"): created and sent (verified), the agent ran, the history was readable.
+- Send a message to an existing chat: sent and verified. Archive from the row menu: verified.
+- New-chat screen: branch and model lists read, dry run reaches the screen, the previously open chat is reopened.
+- Question tray of a real pending question read WITHOUT answering it (3 options, free-form entry, both footer buttons found).
+- NOT verified on 3.25.6: approving or rejecting a command (the terminal commands of the throwaway chat ran without asking: this Mac
+  auto-runs them, and the settings were not changed to force it) and answering a question (the throwaway agent had no
+  question tool). Both are verified on 3.24.6 (sections 10.6 and 11).
+- Found: right after sending a message, the first right-click on the row for the menu was swallowed once (`ui_changed`, nothing
+  changed in Cursor); a retry worked. `#rowMenu` now retries once.
+- A 3-4 character draft showed up by itself in the composer of the throwaway chat and made the next send fail with
+  `draft_not_empty` (the daemon correctly refused to overwrite it). The origin is NOT known (nothing the daemon did types that
+  text); I cleared it in that throwaway chat and the next sends worked. Worth watching.
+
 ## 11. Tool approvals (“Allow”/“Run”): signal, rules, and what is NOT verified
 User request (Oct 12): in one of their projects a chat had stopped waiting for an “allow” (because of a hook) and no
 notification had arrived: can this be notified too?

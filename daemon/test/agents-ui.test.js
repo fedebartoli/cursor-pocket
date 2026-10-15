@@ -370,6 +370,20 @@ describe('AgentsUi on Chromium with the fake page', { skip }, () => {
       assert.deepEqual((await state()).archived, ['chat-a']);
     });
 
+    it('archive: a right-click swallowed by a re-rendering row is retried once', async () => {
+      await reset({ ...cfg(), swallowMenus: 1 });
+      await ui.archive({ composerId: 'chat-a' });
+      const s = await state();
+      assert.deepEqual(s.archived, ['chat-a']);
+      assert.deepEqual(s.log.filter((l) => l.startsWith('menu_swallowed')), ['menu_swallowed:chat-a']);
+    });
+
+    it('archive: gives up with no_menu_item after two swallowed clicks', async () => {
+      await reset({ ...cfg(), swallowMenus: 2 });
+      await assert.rejects(() => ui.archive({ composerId: 'chat-a' }), (e) => e.code === 'no_menu_item');
+      assert.deepEqual((await state()).archived, []);
+    });
+
     it('unarchive: enables "Archived" filter, uses "Unarchive" and RESTORES filter as before', async () => {
       await reset(cfg());
       const r = await ui.unarchive({ composerId: 'chat-z' });

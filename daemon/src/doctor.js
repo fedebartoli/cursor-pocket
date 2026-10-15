@@ -9,8 +9,8 @@ import path from 'node:path';
 import { execFile } from 'node:child_process';
 import { CursorDb } from './cursor/db.js';
 
-/** Cursor version the selectors were last verified against (major.minor). */
-export const TESTED_CURSOR = '3.24';
+/** Cursor versions (major.minor) the selectors were verified against. */
+export const TESTED_CURSOR = ['3.24', '3.25'];
 export const MIN_NODE = [22, 13];
 
 const APP_CANDIDATES = ['/Applications/Cursor.app', path.join(os.homedir(), 'Applications', 'Cursor.app')];
@@ -41,9 +41,9 @@ export function checkCursorVersion({ readFile = (p) => fs.readFileSync(p, 'utf8'
     }
     const v = parseVersion(version);
     if (!v) return warn(`Cursor: unreadable version (${version})`);
-    if (`${v[0]}.${v[1]}` === TESTED_CURSOR) return ok(`Cursor ${version} (the version the selectors were tested on)`);
+    if (TESTED_CURSOR.includes(`${v[0]}.${v[1]}`)) return ok(`Cursor ${version} (a version the selectors were tested on)`);
     return warn(
-      `Cursor ${version}: this release was tested on ${TESTED_CURSOR}.x`,
+      `Cursor ${version}: this release was tested on ${TESTED_CURSOR.map((x) => `${x}.x`).join(' and ')}`,
       'It may still work. If an action fails, run this command again and report the lines marked FAIL (see the Troubleshooting section of the README).',
     );
   }

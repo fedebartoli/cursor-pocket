@@ -19,8 +19,9 @@ describe('versions', () => {
   const app = (version) => ({ candidates: ['/A.app'], readFile: () => JSON.stringify({ version }) });
   it('Cursor: tested version ok, another one warns (never fails), missing app warns', () => {
     assert.equal(checkCursorVersion(app('3.24.9')).level, 'ok');
-    assert.equal(checkCursorVersion(app('3.25.6')).level, 'warn');
-    assert.match(checkCursorVersion(app('3.25.6')).text, /3\.25\.6/);
+    assert.equal(checkCursorVersion(app('3.25.6')).level, 'ok');
+    assert.equal(checkCursorVersion(app('3.26.0')).level, 'warn');
+    assert.match(checkCursorVersion(app('3.26.0')).text, /3\.26\.0/);
     assert.equal(checkCursorVersion({ candidates: ['/none.app'], readFile: () => { throw new Error('nope'); } }).level, 'warn');
   });
 });
@@ -106,7 +107,7 @@ describe('runDoctor and formatReport', () => {
       ui: { probe: async () => ({ up: false }) },
       deps: {
         nodeVersion: '22.13.0',
-        cursorVersion: { candidates: ['/A.app'], readFile: () => JSON.stringify({ version: '3.25.0' }) },
+        cursorVersion: { candidates: ['/A.app'], readFile: () => JSON.stringify({ version: '3.26.0' }) },
         database: { open: () => ({ open() {}, close() {}, listHeaders: () => [{}], sidebarSettings: () => ({}) }) },
         daemon: { fetchImpl: async () => ({ ok: true }) },
         tailscale: { bins: ['/definitely/not/here'] },

@@ -143,6 +143,7 @@
       }
       b.addEventListener('contextmenu', (ev) => {
         ev.preventDefault();
+        if (S.swallowMenus > 0) { S.swallowMenus--; S.log.push(`menu_swallowed:${id}`); return; } // a re-rendering row eats the click
         const archived = S.chats[id].archived === true;
         menu([
           { label: S.chats[id].pinned ? 'Unpin' : 'Pin', run: () => { S.chats[id].pinned = !S.chats[id].pinned; S.pins.push({ id, pinned: S.chats[id].pinned }); sidebar(); } },
@@ -429,7 +430,7 @@
   window.__mock = {
     reset(cfg) {
       document.querySelector('#previews').replaceChildren();
-      S = { current: cfg.current ?? null, chats: cfg.chats, qstate: {}, done: {}, submitted: [], skipped: [], sent: [], clicks: 0, log: [], decided: {}, stopped: [], renamed: [], archived: [], unarchived: [], pins: [], showArchived: false, renaming: null, noPreview: cfg.noPreview === true, sendDisabled: cfg.sendDisabled === true, sidebarHidden: cfg.sidebarHidden === true, stuckOpen: cfg.stuckOpen === true, projects: cfg.projects ?? [], env: cfg.env ?? null, newChat: null, newChats: [], branches: cfg.branches ?? ['main'], branch: cfg.branch ?? (cfg.branches ?? ['main'])[0], model: cfg.model ?? 'Claude Sonnet 5.5 High', models: cfg.models ?? ['Auto', 'Composer 2.5', 'Claude Sonnet 5.5 High', 'Claude Opus 4.6 High'], picks: [], choices: [] };
+      S = { current: cfg.current ?? null, chats: cfg.chats, qstate: {}, done: {}, submitted: [], skipped: [], sent: [], clicks: 0, log: [], decided: {}, stopped: [], renamed: [], archived: [], unarchived: [], pins: [], showArchived: false, renaming: null, noPreview: cfg.noPreview === true, sendDisabled: cfg.sendDisabled === true, sidebarHidden: cfg.sidebarHidden === true, stuckOpen: cfg.stuckOpen === true, swallowMenus: cfg.swallowMenus ?? 0, projects: cfg.projects ?? [], env: cfg.env ?? null, newChat: null, newChats: [], branches: cfg.branches ?? ['main'], branch: cfg.branch ?? (cfg.branches ?? ['main'])[0], model: cfg.model ?? 'Claude Sonnet 5.5 High', models: cfg.models ?? ['Auto', 'Composer 2.5', 'Claude Sonnet 5.5 High', 'Claude Opus 4.6 High'], picks: [], choices: [] };
       for (const [id, c] of Object.entries(S.chats)) {
         S.qstate[id] = { step: 0, selections: JSON.parse(JSON.stringify(cfg.initialSelections?.[id] ?? {})), freeform: { ...(cfg.initialFreeform?.[id] ?? {}) } };
         if (c.questions) {

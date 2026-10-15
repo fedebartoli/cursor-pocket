@@ -23,5 +23,5 @@ First tagged version, prepared for a public release.
 - 286 tests, browser checks for WebKit and Chromium, GitHub Actions.
 
 ### Notes
-- Verified against Cursor 3.24.x. Newer releases may work; run `npm run doctor` and report what it says.
+- Verified against Cursor 3.24.x and 3.25.x (on 3.25.6 approving a command and answering a question were not re-checked live). Newer releases may work; run `npm run doctor` and report what it says.
 - Unofficial: not affiliated with Anysphere.

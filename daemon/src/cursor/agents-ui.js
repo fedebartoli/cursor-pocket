@@ -955,15 +955,18 @@ export class AgentsUi {
     await ctx.ensureSidebar();
     const loc = await ctx.locate({ target: 'row', id: composerId });
     if (!loc.found) throw new UiError('row_not_found', 'chat not found in Cursor sidebar');
-    await ctx.rightClick({ target: 'row', id: composerId });
-    const item = await waitFor(async () => {
-      const l = await ctx.locate({ target: 'menuitem', label });
-      return l.found ? l : null;
-    }, { timeoutMs: 2500, sleep: this.sleep });
-    if (!item) {
-      await ctx.s.pressKey(KEYS.escape).catch(() => {});
-      throw new UiError('no_menu_item', 'menu item not found in Cursor');
+    // A row that was just updated (an agent starting to run) can re-render under the pointer and swallow the right-click:
+    // one more attempt before giving up. Found live on Cursor 3.25: archive right after a message failed once, then worked.
+    let item = null;
+    for (let attempt = 0; attempt < 2 && !item; attempt++) {
+      await ctx.rightClick({ target: 'row', id: composerId });
+      item = await waitFor(async () => {
+        const l = await ctx.locate({ target: 'menuitem', label });
+        return l.found ? l : null;
+      }, { timeoutMs: attempt === 0 ? 1800 : 2500, sleep: this.sleep });
+      if (!item) await ctx.s.pressKey(KEYS.escape).catch(() => {});
     }
+    if (!item) throw new UiError('no_menu_item', 'menu item not found in Cursor');
     await ctx.clickTarget({ target: 'menuitem', label });
   }
 

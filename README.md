@@ -30,7 +30,7 @@
 </p>
 
 > Unofficial project, not affiliated with Anysphere. It relies on Cursor internals (a local SQLite database and the Agents Window
-> interface) that can change without notice. Tested on Cursor 3.24.x.
+> interface) that can change without notice. Tested on Cursor 3.24.x and 3.25.x.
 
 ## Why
 
