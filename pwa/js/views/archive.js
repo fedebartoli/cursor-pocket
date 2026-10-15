@@ -1,11 +1,12 @@
-// Chat archiviate in Cursor (solo locali): elenco con "Ripristina". Il ripristino passa dal menu della riga di Cursor
-// (il daemon accende per un attimo il filtro "Archived" della sidebar e lo rimette com'era).
+// Chats archived in Cursor (local only): list with "Ripristina". Restore goes through Cursor's row menu
+// (daemon briefly toggles sidebar "Archived" filter and restores it).
 import { describeActionError } from '../action-errors.js';
 import { api } from '../api.js';
 import { appbar, banner, emptyState, skeleton } from '../components.js';
 import { h, replace, commit } from '../dom.js';
 import { timeAgo } from '../format.js';
 import { icon } from '../icons.js';
+import { t } from '../i18n/index.js';
 import { getLive } from '../live.js';
 
 export function mountArchive(root) {
@@ -34,7 +35,10 @@ export function mountArchive(root) {
     render();
     try {
       const res = await api.post(`/api/archived/${encodeURIComponent(c.id)}/restore`, {});
-      notice = { text: res?.verified === false ? 'Richiesta inviata. Non riesco ancora a confermare che Cursor abbia ripristinato la chat.' : 'Chat ripristinata.', error: false };
+      notice = {
+        text: res?.verified === false ? t('archive.restoreUnverified') : t('archive.restoreSuccess'),
+        error: false,
+      };
     } catch (err) {
       notice = { text: describeActionError(err), error: true };
     }
@@ -47,19 +51,29 @@ export function mountArchive(root) {
       'div',
       { class: 'row' },
       icon('archive', { size: 20 }),
-      h('div.row-main', null, h('div.row-title', null, c.name || 'Chat senza titolo'), h('div.row-meta', null, `${c.workspaceName || 'Senza progetto'} \u00b7 ${timeAgo(c.lastUpdatedAt)}`)),
-      h('button', { class: 'btn small', type: 'button', disabled: busyId !== null, onClick: () => restore(c) }, icon('archiveRestore', { size: 18 }), busyId === c.id ? 'Attendi' : 'Ripristina'),
+      h(
+        'div.row-main',
+        null,
+        h('div.row-title', null, c.name || t('archive.untitledChat')),
+        h('div.row-meta', null, t('archive.rowMeta', { workspace: c.workspaceName || t('archive.noProject'), time: timeAgo(c.lastUpdatedAt) })),
+      ),
+      h(
+        'button',
+        { class: 'btn small', type: 'button', disabled: busyId !== null, onClick: () => restore(c) },
+        icon('archiveRestore', { size: 18 }),
+        busyId === c.id ? t('archive.wait') : t('archive.restore'),
+      ),
     );
   }
 
   function render() {
     if (!alive) return;
-    const out = [appbar({ title: 'Chat archiviate', backHref: '#/impostazioni' })];
-    if (getLive().offline) out.push(banner({ text: 'Daemon non raggiungibile' }));
+    const out = [appbar({ title: t('archive.title'), backHref: '#/impostazioni' })];
+    if (getLive().offline) out.push(banner({ text: t('archive.daemonUnreachable') }));
     if (error) out.push(banner({ text: error }));
     if (notice) out.push(banner({ text: notice.text, tone: notice.error ? 'danger' : 'info', iconName: notice.error ? 'alert' : 'info', onDismiss: () => { notice = null; render(); } }));
     if (chats === null) out.push(error ? null : skeleton(3));
-    else if (!chats.length) out.push(emptyState({ iconName: 'archive', title: 'Nessuna chat archiviata', text: 'Le chat locali archiviate in Cursor compaiono qui.' }));
+    else if (!chats.length) out.push(emptyState({ iconName: 'archive', title: t('archive.emptyTitle'), text: t('archive.emptyText') }));
     else out.push(h('div', { class: 'list archive-list' }, chats.map(row)));
     commit(host, out);
   }

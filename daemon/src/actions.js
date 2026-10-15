@@ -1,11 +1,11 @@
-// Azioni dalla PWA verso Cursor (Fase 2): rispondere a una domanda, saltarla, scrivere un messaggio.
+// Actions from the PWA to Cursor (Phase 2): answer a question, skip it, send a message.
 //
-// Principi (vedi docs/ARCHITECTURE.md, sezione "Azioni"):
-//  - si agisce solo su cio' che il daemon vede ORA: la risposta cita la chiave (toolCallId) della domanda che
-//    l'utente ha visto; se nel frattempo e' cambiata o e' stata risolta sul Mac, nessuna azione (409 `stale`);
-//  - un'azione alla volta (coda): manipolano la stessa finestra di Cursor;
-//  - il database di Cursor (sola lettura) e' la fonte di verita': dopo l'azione si rilegge per confermarla;
-//  - nessun contenuto di chat nei log: solo tipo di azione, esito e codici.
+// Principles (see docs/ARCHITECTURE.md, "Azioni" section):
+//  - act only on what the daemon sees NOW: the answer references the key (toolCallId) of the question the
+//    user saw; if it changed or was resolved on the Mac in the meantime, no action (409 `stale`);
+//  - one action at a time (queue): they manipulate the same Cursor window;
+//  - Cursor's database (read-only) is the source of truth: after the action it is re-read to confirm;
+//  - no chat content in logs: only action type, outcome, and codes.
 import crypto from 'node:crypto';
 import { EventEmitter } from 'node:events';
 import { SHELL_TOOLS } from './cursor/model.js';
@@ -15,11 +15,13 @@ import { UPLOAD_LIMITS } from './uploads.js';
 import { sleep as realSleep } from './util.js';
 
 export class ActionError extends Error {
-  constructor(status, code, message) {
+  constructor(status, code, message, opts = {}) {
     super(message);
     this.name = 'ActionError';
     this.status = status;
     this.code = code;
+    if (opts.detail) this.detail = opts.detail;
+    if (opts.params && Object.keys(opts.params).length) this.params = opts.params;
   }
 }
 
@@ -27,42 +29,44 @@ export const LIMITS = Object.freeze({ messageChars: 8000, freeformChars: 4000, n
 
 const CONTROL_CHARS = /[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F]/g;
 
-/** Testo "pulito": solo `\n` come a capo, niente caratteri di controllo. */
+/** "Clean" text: only `\n` as line breaks, no control characters. */
 export function cleanText(value) {
   return String(value ?? '').replace(/\r\n?/g, '\n').replace(CONTROL_CHARS, '');
 }
 
 /**
- * Controlla le risposte dell'utente contro la domanda vera (letta dal database) e le allinea alle domande.
+ * Validates user answers against the real question (read from the database) and aligns them to the questions.
  * @returns {{questionId: string, optionIds: string[], freeform: string}[]}
  */
 export function validateAnswers(question, raw) {
-  const bad = (msg) => new ActionError(400, 'bad_answer', msg);
-  if (!question?.questions?.length) throw bad('Domanda non valida');
-  if (!Array.isArray(raw)) throw bad('Risposte mancanti');
+  const bad = (detail, message, params) => {
+    throw new ActionError(400, 'bad_answer', message, { detail, ...(params ? { params } : {}) });
+  };
+  if (!question?.questions?.length) throw bad('bad_answer_invalid_question', 'Invalid question.');
+  if (!Array.isArray(raw)) throw bad('bad_answer_missing', 'Answers missing.');
   const out = [];
   for (const q of question.questions) {
     const a = raw.find((x) => x && typeof x === 'object' && x.questionId === q.id);
-    if (!a) throw bad('Manca la risposta a una domanda');
+    if (!a) throw bad('bad_answer_missing_question', 'A question was not answered.');
     const ids = a.optionIds === undefined ? [] : a.optionIds;
-    if (!Array.isArray(ids) || ids.some((i) => typeof i !== 'string')) throw bad('Opzioni non valide');
-    if (new Set(ids).size !== ids.length) throw bad('Opzioni duplicate');
+    if (!Array.isArray(ids) || ids.some((i) => typeof i !== 'string')) throw bad('bad_answer_invalid_options', 'Invalid options.');
+    if (new Set(ids).size !== ids.length) throw bad('bad_answer_duplicate_options', 'Duplicate options.');
     const freeform = cleanText(a.freeform).trim();
-    if (freeform.length > LIMITS.freeformChars) throw bad('Risposta libera troppo lunga');
+    if (freeform.length > LIMITS.freeformChars) throw bad('bad_answer_freeform_too_long', 'Free-form answer is too long.');
     const wantsFree = ids.includes(FREEFORM_ID) || freeform.length > 0;
     const regular = ids.filter((i) => i !== FREEFORM_ID);
-    if (regular.some((i) => !q.options.some((o) => o.id === i))) throw bad('Opzione sconosciuta');
-    if (ids.includes(FREEFORM_ID) && !freeform) throw bad('Scrivi il testo della risposta libera');
+    if (regular.some((i) => !q.options.some((o) => o.id === i))) throw bad('bad_answer_unknown_option', 'Unknown option.');
+    if (ids.includes(FREEFORM_ID) && !freeform) throw bad('bad_answer_freeform_required', 'Enter the free-form answer text.');
     const total = regular.length + (wantsFree ? 1 : 0);
-    if (total === 0) throw bad('Scegli almeno una risposta');
-    if (!q.allowMultiple && total > 1) throw bad('Questa domanda accetta una sola risposta');
+    if (total === 0) throw bad('bad_answer_no_selection', 'Select at least one answer.');
+    if (!q.allowMultiple && total > 1) throw bad('bad_answer_single_only', 'This question accepts only one answer.');
     out.push({ questionId: q.id, optionIds: wantsFree ? [...regular, FREEFORM_ID] : regular, freeform: wantsFree ? freeform : '' });
   }
-  if (raw.length > question.questions.length) throw bad('Troppe risposte');
+  if (raw.length > question.questions.length) throw bad('bad_answer_too_many', 'Too many answers.');
   return out;
 }
 
-/** Corrisponde all'esito registrato da Cursor? (insiemi di opzioni e testo libero, per ogni domanda) */
+/** Does this match the outcome recorded by Cursor? (option sets and freeform text, per question) */
 export function answersMatch(result, expected) {
   if (!result?.selections) return false;
   const nrm = (s) => String(s ?? '').replace(/\s+/g, ' ').trim();
@@ -74,56 +78,75 @@ export function answersMatch(result, expected) {
   });
 }
 
-/** Errori dell'interfaccia di Cursor -> risposta HTTP comprensibile. Il codice interno non e' mai un contenuto. */
+/** Cursor UI errors -> understandable HTTP response. The internal code is never content. */
 const UI_ERRORS = {
-  unavailable: [503, 'actions_unavailable', 'Cursor non e\' raggiungibile con la porta di debug: avvialo come spiegato nelle Impostazioni.'],
-  closed: [503, 'actions_unavailable', 'La connessione con Cursor si e\' interrotta. Riprova.'],
-  no_window: [503, 'actions_unavailable', 'La finestra Agents di Cursor non e\' aperta.'],
-  timeout: [504, 'timeout', 'Cursor non ha risposto in tempo. L\'operazione potrebbe essere andata a buon fine: controlla sul Mac prima di riprovare.'],
-  no_branch_menu: [409, 'ui_changed', 'Cursor non mostra il menu dei rami: controlla sul Mac.'],
-  no_model_menu: [409, 'ui_changed', 'Cursor non mostra il menu del modello: controlla sul Mac.'],
-  branch_not_found: [409, 'branch_not_found', 'Quel ramo non \u00e8 pi\u00f9 nell\'elenco di Cursor: aggiorna le scelte.'],
-  model_not_found: [409, 'model_not_found', 'Quel modello non \u00e8 pi\u00f9 nell\'elenco di Cursor: aggiorna le scelte.'],
-  branch_failed: [409, 'branch_failed', 'Cursor non ha cambiato il ramo: controlla sul Mac.'],
-  model_failed: [409, 'model_failed', 'Cursor non ha cambiato il modello: controlla sul Mac.'],
-  pin_failed: [409, 'pin_failed', 'Cursor non ha cambiato lo stato: controlla sul Mac.'],
-  bad_pin: [400, 'bad_pin', 'Valore non valido'],
-  row_not_found: [409, 'chat_not_in_sidebar', 'La chat non e\' visibile nella sidebar di Cursor: aprila sul Mac.'],
-  no_tray: [409, 'no_question', 'La domanda non risulta piu\' aperta in Cursor.'],
-  tray_closed: [409, 'no_question', 'La domanda e\' stata chiusa in Cursor prima di completarla.'],
-  mismatch: [409, 'mismatch', 'La domanda aperta in Cursor non corrisponde a quella che vedi qui: controlla sul Mac.'],
-  draft_not_empty: [409, 'draft_not_empty', 'Sul Mac questa chat ha gia\' una bozza nel campo di scrittura: inviala o svuotala prima.'],
-  no_approval: [409, 'no_approval', 'La richiesta non risulta piu\' in attesa in Cursor (forse l\'hai gia\' decisa sul Mac).'],
-  question_pending: [409, 'question_pending', 'La chat ha una domanda in attesa: rispondi prima a quella.'],
-  no_menu_item: [409, 'ui_changed', 'Cursor non mostra la voce di menu attesa: controlla sul Mac.'],
-  no_rename_field: [409, 'ui_changed', 'Cursor non ha aperto il campo del nome: controlla sul Mac.'],
-  no_file_input: [409, 'ui_changed', 'Cursor non mostra il campo per gli allegati: controlla sul Mac.'],
-  attach_failed: [409, 'attach_failed', 'Cursor non ha accettato le immagini: riprova o allegale dal Mac.'],
-  project_not_found: [409, 'project_not_found', 'Cursor non mostra questo progetto nella sidebar (rimosso o rinominato?): controlla sul Mac.'],
-  project_ambiguous: [409, 'project_ambiguous', 'In Cursor ci sono piu\' progetti con questo nome: avvia la chat dal Mac.'],
-  wrong_project: [409, 'ui_changed', 'Cursor ha aperto la chat su un altro progetto: nessun messaggio inviato.'],
-  not_local: [409, 'not_local', 'La nuova chat in Cursor non e\' impostata su "This Mac": nessun messaggio inviato. Cambia l\'ambiente dal Mac.'],
-  no_new_chat: [409, 'ui_changed', 'Cursor non ha aperto la schermata della nuova chat: controlla sul Mac.'],
-  bad_name: [400, 'bad_name', 'Nome non valido.'],
-  not_running: [409, 'not_running', 'L\'agente non sta lavorando in Cursor (forse ha gia\' finito).'],
+  unavailable: [503, 'actions_unavailable', 'Cursor is not reachable on the debug port: start it as explained in Settings.'],
+  closed: [503, 'actions_unavailable', 'The connection to Cursor was lost. Try again.'],
+  no_window: [503, 'actions_unavailable', 'The Cursor Agents window is not open.'],
+  timeout: [504, 'timeout', 'Cursor did not respond in time. The action may still have succeeded: check on your Mac before retrying.'],
+  no_branch_menu: [409, 'ui_changed', 'Cursor is not showing the branch menu: check on your Mac.'],
+  no_model_menu: [409, 'ui_changed', 'Cursor is not showing the model menu: check on your Mac.'],
+  branch_not_found: [409, 'branch_not_found', 'That branch is no longer in Cursor\u2019s list: refresh your choices.'],
+  model_not_found: [409, 'model_not_found', 'That model is no longer in Cursor\u2019s list: refresh your choices.'],
+  branch_failed: [409, 'branch_failed', 'Cursor did not change the branch: check on your Mac.'],
+  model_failed: [409, 'model_failed', 'Cursor did not change the model: check on your Mac.'],
+  pin_failed: [409, 'pin_failed', 'Cursor did not change the pin state: check on your Mac.'],
+  bad_pin: [400, 'bad_pin', 'Invalid value.'],
+  chat_not_open: [409, 'ui_changed', 'Cursor did not open this chat: nothing was typed. Try again.'],
+  row_not_found: [409, 'chat_not_in_sidebar', 'The chat is not visible in Cursor\u2019s sidebar: open it on your Mac.'],
+  no_tray: [409, 'no_question', 'The question is no longer open in Cursor.'],
+  tray_closed: [409, 'no_question', 'The question was closed in Cursor before it was completed.'],
+  mismatch: [409, 'mismatch', 'The question open in Cursor does not match what you see here: check on your Mac.'],
+  draft_not_empty: [409, 'draft_not_empty', 'This chat already has a draft in the composer on your Mac: send or clear it first.'],
+  no_approval: [409, 'no_approval', 'The request is no longer pending in Cursor (you may have already decided on your Mac).'],
+  question_pending: [409, 'question_pending', 'This chat has a pending question: answer it first.'],
+  approval_pending: [409, 'approval_pending', 'This chat is waiting for your approval in Cursor: approve or reject on your Mac before writing.'],
+  no_menu_item: [409, 'ui_changed', 'Cursor is not showing the expected menu item: check on your Mac.'],
+  no_rename_field: [409, 'ui_changed', 'Cursor did not open the name field: check on your Mac.'],
+  no_file_input: [409, 'ui_changed', 'Cursor is not showing the attachment field: check on your Mac.'],
+  attach_failed: [409, 'attach_failed', 'Cursor did not accept the images: retry or attach them on your Mac.'],
+  project_not_found: [409, 'project_not_found', 'Cursor is not showing this project in the sidebar (removed or renamed?): check on your Mac.'],
+  project_ambiguous: [409, 'project_ambiguous', 'Cursor has several projects with this name: start the chat on your Mac.'],
+  wrong_project: [409, 'ui_changed', 'Cursor opened the chat on another project: no message was sent.'],
+  not_local: [409, 'not_local', 'The new chat in Cursor is not set to "This Mac": no message was sent. Change the environment on your Mac.'],
+  no_new_chat: [409, 'ui_changed', 'Cursor did not open the new chat screen: check on your Mac.'],
+  bad_name: [400, 'bad_name', 'Invalid name.'],
+  bad_project: [400, 'bad_project', 'Choose a project.'],
+  bad_decision: [400, 'bad_decision', 'Invalid decision.'],
+  bad_answer: [400, 'bad_answer', 'Unknown option.'],
+  not_running: [409, 'not_running', 'The agent is not working in Cursor (it may have already finished).'],
+  primary_disabled: [409, 'ui_changed', 'The continue button is not available: check on your Mac.'],
+  tray_still_open: [409, 'no_question', 'The questionnaire is still open in Cursor.'],
+  focus_failed: [409, 'ui_changed', 'Could not focus the expected field: check on your Mac.'],
+  type_failed: [409, 'ui_changed', 'Text was not entered in the field: check on your Mac.'],
+  send_disabled: [409, 'ui_changed', 'The send button is not available: check on your Mac.'],
+  send_failed: [409, 'ui_changed', 'The message does not appear to have been sent: check on your Mac.'],
+  rename_failed: [409, 'ui_changed', 'The rename was not confirmed: check on your Mac.'],
+  no_composer: [409, 'ui_changed', 'The composer field was not found: check on your Mac.'],
+  click_failed: [502, 'ui_failed', 'Cursor did not run the action (click_failed). Check on your Mac.'],
+  disabled: [502, 'ui_failed', 'Cursor did not run the action (disabled). Check on your Mac.'],
+  not_found: [502, 'ui_failed', 'Cursor did not run the action (not_found). Check on your Mac.'],
 };
 
 function mapUiError(err) {
   if (err instanceof ActionError) return err;
   const code = String(err?.code ?? '');
   const m = UI_ERRORS[code];
-  if (m) return new ActionError(m[0], m[1], m[2]);
-  return new ActionError(502, 'ui_failed', `Cursor non ha eseguito l'azione (${code || 'errore'}). Controlla sul Mac.`);
+  if (m) return new ActionError(m[0], m[1], m[2], { detail: code });
+  return new ActionError(502, 'ui_failed', `Cursor did not run the action (${code || 'error'}). Check on your Mac.`, {
+    detail: 'ui_failed',
+    params: { code: code || 'error' },
+  });
 }
 
-// Dopo una scadenza con l'azione ancora in corso, lo stesso invio resta bloccato per questo tempo oltre il momento in cui l'errore e' stato dato.
+// After a timeout with the action still in progress, the same send stays blocked for this long past when the error was returned.
 const ORPHAN_HOLD_MS = 30_000;
 
 export class Actions extends EventEmitter {
   #chain = Promise.resolve();
   #inFlight = new Set();
-  #orphans = 0; // azioni scadute per il chiamante ma ancora in corso su Cursor
-  #recent = new Map(); // `kind:chat:key` -> istante, per non inviare due volte la stessa risposta
+  #orphans = 0; // actions timed out for the caller but still running on Cursor
+  #recent = new Map(); // `kind:chat:key` -> timestamp, to avoid sending the same answer twice
   #state = { available: false, reason: 'off' };
   #timer = null;
 
@@ -143,7 +166,7 @@ export class Actions extends EventEmitter {
     if (!config.actionsEnabled) this.#state = { available: false, reason: 'disabled' };
   }
 
-  /** `{available, reason}`; reason: ok | off (porta di debug chiusa) | no_window | disabled. */
+  /** `{available, reason}`; reason: ok | off (debug port closed) | no_window | disabled. */
   get status() {
     return this.#state;
   }
@@ -154,7 +177,7 @@ export class Actions extends EventEmitter {
     this.emit('change', next);
   }
 
-  /** Controlla se la porta di debug e la finestra Agents rispondono (solo HTTP, leggero). */
+  /** Checks whether the debug port and Agents window respond (HTTP only, lightweight). */
   async refresh() {
     if (!this.config.actionsEnabled) return this.#state;
     let reason = 'off';
@@ -181,7 +204,7 @@ export class Actions extends EventEmitter {
   }
 
   // ------------------------------------------------------------------------------------------------------------
-  // infrastruttura: una sola azione alla volta, con scadenza
+  // infrastructure: one action at a time, with timeout
   // ------------------------------------------------------------------------------------------------------------
 
   #run(kind, fn) {
@@ -199,17 +222,19 @@ export class Actions extends EventEmitter {
       } catch (err) {
         work = Promise.reject(err);
       }
-      // La coda si libera solo quando l'azione sotto ha finito DAVVERO (ha scadenze interne): mai due azioni insieme,
-      // anche se il chiamante ha gia' ricevuto l'errore di scadenza.
+      // The queue frees only when the underlying action has REALLY finished (it has internal timeouts): never two actions
+      // at once, even if the caller already received the timeout error.
       work.then(release, release);
       let timer;
       const limit = new Promise((_, reject) => {
         timer = setTimeout(() => {
-          // Il chiamante riceve l'errore, ma l'azione continua: finche' non finisce, un reinvio identico andrebbe in coda e
-          // verrebbe eseguito DOPO (messaggio doppio). `#orphans` lo segnala a `#dedupe`.
+          // The caller gets the error, but the action continues: until it finishes, an identical resend would queue and
+          // run AFTER (duplicate message). `#orphans` signals this to `#dedupe`.
           this.#orphans++;
           work.then(() => this.#orphans--, () => this.#orphans--);
-          reject(new ActionError(504, 'timeout', 'Cursor non ha risposto in tempo. L\'operazione potrebbe essere andata a buon fine: controlla sul Mac prima di riprovare.'));
+          reject(
+            new ActionError(504, 'timeout', 'Cursor did not respond in time. The action may still have succeeded: check on your Mac before retrying.'),
+          );
         }, this.config.actionTimeoutMs);
       });
       try {
@@ -233,27 +258,31 @@ export class Actions extends EventEmitter {
 
   #chat(id) {
     const chat = this.watcher.last?.chats.find((c) => c.id === id);
-    if (!chat) throw new ActionError(404, 'not_found', 'Chat non trovata');
+    if (!chat) throw new ActionError(404, 'not_found', 'Chat not found.', { detail: 'not_found_chat' });
     return chat;
   }
 
   #requireReady() {
-    if (!this.config.actionsEnabled) throw new ActionError(503, 'actions_disabled', 'Le azioni sono disattivate nella configurazione del daemon.');
-    if (!this.#state.available) throw new ActionError(503, 'actions_unavailable', 'Cursor non e\' raggiungibile con la porta di debug: avvialo come spiegato nelle Impostazioni.');
+    if (!this.config.actionsEnabled) throw new ActionError(503, 'actions_disabled', 'Actions are disabled in the daemon configuration.');
+    if (!this.#state.available) {
+      throw new ActionError(503, 'actions_unavailable', 'Cursor is not reachable on the debug port: start it as explained in Settings.', {
+        detail: 'unavailable',
+      });
+    }
   }
 
-  /** La stessa richiesta (stessa chat e stessa domanda) non parte due volte, ne' in contemporanea ne' subito dopo. */
+  /** The same request (same chat and same question) must not start twice, neither concurrently nor back-to-back. */
   #dedupe(kind, chatId, key, ttlMs = 60_000) {
     const id = `${kind}:${chatId}:${key}`;
     const t = this.#recent.get(id);
     if (this.#inFlight.has(id) || (t !== undefined && this.now() - t < ttlMs)) {
-      throw new ActionError(409, 'already_sent', 'Questa richiesta e\' gia\' stata inviata.');
+      throw new ActionError(409, 'already_sent', 'This request was already sent.');
     }
     this.#inFlight.add(id);
     return {
       done: (ok) => {
         this.#inFlight.delete(id);
-        // Con un'azione scaduta ma ancora in corso l'esito e' ignoto: si blocca il reinvio ancora per un po'.
+        // With a timed-out action still running the outcome is unknown: block resend for a while longer.
         if (ok) this.#recent.set(id, this.now());
         else if (this.#orphans > 0) this.#recent.set(id, this.now() + ORPHAN_HOLD_MS);
         for (const [k, v] of this.#recent) if (this.now() - v > 120_000) this.#recent.delete(k);
@@ -261,19 +290,19 @@ export class Actions extends EventEmitter {
     };
   }
 
-  /** Domanda "viva" e azionabile di una chat, con la chiave che l'utente ha visto. */
+  /** Live, actionable question for a chat, with the key the user saw. */
   #liveQuestion(chatId, key) {
     const chat = this.#chat(chatId);
     const a = chat.attention;
-    if (!a || a.kind !== 'domanda' || !a.live || a.key !== key) {
-      throw new ActionError(409, 'stale', 'La domanda e\' cambiata o e\' gia\' stata risolta: aggiorna e riprova.');
+    if (!a || a.kind !== 'question' || !a.live || a.key !== key) {
+      throw new ActionError(409, 'stale', 'The question changed or was already resolved: refresh and try again.', { detail: 'stale_question' });
     }
     const question = this.watcher.detail(chatId)?.question;
-    if (!question?.questions?.length) throw new ActionError(409, 'no_question', 'Non riesco a leggere la domanda: rispondi dal Mac.');
+    if (!question?.questions?.length) throw new ActionError(409, 'no_question', 'Cannot read the question: answer on your Mac.');
     return { chat, a, question };
   }
 
-  /** Rilegge il database ogni 400 ms (conta i giri, non l'orologio: stesso risultato e testabile). */
+  /** Re-reads the database every 400 ms (counts iterations, not wall clock: same result and testable). */
   async #waitFor(fn, timeoutMs) {
     for (let i = 0; ; i++) {
       const v = fn();
@@ -284,12 +313,12 @@ export class Actions extends EventEmitter {
   }
 
   // ------------------------------------------------------------------------------------------------------------
-  // azioni pubbliche
+  // public actions
   // ------------------------------------------------------------------------------------------------------------
 
-  /** Risponde alla domanda `key` della chat. `answers`: [{questionId, optionIds?, freeform?}]. */
+  /** Answers question `key` for the chat. `answers`: [{questionId, optionIds?, freeform?}]. */
   async answer(chatId, { key, answers } = {}) {
-    if (typeof key !== 'string' || !key) throw new ActionError(400, 'bad_key', 'Chiave non valida');
+    if (typeof key !== 'string' || !key) throw new ActionError(400, 'bad_key', 'Invalid key.');
     this.#requireReady();
     const { a, question } = this.#liveQuestion(chatId, key);
     const expected = validateAnswers(question, answers);
@@ -298,7 +327,7 @@ export class Actions extends EventEmitter {
     try {
       const res = await this.#run('answer', async () => {
         await this.ui.answer({ composerId: chatId, question, answers: expected.map((e) => ({ optionIds: e.optionIds, freeform: e.freeform })) });
-        // Conferma dal database: il bubble della domanda passa a `submitted` con le scelte fatte.
+        // Confirm from database: the question bubble becomes `submitted` with the chosen answers.
         const r = await this.#waitFor(() => {
           const x = this.db.questionResult(chatId, a.bubbleId);
           return x?.status === 'submitted' ? x : null;
@@ -307,16 +336,16 @@ export class Actions extends EventEmitter {
         return answersMatch(r, expected) ? { ok: true, verified: true } : { ok: true, verified: false, warning: 'differs' };
       });
       ok = true;
-      this.watcher.boost?.(chatId); // dopo l'azione la chat si rilegge ogni secondo: la reazione dell'agente si vede subito
+      this.watcher.boost?.(chatId); // after the action the chat is re-read every second: agent reaction shows up quickly
       return res;
     } finally {
       slot.done(ok);
     }
   }
 
-  /** Salta la domanda (come il pulsante Skip di Cursor). */
+  /** Skips the question (like Cursor's Skip button). */
   async skip(chatId, { key } = {}) {
-    if (typeof key !== 'string' || !key) throw new ActionError(400, 'bad_key', 'Chiave non valida');
+    if (typeof key !== 'string' || !key) throw new ActionError(400, 'bad_key', 'Invalid key.');
     this.#requireReady();
     const { a, question } = this.#liveQuestion(chatId, key);
     const slot = this.#dedupe('skip', chatId, key);
@@ -331,7 +360,7 @@ export class Actions extends EventEmitter {
         return { ok: true, verified: Boolean(r) };
       });
       ok = true;
-      this.watcher.boost?.(chatId); // dopo l'azione la chat si rilegge ogni secondo: la reazione dell'agente si vede subito
+      this.watcher.boost?.(chatId); // after the action the chat is re-read every second: agent reaction shows up quickly
       return res;
     } finally {
       slot.done(ok);
@@ -339,41 +368,47 @@ export class Actions extends EventEmitter {
   }
 
   /**
-   * Approva o rifiuta il comando di terminale in attesa (pulsanti "Run" / "Skip" di Cursor). Solo se la richiesta e' ancora
-   * quella che l'utente ha visto (`key` = toolCallId) e solo per i comandi di terminale; nei log finiscono la decisione e
-   * l'esito, mai il comando.
+   * Approves or rejects a pending terminal command (Cursor "Run" / "Skip" buttons). Only if the request is still
+   * the one the user saw (`key` = toolCallId) and only for terminal commands; logs contain decision and
+   * outcome, never the command.
    */
   async approval(chatId, { key, decision } = {}) {
-    if (typeof key !== 'string' || !key) throw new ActionError(400, 'bad_key', 'Chiave non valida');
-    if (decision !== 'approve' && decision !== 'reject') throw new ActionError(400, 'bad_decision', 'Decisione non valida');
-    if (!this.config.approvalsEnabled) throw new ActionError(503, 'approvals_disabled', 'Approvare dal telefono e\' disattivato nella configurazione del daemon (CP_APPROVALS).');
+    if (typeof key !== 'string' || !key) throw new ActionError(400, 'bad_key', 'Invalid key.');
+    if (decision !== 'approve' && decision !== 'reject') throw new ActionError(400, 'bad_decision', 'Invalid decision.');
+    if (!this.config.approvalsEnabled) {
+      throw new ActionError(503, 'approvals_disabled', 'Approving from the phone is disabled in the daemon configuration (CP_APPROVALS).');
+    }
     this.#requireReady();
     const chat = this.#chat(chatId);
     const a = chat.attention;
-    if (!a || a.kind !== 'approvazione' || !a.live || a.key !== key || !a.bubbleId) {
-      throw new ActionError(409, 'stale', 'La richiesta e\' cambiata o e\' gia\' stata decisa: aggiorna e riprova.');
+    if (!a || a.kind !== 'approval' || !a.live || a.key !== key || !a.bubbleId) {
+      throw new ActionError(409, 'stale', 'The request changed or was already decided: refresh and try again.', { detail: 'stale_approval' });
     }
     if (!SHELL_TOOLS.has(a.toolName)) {
-      throw new ActionError(409, 'unsupported', 'Da qui si possono decidere solo i comandi di terminale: decidi questa richiesta sul Mac.');
+      throw new ActionError(409, 'unsupported', 'Only terminal commands can be decided from here: decide this request on your Mac.');
     }
     if (decision === 'approve' && this.db.approvalDetails(chatId, a.bubbleId).truncated) {
-      throw new ActionError(409, 'command_too_long', 'Il comando e\' troppo lungo per essere letto per intero qui: per eseguirlo usa Cursor sul Mac (puoi comunque rifiutarlo).');
+      throw new ActionError(
+        409,
+        'command_too_long',
+        'The command is too long to read in full here: run it in Cursor on your Mac (you can still reject it).',
+      );
     }
     const slot = this.#dedupe('approval', chatId, key);
     let ok = false;
     try {
       const res = await this.#run('approval', async () => {
         const clicked = await this.ui.approval({ composerId: chatId, bubbleId: a.bubbleId, decision });
-        // Conferma: o il bubble cambia (`reviewData.status` non e' piu' `Requested`, il tool non e' piu' `loading`), oppure
-        // l'agente prosegue e Cursor non tiene piu' quella richiesta tra gli ultimi bubble (osservato dal vivo dopo "Skip":
-        // il vecchio bubble resta `Requested` e ne compaiono di nuovi).
+        // Confirm: either the bubble changes (`reviewData.status` no longer `Requested`, tool no longer `loading`), or
+        // the agent moves on and Cursor no longer keeps that request among the latest bubbles (observed live after "Skip":
+        // the old bubble stays `Requested` and new ones appear).
         const r = clicked?.settled === true ? { settled: true } : await this.#waitFor(() => {
           const b = this.db.bubbleSummary(chatId, a.bubbleId);
           if (b?.tool && (b.tool.review?.status !== 'Requested' || b.tool.status !== 'loading')) return b;
           const now = this.watcher.last?.chats.find((c) => c.id === chatId)?.attention;
-          return !now || now.key !== key || now.kind !== 'approvazione' ? { moved: true } : null;
+          return !now || now.key !== key || now.kind !== 'approval' ? { moved: true } : null;
         }, 10_000);
-        // La carta di Cursor perde i pulsanti appena la decisione e' accettata (`settled`): segnale piu' rapido del database.
+        // Cursor's card loses its buttons as soon as the decision is accepted (`settled`): faster signal than the database.
         return { ok: true, verified: Boolean(r), decision };
       });
       ok = true;
@@ -386,15 +421,15 @@ export class Actions extends EventEmitter {
   }
 
   /**
-   * Ferma l'agente di una chat che sta lavorando (pulsante "Stop generation" di Cursor). Non cancella nulla: l'agente
-   * smette di generare e la conversazione resta. Con una domanda o un'approvazione aperte non serve: si risponde a quelle.
+   * Stops the agent for a chat that is working (Cursor "Stop generation" button). Does not delete anything: the agent
+   * stops generating and the conversation remains. With an open question or approval, use those instead.
    */
   async stopAgent(chatId) {
     this.#requireReady();
     const chat = this.#chat(chatId);
-    if (!chat.running) throw new ActionError(409, 'not_running', 'L\'agente non sta lavorando: forse ha gia\' finito.');
-    if (chat.attention?.live && (chat.attention.kind === 'domanda' || chat.attention.kind === 'approvazione')) {
-      throw new ActionError(409, 'attention_pending', 'La chat aspetta una tua decisione: rispondi, approva o rifiuta invece di fermarla.');
+    if (!chat.running) throw new ActionError(409, 'not_running', 'The agent is not working: it may have already finished.', { detail: 'not_running_stop' });
+    if (chat.attention?.live && (chat.attention.kind === 'question' || chat.attention.kind === 'approval')) {
+      throw new ActionError(409, 'attention_pending', 'This chat is waiting for your decision: answer, approve, or reject instead of stopping it.');
     }
     const slot = this.#dedupe('stop', chatId, 'stop', 6_000);
     let ok = false;
@@ -413,12 +448,17 @@ export class Actions extends EventEmitter {
     }
   }
 
-  /** Rinomina la chat nella sidebar di Cursor (come "Rename" dal menu della riga). Il nome si legge poi dal database per conferma. */
+  /** Renames the chat in Cursor's sidebar (like "Rename" from the row menu). The name is then read from the database to confirm. */
   async rename(chatId, { name } = {}) {
-    if (typeof name !== 'string') throw new ActionError(400, 'bad_name', 'Scrivi un nome');
+    if (typeof name !== 'string') throw new ActionError(400, 'bad_name', 'Enter a name.', { detail: 'bad_name_required' });
     const clean = cleanText(name).replace(/\s+/g, ' ').trim();
-    if (!clean) throw new ActionError(400, 'bad_name', 'Scrivi un nome');
-    if (clean.length > LIMITS.nameChars) throw new ActionError(400, 'bad_name', `Nome troppo lungo (massimo ${LIMITS.nameChars} caratteri)`);
+    if (!clean) throw new ActionError(400, 'bad_name', 'Enter a name.', { detail: 'bad_name_required' });
+    if (clean.length > LIMITS.nameChars) {
+      throw new ActionError(400, 'bad_name', `Name is too long (maximum ${LIMITS.nameChars} characters).`, {
+        detail: 'bad_name_too_long',
+        params: { max: LIMITS.nameChars },
+      });
+    }
     this.#requireReady();
     this.#chat(chatId);
     const slot = this.#dedupe('rename', chatId, crypto.createHash('sha1').update(clean).digest('hex').slice(0, 16), 4_000);
@@ -438,11 +478,11 @@ export class Actions extends EventEmitter {
     }
   }
 
-  /** Archivia una chat (non una che sta lavorando). */
+  /** Archives a chat (not one that is running). */
   async archive(chatId) {
     this.#requireReady();
     const chat = this.#chat(chatId);
-    if (chat.running) throw new ActionError(409, 'running', 'L\'agente sta ancora lavorando: fermalo prima di archiviare la chat.');
+    if (chat.running) throw new ActionError(409, 'running', 'The agent is still working: stop it before archiving the chat.');
     const slot = this.#dedupe('archive', chatId, 'archive', 6_000);
     let ok = false;
     try {
@@ -459,16 +499,16 @@ export class Actions extends EventEmitter {
     }
   }
 
-  /** La chat e' fissata in cima alla sidebar di Cursor? (letto dalla pagina, nessuna modifica) */
+  /** Is the chat pinned to the top of Cursor's sidebar? (read from the page, no change) */
   async pinState(chatId) {
     this.#requireReady();
     this.#chat(chatId);
     return this.#run('pinstate', async () => ({ ok: true, ...(await this.ui.pinState({ composerId: chatId })) }));
   }
 
-  /** Fissa o toglie dai fissati una chat (come "Pin" nel menu della sidebar di Cursor). */
+  /** Pins or unpins a chat (like "Pin" in Cursor's sidebar menu). */
   async pin(chatId, { pinned } = {}) {
-    if (typeof pinned !== 'boolean') throw new ActionError(400, 'bad_pin', 'Indica se fissare o togliere');
+    if (typeof pinned !== 'boolean') throw new ActionError(400, 'bad_pin', 'Say whether to pin or unpin.', { detail: 'bad_pin_unspecified' });
     this.#requireReady();
     this.#chat(chatId);
     const slot = this.#dedupe('pin', chatId, String(pinned), 3_000);
@@ -483,10 +523,12 @@ export class Actions extends EventEmitter {
     }
   }
 
-  /** Ripristina una chat archiviata (solo se risulta tra quelle archiviate e visibili). */
+  /** Restores an archived chat (only if it appears among archived and visible ones). */
   async restore(chatId) {
     this.#requireReady();
-    if (!this.watcher.archived({ limit: 200 }).some((c) => c.id === chatId)) throw new ActionError(404, 'not_found', 'Chat archiviata non trovata');
+    if (!this.watcher.archived({ limit: 200 }).some((c) => c.id === chatId)) {
+      throw new ActionError(404, 'not_found', 'Archived chat not found.', { detail: 'not_found_archived' });
+    }
     const slot = this.#dedupe('restore', chatId, 'restore', 6_000);
     let ok = false;
     try {
@@ -503,34 +545,42 @@ export class Actions extends EventEmitter {
     }
   }
 
-  /** Avvia una chat NUOVA (locale, "This Mac") su un progetto con il primo messaggio. */
-  /** Ramo e modello attuali e possibili per la nuova chat di un progetto (sola lettura: Cursor apre i menu e li richiude). */
+  /** Starts a NEW chat (local, "This Mac") on a project with the first message. */
+  /** Current and available branch and model for a project's new chat (read-only: Cursor opens menus and closes them). */
   async newChatOptions(sectionId) {
-    if (typeof sectionId !== 'string' || !sectionId) throw new ActionError(400, 'bad_project', 'Scegli un progetto');
+    if (typeof sectionId !== 'string' || !sectionId) throw new ActionError(400, 'bad_project', 'Choose a project.');
     this.#requireReady();
     const known = this.watcher.last?.chats.find((c) => c.sectionId === sectionId);
-    if (!known?.workspaceName) throw new ActionError(404, 'not_found', 'Progetto non trovato');
+    if (!known?.workspaceName) throw new ActionError(404, 'not_found', 'Project not found.', { detail: 'not_found_project' });
     return this.#run('newchatopts', async () => ({ ok: true, ...(await this.ui.newChatOptions({ project: known.workspaceName })) }));
   }
 
   async newChat({ sectionId, text, images, branch, model } = {}) {
     for (const [k, v] of [['branch', branch], ['model', model]]) {
-      if (v !== undefined && (typeof v !== 'string' || !v.trim() || v.length > 120 || /[\u0000-\u001f]/.test(v))) throw new ActionError(400, `bad_${k}`, k === 'branch' ? 'Ramo non valido' : 'Modello non valido');
+      if (v !== undefined && (typeof v !== 'string' || !v.trim() || v.length > 120 || /[\u0000-\u001f]/.test(v))) {
+        throw new ActionError(400, `bad_${k}`, k === 'branch' ? 'Invalid branch.' : 'Invalid model.', { detail: k === 'branch' ? 'bad_branch' : 'bad_model' });
+      }
     }
     const ids = images === undefined ? [] : images;
     if (!Array.isArray(ids) || ids.length > UPLOAD_LIMITS.perMessage || !ids.every((x) => typeof x === 'string')) {
-      throw new ActionError(400, 'bad_images', `Si possono allegare al massimo ${UPLOAD_LIMITS.perMessage} immagini`);
+      throw new ActionError(400, 'bad_images', `At most ${UPLOAD_LIMITS.perMessage} images can be attached.`, {
+        params: { max: UPLOAD_LIMITS.perMessage },
+      });
     }
-    if (text !== undefined && typeof text !== 'string') throw new ActionError(400, 'bad_text', 'Scrivi un messaggio');
+    if (text !== undefined && typeof text !== 'string') throw new ActionError(400, 'bad_text', 'Write a message.', { detail: 'bad_text_empty' });
     const clean = cleanText(text ?? '').trim();
-    if (!clean && !ids.length) throw new ActionError(400, 'bad_text', 'Scrivi un messaggio');
-    if (clean.length > LIMITS.messageChars) throw new ActionError(400, 'too_long', `Messaggio troppo lungo (massimo ${LIMITS.messageChars} caratteri)`);
-    if (typeof sectionId !== 'string' || !sectionId) throw new ActionError(400, 'bad_project', 'Scegli un progetto');
+    if (!clean && !ids.length) throw new ActionError(400, 'bad_text', 'Write a message.', { detail: 'bad_text_empty' });
+    if (clean.length > LIMITS.messageChars) {
+      throw new ActionError(400, 'too_long', `Message is too long (maximum ${LIMITS.messageChars} characters).`, {
+        params: { max: LIMITS.messageChars },
+      });
+    }
+    if (typeof sectionId !== 'string' || !sectionId) throw new ActionError(400, 'bad_project', 'Choose a project.');
     this.#requireReady();
     const known = this.watcher.last?.chats.find((c) => c.sectionId === sectionId);
-    if (!known?.workspaceName) throw new ActionError(404, 'not_found', 'Progetto non trovato');
+    if (!known?.workspaceName) throw new ActionError(404, 'not_found', 'Project not found.', { detail: 'not_found_project' });
     const files = ids.length ? this.uploads?.paths(ids) : [];
-    if (!files) throw new ActionError(409, 'image_expired', 'Un\'immagine non \u00e8 pi\u00f9 disponibile: allegala di nuovo.');
+    if (!files) throw new ActionError(409, 'image_expired', 'An image is no longer available: attach it again.');
     const slot = this.#dedupe('newchat', sectionId, crypto.createHash('sha1').update(clean + '\u0000' + ids.join(',') + '\u0000' + (branch ?? '') + '\u0000' + (model ?? '')).digest('hex').slice(0, 16), 10_000);
     let ok = false;
     try {
@@ -538,7 +588,7 @@ export class Actions extends EventEmitter {
         const r = await this.ui.newChat({ project: known.workspaceName, text: clean, ...(files.length ? { files } : {}), ...(branch ? { branch: branch.trim() } : {}), ...(model ? { model: model.trim() } : {}) });
         const seen = await this.#waitFor(() => {
           const f = this.db.chatFlags(r.composerId);
-          return f && !f.draft && !f.archived ? true : null; // la "bozza" che Cursor crea prima dell'invio non conta
+          return f && !f.draft && !f.archived ? true : null; // the "draft" Cursor creates before send does not count
         }, 12_000);
         return { ok: true, chatId: r.composerId, verified: Boolean(seen) };
       });
@@ -553,29 +603,39 @@ export class Actions extends EventEmitter {
     }
   }
 
-  /** Scrive un messaggio nella chat. Se l'agente sta lavorando decide Cursor (coda o invio immediato, impostazione sua). */
+  /** Writes a message in the chat. If the agent is working, Cursor decides (queue or immediate send, its setting). */
   async sendMessage(chatId, { text, images } = {}) {
     const ids = images === undefined ? [] : images;
     if (!Array.isArray(ids) || ids.length > UPLOAD_LIMITS.perMessage || !ids.every((x) => typeof x === 'string')) {
-      throw new ActionError(400, 'bad_images', `Si possono allegare al massimo ${UPLOAD_LIMITS.perMessage} immagini`);
+      throw new ActionError(400, 'bad_images', `At most ${UPLOAD_LIMITS.perMessage} images can be attached.`, {
+        params: { max: UPLOAD_LIMITS.perMessage },
+      });
     }
-    if (text !== undefined && typeof text !== 'string') throw new ActionError(400, 'bad_text', 'Scrivi un messaggio');
+    if (text !== undefined && typeof text !== 'string') throw new ActionError(400, 'bad_text', 'Write a message.', { detail: 'bad_text_empty' });
     const clean = cleanText(text ?? '').trim();
-    if (!clean && !ids.length) throw new ActionError(400, 'bad_text', 'Scrivi un messaggio');
-    if (clean.length > LIMITS.messageChars) throw new ActionError(400, 'too_long', `Messaggio troppo lungo (massimo ${LIMITS.messageChars} caratteri)`);
+    if (!clean && !ids.length) throw new ActionError(400, 'bad_text', 'Write a message.', { detail: 'bad_text_empty' });
+    if (clean.length > LIMITS.messageChars) {
+      throw new ActionError(400, 'too_long', `Message is too long (maximum ${LIMITS.messageChars} characters).`, {
+        params: { max: LIMITS.messageChars },
+      });
+    }
     this.#requireReady();
     const chat = this.#chat(chatId);
     const files = ids.length ? this.uploads?.paths(ids) : [];
-    if (!files) throw new ActionError(409, 'image_expired', 'Un\'immagine non \u00e8 pi\u00f9 disponibile: allegala di nuovo.');
-    if (chat.attention?.kind === 'domanda' && chat.attention.live) {
-      throw new ActionError(409, 'question_pending', 'La chat ha una domanda in attesa: rispondi prima a quella.');
+    if (!files) throw new ActionError(409, 'image_expired', 'An image is no longer available: attach it again.');
+    if (chat.attention?.kind === 'question' && chat.attention.live) {
+      throw new ActionError(409, 'question_pending', 'This chat has a pending question: answer it first.');
     }
-    // Con un'approvazione in attesa l'effetto di un nuovo messaggio dipende dalle impostazioni di Cursor (coda oppure
-    // "ferma e invia", che annullerebbe il comando in attesa): non si rischia, prima si approva o si rifiuta dal Mac.
-    if (chat.attention?.kind === 'approvazione' && chat.attention.live) {
-      throw new ActionError(409, 'approval_pending', 'La chat aspetta una tua approvazione in Cursor: approvala o rifiutala dal Mac prima di scrivere.');
+    // With a pending approval, a new message's effect depends on Cursor settings (queue or
+    // "stop and send", which would cancel the pending command): do not risk it; approve or reject on the Mac first.
+    if (chat.attention?.kind === 'approval' && chat.attention.live) {
+      throw new ActionError(
+        409,
+        'approval_pending',
+        'This chat is waiting for your approval in Cursor: approve or reject on your Mac before writing.',
+      );
     }
-    // Un doppio tocco sul pulsante non deve inviare due volte lo stesso testo.
+    // A double tap on the button must not send the same text twice.
     const slot = this.#dedupe('message', chatId, crypto.createHash('sha1').update(clean + '\u0000' + ids.join(',')).digest('hex').slice(0, 16), 8_000);
     let ok = false;
     try {
@@ -594,7 +654,7 @@ export class Actions extends EventEmitter {
         this.uploads?.remove(ids);
         this.logger.info('message_images', { count: ids.length });
       }
-      this.watcher.boost?.(chatId); // dopo l'azione la chat si rilegge ogni secondo: la reazione dell'agente si vede subito
+      this.watcher.boost?.(chatId); // after the action the chat is re-read every second: agent reaction shows up quickly
       return res;
     } finally {
       slot.done(ok);

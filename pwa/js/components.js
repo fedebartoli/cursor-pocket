@@ -1,15 +1,26 @@
-// Componenti di interfaccia condivisi tra le viste.
+// Shared UI components across views.
 import { h } from './dom.js';
 import { timeAgo } from './format.js';
+import { t } from './i18n/index.js';
 import { icon } from './icons.js';
 
 export const STATE = Object.freeze({
-  RUNNING: 'in_corso',
-  ATTENTION: 'attenzione',
-  PENDING: 'in_sospeso',
-  DONE: 'finita',
-  IDLE: 'inattiva',
+  RUNNING: 'running',
+  ATTENTION: 'attention',
+  PENDING: 'pending',
+  DONE: 'done',
+  IDLE: 'idle',
 });
+
+export function attentionKindLabel(kind) {
+  return kind ? t(`attention.${kind}`) : t('components.stateNeedsAttention');
+}
+
+export function workspaceDisplayName(ws) {
+  if (ws.name) return ws.name;
+  if (ws.home) return t('common.noFolder');
+  return '';
+}
 
 export function iconButton({ label, name, onClick, href, pip = false, spin = false }) {
   const props = { class: 'icon-btn', 'aria-label': label, title: label };
@@ -18,14 +29,14 @@ export function iconButton({ label, name, onClick, href, pip = false, spin = fal
   return h('button', { ...props, type: 'button', onClick }, children);
 }
 
-/** Marchio di Cursor in alto a sinistra (file a parte, sostituibile: vedi docs/SETUP.md, "Marchio Cursor"). */
+/** Cursor brand top-left (separate file, replaceable: see docs/SETUP.md, "Cursor brand"). */
 export const logoImg = (size = 28) => h('img', { class: 'appbar-logo', src: '/icons/cursor-logo.svg', alt: '', width: size, height: size, decoding: 'async' });
 
 export function appbar({ title, backHref, actions = [], logo = false }) {
   return h(
     'header.appbar',
     null,
-    backHref ? h('a', { class: 'icon-btn appbar-back', href: backHref, 'aria-label': 'Indietro' }, icon('back', { size: 22 })) : null,
+    backHref ? h('a', { class: 'icon-btn appbar-back', href: backHref, 'aria-label': t('components.back') }, icon('back', { size: 22 })) : null,
     logo && !backHref ? logoImg() : null,
     h('h1', { class: 'appbar-title', tabindex: '-1' }, title),
     h('div.appbar-actions', null, actions),
@@ -39,7 +50,7 @@ export function banner({ tone = 'danger', iconName = 'alert', text, detail, acti
     { class: `banner${tone === 'info' ? ' info' : ''}`, role: 'status' },
     icon(iconName, { size: 20 }),
     h('div.grow', null, h('div', null, h('strong', null, text)), detail ? h('div', null, detail) : null, action),
-    onDismiss ? h('button', { class: 'icon-btn', type: 'button', 'aria-label': 'Nascondi', onClick: onDismiss }, icon('close', { size: 18 })) : null,
+    onDismiss ? h('button', { class: 'icon-btn', type: 'button', 'aria-label': t('components.dismiss'), onClick: onDismiss }, icon('close', { size: 18 })) : null,
   );
 }
 
@@ -49,14 +60,14 @@ export function sectionHead({ label, count, tone, iconName, expanded, onToggle, 
     onToggle ? icon(expanded ? 'chevronDown' : 'chevronRight', { size: 16 }) : null,
     iconName ? icon(iconName, { size: 16 }) : null,
     h('span.grow', null, label),
-    alert ? h('span', { class: 'dot attention', role: 'img', 'aria-label': 'Contiene chat che richiedono attenzione' }) : null,
+    alert ? h('span', { class: 'dot attention', role: 'img', 'aria-label': t('components.sectionHasAttention') }) : null,
     count != null ? h('span', { class: `count${tone === 'danger' ? ' danger' : ''}` }, String(count)) : null,
   ];
   if (!onToggle) return h('div', { class: cls }, children);
   return h('button', { class: cls, type: 'button', 'aria-expanded': String(!!expanded), onClick: onToggle }, children);
 }
 
-/** Interruttore accessibile (role=switch). `onToggle(nuovoValore)`. */
+/** Accessible switch (role=switch). `onToggle(newValue)`. */
 export function switchRow({ label, sub, checked, onToggle, disabled = false }) {
   return h(
     'div.switch-row',
@@ -71,57 +82,57 @@ export function emptyState({ iconName = 'terminal', title, text }) {
 }
 
 export function skeleton(rows = 4) {
-  return h('div', { class: 'skeleton-list', 'aria-busy': 'true', 'aria-label': 'Caricamento' }, Array.from({ length: rows }, () => h('div.skel.skel-row')));
+  return h('div', { class: 'skeleton-list', 'aria-busy': 'true', 'aria-label': t('components.loading') }, Array.from({ length: rows }, () => h('div.skel.skel-row')));
 }
 
-/** Marcatore di stato a sinistra della riga (stesso significato dei segnali di Cursor). */
+/** State marker on the left of the row (same meaning as Cursor indicators). */
 export function markFor(card) {
   switch (card.state) {
     case STATE.RUNNING:
-      return h('span', { class: 'mark running', role: 'img', 'aria-label': 'In corso' }, icon('spinner', { size: 20, className: 'spin' }));
+      return h('span', { class: 'mark running', role: 'img', 'aria-label': t('components.stateRunning') }, icon('spinner', { size: 20, className: 'spin' }));
     case STATE.ATTENTION:
-      return h('span.mark', null, h('span', { class: 'dot attention', role: 'img', 'aria-label': 'Richiede attenzione' }));
+      return h('span.mark', null, h('span', { class: 'dot attention', role: 'img', 'aria-label': t('components.stateNeedsAttention') }));
     case STATE.PENDING:
-      return h('span', { class: 'mark pending', role: 'img', 'aria-label': 'In sospeso' }, icon('clock', { size: 20 }));
+      return h('span', { class: 'mark pending', role: 'img', 'aria-label': t('components.statePending') }, icon('clock', { size: 20 }));
     case STATE.DONE:
-      return h('span.mark', null, h('span', { class: 'dot done', role: 'img', 'aria-label': 'Da leggere' }));
+      return h('span.mark', null, h('span', { class: 'dot done', role: 'img', 'aria-label': t('components.stateUnread') }));
     default:
       return h('span.mark', null, icon('terminal', { size: 18 }));
   }
 }
 
-/** Parti della riga secondaria legate allo stato. */
+/** Secondary row parts tied to state. */
 export function stateParts(card) {
   const a = card.attention;
   switch (card.state) {
     case STATE.RUNNING:
-      return ['In corso'];
+      return [t('components.stateRunning')];
     case STATE.ATTENTION:
-      return [a?.label || 'Richiede attenzione'];
+      return [attentionKindLabel(a?.kind)];
     case STATE.PENDING:
-      return [a?.label || 'Richiesta non risolta', a?.reason === 'ignorata' ? 'ignorata' : 'non risolta da tempo'];
+      return [attentionKindLabel(a?.kind), a?.reason === 'ignored' ? t('components.ignored') : t('components.unresolvedLong')];
     case STATE.DONE:
-      return ['Da leggere'];
+      return [t('components.stateUnread')];
     default:
       return [];
   }
 }
 
 export const STATE_PILL = Object.freeze({
-  [STATE.RUNNING]: { text: 'In corso', cls: 'running' },
-  [STATE.ATTENTION]: { text: 'Richiede attenzione', cls: 'attention' },
-  [STATE.PENDING]: { text: 'In sospeso', cls: '' },
-  [STATE.DONE]: { text: 'Da leggere', cls: 'done' },
-  [STATE.IDLE]: { text: 'Inattiva', cls: '' },
+  [STATE.RUNNING]: Object.freeze({ get text() { return t('components.pillRunning'); }, cls: 'running' }),
+  [STATE.ATTENTION]: Object.freeze({ get text() { return t('components.pillNeedsAttention'); }, cls: 'attention' }),
+  [STATE.PENDING]: Object.freeze({ get text() { return t('components.pillPending'); }, cls: '' }),
+  [STATE.DONE]: Object.freeze({ get text() { return t('components.pillUnread'); }, cls: 'done' }),
+  [STATE.IDLE]: Object.freeze({ get text() { return t('components.pillIdle'); }, cls: '' }),
 });
 
-const KIND_ICON = { domanda: 'question', approvazione: 'approval', piano: 'plan' };
+const KIND_ICON = { question: 'question', approval: 'approval', plan: 'plan' };
 
-/** Riga di una chat: titolo, progetto, stato (con icona del tipo di richiesta) e anteprima della domanda. */
+/** Chat row: title, project, state (with request-type icon) and question preview. */
 export function chatRow(card, { showWorkspace = false, showPrompt = false } = {}) {
   const labels = stateParts(card);
-  // Il progetto compare nelle liste miste; dentro un gruppo, se non c'e' uno stato da dire, si mostra il sottotitolo.
-  const meta = showWorkspace ? card.workspaceName : labels.length ? '' : card.subtitle;
+  // Project shows in mixed lists; inside a group, if there is no state to show, show the subtitle.
+  const meta = showWorkspace ? (card.workspaceName || t('common.noFolder')) : labels.length ? '' : card.subtitle;
   let stateIcon = null;
   if (card.state === STATE.ATTENTION) stateIcon = icon(KIND_ICON[card.attention?.kind] ?? 'alert', { size: 15 });
   else if (card.state === STATE.PENDING) stateIcon = icon('clock', { size: 15 });
@@ -133,7 +144,7 @@ export function chatRow(card, { showWorkspace = false, showPrompt = false } = {}
     h(
       'div.row-main',
       null,
-      h('div.row-title', null, card.name || 'Chat senza titolo'),
+      h('div.row-title', null, card.name || t('common.untitled')),
       meta ? h('div.row-meta', null, meta) : null,
       labels.length ? h('div', { class: `row-state ${card.state}` }, stateIcon, h('span', null, labels.join(' \u00b7 '))) : null,
       prompt ? h('div.row-prompt', null, prompt) : null,

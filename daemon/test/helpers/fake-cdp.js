@@ -1,5 +1,5 @@
-// Server CDP finto per i test: HTTP (/json/version, /json/list) + WebSocket minimale (RFC 6455) su 127.0.0.1.
-// Non e' un browser: risponde ai comandi con un gestore scritto dal test.
+// Fake CDP server for tests: HTTP (/json/version, /json/list) + minimal WebSocket (RFC 6455) on 127.0.0.1.
+// Not a browser: responds to commands with a handler written by the test.
 import crypto from 'node:crypto';
 import http from 'node:http';
 
@@ -24,7 +24,7 @@ function encodeText(text) {
   return Buffer.concat([header, payload]);
 }
 
-/** Estrae dal buffer tutti i frame completi (i client scrivono sempre con maschera). */
+/** Extracts all complete frames from the buffer (clients always write masked). */
 function takeFrames(state) {
   const frames = [];
   for (;;) {
@@ -80,7 +80,7 @@ export class FakeCdp {
     });
   }
 
-  /** Chiude tutte le connessioni WebSocket aperte (simula Cursor che si chiude). */
+  /** Closes all open WebSocket connections (simulates Cursor shutting down). */
   dropConnections() {
     for (const s of this.sockets) s.destroy();
   }
@@ -130,7 +130,7 @@ export class FakeCdp {
         let reply;
         try {
           const result = await this.handler(msg.method, msg.params, this);
-          if (result === 'NO_REPLY') continue; // per provare le scadenze
+          if (result === 'NO_REPLY') continue; // for timeout tests
           reply = { id: msg.id, result: result ?? {} };
         } catch (err) {
           reply = { id: msg.id, error: { code: -32000, message: String(err?.message || err) } };

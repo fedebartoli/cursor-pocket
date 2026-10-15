@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-Fase 0 - quali chat risultano "in corso" (unfinishedRunAt presente) e come si presentano (SOLA LETTURA, mode=ro).
-Solo metadati, nessun titolo/contenuto.
+Phase 0 - which chats appear "in progress" (unfinishedRunAt set) and how they look (READ ONLY, mode=ro).
+Metadata only, no titles or content.
 """
 import collections, json, os, sqlite3, time
 
@@ -37,22 +37,22 @@ def main():
         for k in j:
             keys[k] += 1
         rows.append((cid, arch, sub, rec, j))
-    print("chiavi presenti negli header (conteggio righe):")
+    print("keys present in headers (row count):")
     print("  ", dict(sorted(keys.items(), key=lambda kv: -kv[1])))
 
-    print("\n== header con unfinishedRunAt ==")
+    print("\n== headers with unfinishedRunAt ==")
     for cid, arch, sub, rec, j in sorted(rows, key=lambda r: -(r[3] or 0)):
         if "unfinishedRunAt" in j:
             cd = kv(con, f"composerData:{cid}") or {}
-            print(f"  eta'_ultimo_agg={ (now-(j.get('lastUpdatedAt') or rec or 0))/60000:.1f} min | "
-                  f"unfinished={ (now-j['unfinishedRunAt'])/60000:.1f} min fa | arch={arch} sub={sub} "
+            print(f"  last_update_age={ (now-(j.get('lastUpdatedAt') or rec or 0))/60000:.1f} min | "
+                  f"unfinished={ (now-j['unfinishedRunAt'])/60000:.1f} min ago | arch={arch} sub={sub} "
                   f"loc={(j.get('agentLocation') or {}).get('type')} flag={j.get('hasBlockingPendingActions')} "
                   f"cd.status={cd.get('status')} gen={len(cd.get('generatingBubbleIds') or [])}")
 
-    print("\n== le 6 chat piu' recenti (qualsiasi stato), metadati ==")
+    print("\n== 6 most recent chats (any state), metadata ==")
     for cid, arch, sub, rec, j in sorted(rows, key=lambda r: -(r[3] or 0))[:6]:
         cd = kv(con, f"composerData:{cid}") or {}
-        print(f"  eta'={ (now-(rec or 0))/60000:.1f} min | arch={arch} sub={sub} draft={j.get('isDraft')} "
+        print(f"  age={ (now-(rec or 0))/60000:.1f} min | arch={arch} sub={sub} draft={j.get('isDraft')} "
               f"loc={(j.get('agentLocation') or {}).get('type')} flag={j.get('hasBlockingPendingActions')} "
               f"unread={j.get('hasUnreadMessages')} unfinished={'unfinishedRunAt' in j} "
               f"cd.status={cd.get('status')} bubbles={len(cd.get('fullConversationHeadersOnly') or [])}")

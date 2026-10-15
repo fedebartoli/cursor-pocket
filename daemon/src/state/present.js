@@ -1,72 +1,61 @@
-// Presentazione: trasforma le chat "grezze" del modello nel payload per la PWA.
-// Funzione PURA e deterministica (stesso input -> stesso output, senza orari relativi), cosi' il daemon puo'
-// confrontare gli snapshot e notificare i client solo quando qualcosa cambia davvero.
+// Presentation: turns "raw" model chats into the PWA payload.
+// PURE deterministic function (same input -> same output, no relative times), so the daemon can
+// compare snapshots and notify clients only when something actually changed.
 import { collapsedIds, orderSections } from '../cursor/sidebar.js';
 export const STATES = Object.freeze({
-  RUNNING: 'in_corso',
-  ATTENTION: 'attenzione',
-  PENDING: 'in_sospeso',
-  DONE: 'finita',
-  IDLE: 'inattiva',
+  RUNNING: 'running',
+  ATTENTION: 'attention',
+  PENDING: 'pending',
+  DONE: 'done',
+  IDLE: 'idle',
 });
 
 export function ignoreKey(chatId, key) {
   return `${chatId}|${key}`;
 }
 
-export function attentionLabel(a) {
-  switch (a.kind) {
-    case 'domanda':
-      return 'Domanda in attesa';
-    case 'approvazione':
-      return 'Approvazione richiesta';
-    case 'piano':
-      return 'Piano in attesa';
-    default:
-      return 'Richiesta non risolta';
-  }
+// [tool names, action code (PWA translates), category (PWA picks icon from category)]
+const TOOLS = [
+  [['read_file', 'read_file_v2'], 'read_file', 'read'],
+  [['edit_file', 'edit_file_v2', 'search_replace', 'write', 'apply_patch', 'multi_edit'], 'edit_file', 'edit'],
+  [['delete_file'], 'delete_file', 'delete'],
+  [['run_terminal_command_v2', 'run_terminal_cmd', 'run_terminal_command'], 'run_command', 'terminal'],
+  [['grep', 'ripgrep', 'ripgrep_raw_search', 'codebase_search', 'semantic_search', 'grep_search'], 'search_code', 'search'],
+  [['glob_file_search', 'list_dir', 'file_search', 'list_dir_v2'], 'explore_files', 'search'],
+  [['web_search', 'web_fetch'], 'search_web', 'web'],
+  [['ask_question'], 'ask_question', 'question'],
+  [['create_plan'], 'create_plan', 'plan'],
+  [['todo_write'], 'update_todos', 'todo'],
+  [['task', 'task_v2'], 'start_subagent', 'agent'],
+  [['read_lints'], 'check_errors', 'search'],
+  [['mcp', 'call_mcp_tool', 'read_mcp_resource'], 'use_mcp', 'tool'],
+];
+
+/** Action code and category for a tool TYPE (never parameters: commands and paths do not leave the daemon). */
+export function toolActivity(name) {
+  for (const [names, action, category] of TOOLS) if (names.includes(name)) return { action, category };
+  return { action: 'other_action', category: 'tool' };
 }
 
-/** Cosa chiede di approvare un tool (solo il TIPO: mai il comando o i percorsi). */
-export function toolActionLabel(toolName) {
+/** Approval action TYPE for notifications (Italian text); not sent in the state payload. */
+export function toolApprovalAction(toolName) {
   switch (toolName) {
     case 'run_terminal_command_v2':
-      return 'Comando da eseguire';
+    case 'run_terminal_cmd':
+    case 'run_terminal_command':
+      return 'run_command';
     case 'edit_file':
     case 'edit_file_v2':
-      return 'Modifica di un file';
+      return 'edit_file';
     case 'mcp':
     case 'call_mcp_tool':
     case 'read_mcp_resource':
-      return 'Strumento MCP';
+      return 'mcp_tool';
     case 'web_fetch':
-      return 'Richiesta web';
+      return 'web_request';
     default:
-      return 'Azione da approvare';
+      return 'generic';
   }
-}
-
-// [nomi del tool, etichetta, categoria (la PWA sceglie l'icona dalla categoria)]
-const TOOLS = [
-  [['read_file', 'read_file_v2'], 'Legge un file', 'read'],
-  [['edit_file', 'edit_file_v2', 'search_replace', 'write', 'apply_patch', 'multi_edit'], 'Modifica un file', 'edit'],
-  [['delete_file'], 'Elimina un file', 'delete'],
-  [['run_terminal_command_v2', 'run_terminal_cmd', 'run_terminal_command'], 'Esegue un comando', 'terminal'],
-  [['grep', 'ripgrep', 'ripgrep_raw_search', 'codebase_search', 'semantic_search', 'grep_search'], 'Cerca nel codice', 'search'],
-  [['glob_file_search', 'list_dir', 'file_search', 'list_dir_v2'], 'Esplora i file', 'search'],
-  [['web_search', 'web_fetch'], 'Cerca sul web', 'web'],
-  [['ask_question'], 'Pone una domanda', 'question'],
-  [['create_plan'], 'Prepara un piano', 'plan'],
-  [['todo_write'], 'Aggiorna le attivit\u00e0', 'todo'],
-  [['task', 'task_v2'], 'Avvia un sotto-agente', 'agent'],
-  [['read_lints'], 'Controlla gli errori', 'search'],
-  [['mcp', 'call_mcp_tool', 'read_mcp_resource'], 'Usa uno strumento MCP', 'tool'],
-];
-
-/** Etichetta italiana e categoria del TIPO di azione di un tool (mai i parametri: comandi e percorsi non escono dal daemon). */
-export function toolActivity(name) {
-  for (const [names, label, category] of TOOLS) if (names.includes(name)) return { label, category };
-  return { label: 'Esegue un\u2019azione', category: 'tool' };
 }
 
 function toolState(status) {
@@ -89,11 +78,11 @@ function toolState(status) {
   }
 }
 
-// Un tool rimasto "in corso" da molto tempo e' quasi sempre un residuo (chat interrotta): non si mostra come attivo.
+// A tool stuck "running" for a long time is almost always stale (interrupted chat): do not show as active.
 const STALE_RUNNING_MS = 15 * 60_000;
 const staleRunning = (state, at, now) => (state === 'running' && at && now - at > STALE_RUNNING_MS ? '' : state);
 
-/** Stato di un tool (done | running | error | stopped | '') tenendo conto dei residui vecchi. */
+/** Tool state (done | running | error | stopped | '') accounting for old stale entries. */
 export const toolStateOf = (status, at, now) => staleRunning(toolState(status), at, now);
 
 const firstLine = (t, n) => {
@@ -103,21 +92,21 @@ const firstLine = (t, n) => {
 };
 
 /**
- * "Attivita' recente" di una chat dai bubble (db.recentActivity), dal piu' recente al piu' vecchio:
- * `{ id (bubble), at, kind: 'user' | 'assistant' | 'tool', category (solo tool), label, state, preview }`. I tool mostrano solo il tipo di azione;
- * i bubble vuoti (senza testo ne' tool) si saltano. Un tool "in corso" da piu' di 15 minuti non e' piu' dato per attivo.
+ * Recent activity for a chat from bubbles (db.recentActivity), newest to oldest:
+ * `{ id (bubble), at, kind: 'user' | 'assistant' | 'tool', category (tools only), action, state, preview }`. Tools show action type only;
+ * empty bubbles (no text or tool) are skipped. A tool "running" for more than 15 minutes is no longer treated as active.
  */
 export function activityOf(items, now = Date.now()) {
   const out = [];
   for (const b of items ?? []) {
     if (b.tool) {
-      const { label, category } = toolActivity(b.tool.name);
-      out.push({ id: b.id, at: b.at, kind: 'tool', category, label, state: staleRunning(toolState(b.tool.status), b.at, now), preview: '' });
+      const { action, category } = toolActivity(b.tool.name);
+      out.push({ id: b.id, at: b.at, kind: 'tool', category, action, state: staleRunning(toolState(b.tool.status), b.at, now), preview: '' });
     } else if (b.text) {
       out.push(
         b.type === 1
-          ? { id: b.id, at: b.at, kind: 'user', label: 'Messaggio inviato', state: '', preview: firstLine(b.text, 140) }
-          : { id: b.id, at: b.at, kind: 'assistant', label: 'Risposta dell\u2019agente', state: '', preview: firstLine(b.text, 140) },
+          ? { id: b.id, at: b.at, kind: 'user', action: 'message_sent', state: '', preview: firstLine(b.text, 140) }
+          : { id: b.id, at: b.at, kind: 'assistant', action: 'agent_reply', state: '', preview: firstLine(b.text, 140) },
       );
     }
   }
@@ -125,20 +114,20 @@ export function activityOf(items, now = Date.now()) {
 }
 
 /**
- * Stato di una chat applicando "Ignora" e la soglia "In sospeso".
+ * Chat state applying "Ignore" and the "Pending" threshold.
  *
- * Una chat che sta LAVORANDO non e' ferma in attesa di te: il flag di Cursor (`hasBlockingPendingActions`) resta spesso
- * acceso da una vecchia domanda e Cursor lo mostra come pallino anche mentre l'agente lavora (FINDINGS 9.1, 9.7).
- * Quindi durante la run conta come attenzione solo una richiesta VIVA (una domanda aperta o un'approvazione in attesa
- * adesso); un residuo o un piano non risolto tornano visibili quando la run finisce.
+ * A chat that is WORKING is not idle waiting for you: Cursor's flag (`hasBlockingPendingActions`) often stays on
+ * from an old question and Cursor shows the dot even while the agent works (FINDINGS 9.1, 9.7).
+ * So during a run only a LIVE request counts as attention (open question or approval pending now);
+ * stale or unresolved plan become visible again when the run ends.
  */
 export function stateOf(chat, { ignored, now, pendingAfterMs }) {
   const a = chat.attention;
   if (a && (a.live || !chat.running)) {
     const isIgnored = ignored.has(ignoreKey(chat.id, a.key));
     const isOld = pendingAfterMs > 0 && now - a.since > pendingAfterMs;
-    if (isIgnored) return { state: STATES.PENDING, reason: 'ignorata' };
-    if (isOld) return { state: STATES.PENDING, reason: 'vecchia' };
+    if (isIgnored) return { state: STATES.PENDING, reason: 'ignored' };
+    if (isOld) return { state: STATES.PENDING, reason: 'old' };
     return { state: STATES.ATTENTION, reason: null };
   }
   if (chat.running) return { state: STATES.RUNNING, reason: null };
@@ -169,8 +158,7 @@ function card(chat, label, ctx) {
           key: a.key,
           live: a.live,
           since: a.since,
-          label: attentionLabel(a),
-          detail: a.kind === 'approvazione' ? toolActionLabel(a.toolName) : '',
+          ...(a.kind === 'approval' ? { approvalAction: toolApprovalAction(a.toolName) } : {}),
           reason,
           title: a.question?.title ?? '',
           prompt: a.question?.questions?.[0]?.prompt?.slice(0, 160) ?? '',
@@ -181,10 +169,10 @@ function card(chat, label, ctx) {
 
 /**
  * @param {object} p
- * @param {object[]} p.chats      chat del modello (buildChat + attention arricchita)
- * @param {object|null} p.settings impostazioni sidebar di Cursor (puo' essere null)
- * @param {Set<string>} p.ignored  coppie ignoreKey(chatId, key)
- * @param {Map<string, {favorite: boolean, muted: boolean}>} [p.prefs] preferenze locali per chat
+ * @param {object[]} p.chats      model chats (buildChat + enriched attention)
+ * @param {object|null} p.settings Cursor sidebar settings (may be null)
+ * @param {Set<string>} p.ignored  ignoreKey(chatId, key) pairs
+ * @param {Map<string, {favorite: boolean, muted: boolean}>} [p.prefs] local per-chat prefs
  * @param {number} p.now
  * @param {number} p.pendingAfterMs
  */
@@ -192,7 +180,7 @@ export function presentState({ chats, settings, ignored, now, pendingAfterMs, pr
   const ctx = { ignored, now, pendingAfterMs, prefs };
   const groupBy = 'workspace';
 
-  // Sezioni per workspace.
+  // Sections by workspace.
   const sections = new Map();
   for (const c of chats) {
     let s = sections.get(c.sectionId);
@@ -204,7 +192,7 @@ export function presentState({ chats, settings, ignored, now, pendingAfterMs, pr
     if (c.lastUpdatedAt > s.lastUpdatedAt) s.lastUpdatedAt = c.lastUpdatedAt;
   }
 
-  // Nomi duplicati (due cartelle con lo stesso nome): aggiungo la cartella superiore.
+  // Duplicate names (two folders with the same name): append parent folder.
   const byName = new Map();
   for (const s of sections.values()) byName.set(s.name, (byName.get(s.name) || 0) + 1);
   for (const s of sections.values()) {

@@ -1,8 +1,8 @@
-// Interfaccia con macOS per "Mac sveglio" a schermo chiuso: sospensione (pmset), stato dello schermo, batteria, luminosita'.
-// Tutto passa da `run(comando, argomenti)` (iniettabile nei test) e NON legge mai contenuti di chat.
+// macOS interface for "keep Mac awake" with lid closed: sleep (pmset), lid state, battery, brightness.
+// Everything goes through `run(command, args)` (injectable in tests) and NEVER reads chat content.
 //
-// Sospensione: `sudo -n pmset -a disablesleep 1|0` funziona solo se l'utente ha installato la regola di `tools/mac/power-setup.sh`
-// (ammette esattamente quei due comandi, senza password). Senza regola `canControlSleep()` e' falso e non si prova nemmeno.
+// Sleep: `sudo -n pmset -a disablesleep 1|0` works only if the user installed the rule from `tools/mac/power-setup.sh`
+// (allows exactly those two commands, no password). Without it `canControlSleep()` is false and we do not try.
 import { execFile } from 'node:child_process';
 import fs from 'node:fs';
 
@@ -36,7 +36,7 @@ export class Power {
     await this.run(SUDO, ['-n', PMSET, '-a', 'disablesleep', on ? '1' : '0']);
   }
 
-  /** @returns {Promise<boolean|null>} valore attuale di SleepDisabled (null se non leggibile) */
+  /** @returns {Promise<boolean|null>} current SleepDisabled value (null if unreadable) */
   async sleepDisabled() {
     try {
       const m = /SleepDisabled\s+(\d)/.exec(await this.run(PMSET, ['-g']));
@@ -46,7 +46,7 @@ export class Power {
     }
   }
 
-  /** @returns {Promise<boolean|null>} schermo chiuso? (null se non leggibile, es. Mac fisso) */
+  /** @returns {Promise<boolean|null>} lid closed? (null if unreadable, e.g. desktop Mac) */
   async lidClosed() {
     try {
       const m = /"AppleClamshellState"\s*=\s*(Yes|No)/.exec(await this.run(IOREG, ['-r', '-k', 'AppleClamshellState', '-d', '4']));

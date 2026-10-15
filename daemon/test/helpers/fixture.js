@@ -1,5 +1,5 @@
-// Database sintetico con lo stesso schema di `state.vscdb` di Cursor (solo le parti usate dal daemon).
-// I test non toccano MAI il database reale.
+// Synthetic database with the same schema as Cursor's `state.vscdb` (only parts used by the daemon).
+// Tests NEVER touch the real database.
 import fs from 'node:fs';
 import os from 'node:os';
 import path from 'node:path';
@@ -38,15 +38,15 @@ export class CursorFixture {
   }
 
   /**
-   * Progetti rimossi dalla sidebar dell'Agents Window (`cursor/glass.removedProjects`).
-   * `workspaceIds`: id di workspace (come in `workspaceIdentifier.id`). Un valore non-array scrive il testo grezzo.
+   * Projects removed from the Agents Window sidebar (`cursor/glass.removedProjects`).
+   * `workspaceIds`: workspace ids (as in `workspaceIdentifier.id`). A non-array value writes raw text.
    */
   setRemovedProjects(workspaceIds) {
     const value = Array.isArray(workspaceIds)
       ? JSON.stringify(
           workspaceIds.map((id, i) => ({
             type: 'workspace',
-            id: `glass-project-${i}-${id}`, // diverso dall'id del workspace, come in Cursor
+            id: `glass-project-${i}-${id}`, // distinct from workspace id, as in Cursor
             name: `Progetto ${i}`,
             repoUrls: [],
             workspaceIdentifier: { id, uri: { $mid: 1, scheme: 'file', path: `/Users/demo/${id}` } },
@@ -56,7 +56,7 @@ export class CursorFixture {
     this.db.prepare('INSERT INTO ItemTable (key, value) VALUES (?, ?)').run('cursor/glass.removedProjects', value);
   }
 
-  /** Scrive workspaceStorage/<id>/workspace.json con il campo `folder`. */
+  /** Writes workspaceStorage/<id>/workspace.json with the `folder` field. */
   setWorkspaceJson(workspaceId, folderPath) {
     const d = path.join(this.wsDir, workspaceId);
     fs.mkdirSync(d, { recursive: true });
@@ -64,8 +64,8 @@ export class CursorFixture {
   }
 
   /**
-   * Crea o aggiorna una chat. `header` sovrascrive campi del JSON dell'header.
-   * Opzioni: path (cartella), archived, subagent, location (null per chat classica).
+   * Creates or updates a chat. `header` overrides fields in the header JSON.
+   * Options: path (folder), archived, subagent, location (null for classic chat).
    */
   chat(id, opts = {}) {
     const prev = this.chats.get(id) ?? {};
@@ -101,7 +101,7 @@ export class CursorFixture {
   }
 
   /**
-   * Scrive composerData + bubble. `bubbles`: [{id, type, createdAt (ms), text?, tool?:{name,status,toolCallId,params?,userDecision?,additionalData?}}]
+   * Writes composerData + bubble. `bubbles`: [{id, type, createdAt (ms), text?, tool?:{name,status,toolCallId,params?,userDecision?,additionalData?}}]
    */
   conversation(id, bubbles, { status = 'completed', queueItems = [] } = {}) {
     const headers = bubbles.map((b) => ({ bubbleId: b.id, type: b.type, createdAt: new Date(b.createdAt).toISOString() }));
@@ -135,10 +135,10 @@ export const QUESTION_PARAMS = {
 };
 
 /**
- * Conversazione standard che termina con una domanda.
- * Ciclo di vita reale (FINDINGS 9.1): `status:'loading'` nei primi secondi; poi `status:'completed'` con
- * `additionalData:{status:'pending'}` mentre aspetta la risposta; `{status:'submitted'}` a risposta data.
- * `composerStatus`: stato persistito del composer (`aborted` durante la run, `completed` a run finita).
+ * Standard conversation ending with a question.
+ * Real lifecycle (FINDINGS 9.1): `status:'loading'` in the first seconds; then `status:'completed'` with
+ * `additionalData:{status:'pending'}` while waiting for an answer; `{status:'submitted'}` after answer.
+ * `composerStatus`: persisted composer state (`aborted` during run, `completed` when run finishes).
  */
 export function askingConversation(fx, id, { toolCallId = 'tc-1', at = 1_700_000_090_000, status = 'loading', additionalData, composerStatus } = {}) {
   fx.conversation(
@@ -152,9 +152,9 @@ export function askingConversation(fx, id, { toolCallId = 'tc-1', at = 1_700_000
 }
 
 /**
- * Conversazione che termina con un comando in attesa di approvazione (FINDINGS 11): il bubble del tool porta
- * `additionalData.reviewData` con `status: 'Requested'` finche' l'utente non decide, poi `'Done'`.
- * `trailing`: bubble aggiunti dopo (Cursor cerca l'approvazione negli ultimi DUE bubble).
+ * Conversation ending with a command awaiting approval (FINDINGS 11): the tool bubble carries
+ * `additionalData.reviewData` with `status: 'Requested'` until the user decides, then `'Done'`.
+ * `trailing`: bubbles added after (Cursor looks for approval in the last TWO bubbles).
  */
 export function approvingConversation(fx, id, { toolCallId = 'tc-ap', at = 1_700_000_090_000, reviewStatus = 'Requested', toolStatus = 'loading', composerStatus, trailing = [], command = 'echo prova' } = {}) {
   fx.conversation(
@@ -179,7 +179,7 @@ export function approvingConversation(fx, id, { toolCallId = 'tc-ap', at = 1_700
   );
 }
 
-/** Configurazione di test: percorsi temporanei, intervalli minimi, nessuna attesa. */
+/** Test configuration: temporary paths, minimal intervals, no waits. */
 export function testConfig(fx, overrides = {}) {
   const base = loadConfig({
     CP_CURSOR_DB: fx.file,

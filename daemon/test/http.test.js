@@ -8,7 +8,7 @@ import { T0, startHarness } from './helpers/harness.js';
 
 const ID = 'chat-0000-0001';
 
-/** Chat con una domanda viva (visibile nello stato dopo un tick). */
+/** Chat with a live question (visible in state after one tick). */
 function withQuestion(h, { toolCallId = 'tc-1' } = {}) {
   h.fx.chat(ID, { name: 'Titolo di prova', lastUpdatedAt: T0 - 1000, header: { hasBlockingPendingActions: true } });
   askingConversation(h.fx, ID, { toolCallId, at: T0 - 2000 });
@@ -20,7 +20,7 @@ function validSub(host = 'web.push.apple.com') {
   return { endpoint: `https://${host}/wpush/v2/token-${crypto.randomBytes(4).toString('hex')}`, keys: { p256dh: b64u.encode(ua.getPublicKey()), auth: b64u.encode(crypto.randomBytes(16)) } };
 }
 
-test('pubblico: healthz, Host non consentito, URL anomali, nessun accesso senza sessione', async () => {
+test('public: healthz, disallowed Host, anomalous URLs, no access without session', async () => {
   const h = await startHarness();
   try {
     assert.equal((await h.req({ path: '/healthz' })).status, 200);
@@ -37,7 +37,7 @@ test('pubblico: healthz, Host non consentito, URL anomali, nessun accesso senza 
   }
 });
 
-test('abbinamento: cookie HttpOnly/SameSite=Strict, Secure solo via HTTPS, codice monouso, blocco dopo troppi errori', async () => {
+test('pairing: HttpOnly/SameSite=Strict cookie, Secure only over HTTPS, one-time code, lockout after too many failures', async () => {
   const h = await startHarness();
   try {
     const { code } = h.app.auth.createPairingCode();
@@ -50,16 +50,16 @@ test('abbinamento: cookie HttpOnly/SameSite=Strict, Secure solo via HTTPS, codic
     const cookie = ok.headers['set-cookie'][0];
     assert.match(cookie, /HttpOnly/);
     assert.match(cookie, /SameSite=Strict/);
-    assert.doesNotMatch(cookie, /Secure/, 'su HTTP locale niente Secure');
+    assert.doesNotMatch(cookie, /Secure/, 'no Secure on local HTTP');
     assert.deepEqual((await h.req({ path: '/api/session', cookie: cookie.split(';')[0] })).json(), { authenticated: true });
-    assert.equal((await h.req({ method: 'POST', path: '/api/pair', body: { code } })).status, 401, 'monouso');
+    assert.equal((await h.req({ method: 'POST', path: '/api/pair', body: { code } })).status, 401, 'one-time use');
 
     const viaTs = h.app.auth.createPairingCode().code;
     const secure = await h.req({ method: 'POST', path: '/api/pair', body: { code: viaTs }, headers: { Host: 'macbook.tail1234.ts.net' } });
     assert.match(secure.headers['set-cookie'][0], /; Secure$/);
     assert.match(secure.headers['strict-transport-security'], /max-age=/);
 
-    // 5 errori consecutivi -> 429 con Retry-After, anche per un codice corretto
+    // 5 consecutive failures -> 429 with Retry-After, even for a correct code
     const fresh = h.app.auth.createPairingCode().code;
     let last;
     for (let i = 0; i < 6; i++) last = await h.req({ method: 'POST', path: '/api/pair', body: { code: 'ZZZZ-ZZZZ' } });
@@ -71,7 +71,7 @@ test('abbinamento: cookie HttpOnly/SameSite=Strict, Secure solo via HTTPS, codic
   }
 });
 
-test('stato e Ignora: richiesta ignorata passa a "in sospeso"; chiave non piu\' attuale = 409; ripristino', async () => {
+test('state and Ignore: ignored request moves to pending; stale key = 409; restore', async () => {
   const h = await startHarness();
   try {
     const cookie = await h.pair();
@@ -81,7 +81,7 @@ test('stato e Ignora: richiesta ignorata passa a "in sospeso"; chiave non piu\' 
     const s1 = (await h.req({ path: '/api/state', cookie })).json();
     assert.deepEqual(s1.state.counts, { attention: 1, pending: 0, running: 0, total: 1 });
     const card = s1.state.attention[0];
-    assert.equal(card.attention.kind, 'domanda');
+    assert.equal(card.attention.kind, 'question');
     assert.equal(card.attention.prompt, QUESTION_PARAMS.questions[0].prompt);
 
     assert.equal((await h.req({ method: 'POST', path: `/api/chats/${ID}/ignore`, cookie, body: { key: 'altra-chiave' } })).status, 409);
@@ -90,10 +90,10 @@ test('stato e Ignora: richiesta ignorata passa a "in sospeso"; chiave non piu\' 
 
     const s2 = (await h.req({ path: '/api/state', cookie })).json();
     assert.deepEqual(s2.state.counts, { attention: 0, pending: 1, running: 0, total: 1 });
-    assert.equal(s2.state.pending[0].attention.reason, 'ignorata');
+    assert.equal(s2.state.pending[0].attention.reason, 'ignored');
     assert.ok(s2.version > s1.version);
 
-    // la stessa chat pone una NUOVA domanda: il pallino ricompare
+    // same chat asks a NEW question: dot reappears
     h.fx.chat(ID, { lastUpdatedAt: T0 + 5000 });
     askingConversation(h.fx, ID, { toolCallId: 'tc-2', at: T0 + 4000 });
     h.tick();
@@ -101,7 +101,7 @@ test('stato e Ignora: richiesta ignorata passa a "in sospeso"; chiave non piu\' 
     assert.deepEqual(s3.state.counts.attention, 1);
     assert.equal(s3.state.attention[0].attention.key, 'tc-2');
 
-    // ripristino della vecchia richiesta (idempotente)
+    // restore old ignore (idempotent)
     assert.equal((await h.req({ method: 'DELETE', path: `/api/chats/${ID}/ignore`, cookie, body: { key: card.attention.key } })).status, 200);
     assert.equal((await h.req({ method: 'POST', path: `/api/chats/zzzzzzzz-nuova/ignore`, cookie, body: { key: 'x' } })).status, 404);
   } finally {
@@ -109,7 +109,7 @@ test('stato e Ignora: richiesta ignorata passa a "in sospeso"; chiave non piu\' 
   }
 });
 
-test('dettaglio chat: domanda con opzioni e ultimo messaggio; id non valido', async () => {
+test('chat detail: question with options and last message; invalid id', async () => {
   const h = await startHarness();
   try {
     const cookie = await h.pair();
@@ -124,7 +124,7 @@ test('dettaglio chat: domanda con opzioni e ultimo messaggio; id non valido', as
   }
 });
 
-test('CSRF e validazione del corpo: Origin diversa, Content-Type errato, corpo troppo grande, JSON rotto', async () => {
+test('CSRF and body validation: wrong Origin, wrong Content-Type, body too large, broken JSON', async () => {
   const h = await startHarness();
   try {
     const cookie = await h.pair();
@@ -138,7 +138,7 @@ test('CSRF e validazione del corpo: Origin diversa, Content-Type errato, corpo t
     assert.equal((await h.req({ method: 'POST', path: url, cookie, body: '{rotto', headers: { 'Content-Type': 'application/json' } })).status, 400);
     const huge = JSON.stringify({ key: 'x'.repeat(20_000) });
     assert.equal((await h.req({ method: 'POST', path: url, cookie, body: huge, headers: { 'Content-Type': 'application/json' } })).status, 413);
-    // stessa origine: consentita
+    // same origin: allowed
     const host = `127.0.0.1:${h.port}`;
     assert.equal((await h.req({ method: 'POST', path: url, cookie, body: { key }, headers: { Origin: `http://${host}`, Host: host } })).status, 200);
   } finally {
@@ -146,31 +146,36 @@ test('CSRF e validazione del corpo: Origin diversa, Content-Type errato, corpo t
   }
 });
 
-test('push: validazione della sottoscrizione, limite dispositivi, annullamento, notifica di prova e logout', async () => {
+test('push: subscription validation, device limit, unsubscribe, test notification and logout', async () => {
   const h = await startHarness();
   try {
     const cookie = await h.pair();
     assert.match((await h.req({ path: '/api/push/public-key', cookie })).json().publicKey, /^[\w-]{87}$/, '65 byte in base64url');
 
     const post = (p, body) => h.req({ method: 'POST', path: p, cookie, body });
-    assert.equal((await post('/api/push/subscribe', { subscription: validSub('evil.example.com') })).status, 400, 'host non push');
+    assert.equal((await post('/api/push/subscribe', { subscription: validSub('evil.example.com') })).status, 400, 'non-push host');
     assert.equal((await post('/api/push/subscribe', { subscription: { endpoint: 'https://web.push.apple.com/x', keys: { p256dh: 'AAAA', auth: 'AAAA' } } })).status, 400);
     assert.equal((await post('/api/push/subscribe', {})).status, 400);
 
     const sub = validSub();
     assert.equal((await post('/api/push/subscribe', { subscription: sub })).status, 200);
-    assert.equal((await post('/api/push/subscribe', { subscription: sub })).status, 200, 'idempotente');
+    assert.equal((await post('/api/push/subscribe', { subscription: sub })).status, 200, 'idempotent');
     assert.equal(h.app.store.countSubscriptions(), 1);
+    assert.equal(h.app.store.listSubscriptions()[0].lang, null);
+    assert.equal((await post('/api/push/subscribe', { subscription: sub, lang: 'de' })).status, 200);
+    assert.equal(h.app.store.listSubscriptions()[0].lang, 'de');
+    assert.equal((await post('/api/push/subscribe', { subscription: sub, lang: 'not-a-lang' })).status, 200);
+    assert.equal(h.app.store.listSubscriptions()[0].lang, 'de', 'invalid lang ignored');
     assert.deepEqual((await post('/api/push/status', { endpoint: sub.endpoint })).json(), { subscribed: true, total: 1 });
 
     const test1 = await post('/api/push/test', {});
     assert.deepEqual(test1.json(), { sent: 1, failed: 0, removed: 0 });
     assert.equal(h.sent.length, 1);
     assert.equal(h.sent[0].subscription.endpoint, sub.endpoint);
-    assert.equal((await post('/api/push/test', {})).status, 429, 'una notifica di prova ogni 5 secondi');
+    assert.equal((await post('/api/push/test', {})).status, 429, 'one test notification every 5 seconds');
 
     for (let i = 0; i < 9; i++) assert.equal((await post('/api/push/subscribe', { subscription: validSub() })).status, 200);
-    assert.equal((await post('/api/push/subscribe', { subscription: validSub() })).status, 409, 'massimo 10 dispositivi');
+    assert.equal((await post('/api/push/subscribe', { subscription: validSub() })).status, 409, 'max 10 devices');
 
     assert.equal((await post('/api/push/unsubscribe', { endpoint: sub.endpoint })).status, 200);
     assert.equal(h.app.store.countSubscriptions(), 9);
@@ -178,24 +183,24 @@ test('push: validazione della sottoscrizione, limite dispositivi, annullamento, 
     const lo = await post('/api/logout', {});
     assert.equal(lo.status, 200);
     assert.match(lo.headers['set-cookie'][0], /Max-Age=0/);
-    assert.equal(h.app.store.countSubscriptions(), 0, 'il logout elimina le sottoscrizioni della sessione');
+    assert.equal(h.app.store.countSubscriptions(), 0, 'logout removes session subscriptions');
     assert.equal((await h.req({ path: '/api/state', cookie })).status, 401);
   } finally {
     await h.stop();
   }
 });
 
-test('notifiche end-to-end: nuova domanda -> una sola push; chat finita -> una push; nessuna push per lo stato iniziale', async () => {
+test('notifications end-to-end: new question -> one push; chat finished -> one push; no push for initial state', async () => {
   const h = await startHarness();
   try {
     const cookie = await h.pair();
     await h.req({ method: 'POST', path: '/api/push/subscribe', cookie, body: { subscription: validSub() } });
-    // stato iniziale: un residuo
+    // initial state: one stale chat
     h.fx.chat('residuo-00001', { name: 'Vecchia', lastUpdatedAt: T0 - 5000, header: { hasBlockingPendingActions: true } });
     h.tick();
     h.tick();
     assert.equal(h.sent.length, 0);
-    // nuova domanda
+    // new question
     withQuestion(h);
     h.tick();
     await new Promise((r) => setImmediate(r));
@@ -203,15 +208,15 @@ test('notifiche end-to-end: nuova domanda -> una sola push; chat finita -> una p
     await new Promise((r) => setImmediate(r));
     assert.equal(h.sent.length, 1);
     const payload = JSON.parse(h.sent[0].payload);
-    assert.equal(payload.title, 'Domanda in attesa');
+    assert.equal(payload.title, 'Question waiting');
     assert.equal(payload.url, `/#/chat/${ID}`);
-    assert.equal(payload.badge, 2, 'badge = chat che richiedono attenzione (residuo incluso)');
+    assert.equal(payload.badge, 2, 'badge = chats needing attention (stale included)');
   } finally {
     await h.stop();
   }
 });
 
-test('push: approvazione in attesa = notifica con il TIPO di azione, mai il comando; poi il badge conta anche lei', async () => {
+test('push: pending approval = notification with action TYPE, never the command; then badge counts it too', async () => {
   const h = await startHarness({ configOverrides: { approvalDelayMs: 5000 } });
   try {
     const cookie = await h.pair();
@@ -222,34 +227,34 @@ test('push: approvazione in attesa = notifica con il TIPO di azione, mai il coma
     h.tick();
     h.tick(4000);
     await new Promise((r) => setImmediate(r));
-    assert.equal(h.sent.length, 0, 'sotto il ritardo: nessuna notifica');
+    assert.equal(h.sent.length, 0, 'below delay: no notification');
     h.tick(2000);
     await new Promise((r) => setImmediate(r));
     h.tick();
     await new Promise((r) => setImmediate(r));
     assert.equal(h.sent.length, 1);
     const payload = JSON.parse(h.sent[0].payload);
-    assert.equal(payload.title, 'Approvazione richiesta');
-    assert.equal(payload.kind, 'approvazione');
+    assert.equal(payload.title, 'Approval required');
+    assert.equal(payload.kind, 'approval');
     assert.match(payload.body, /Migrazione/);
-    assert.match(payload.body, /Comando da eseguire/);
+    assert.match(payload.body, /Command to run/);
     assert.equal(payload.url, `/#/chat/${ID}`);
-    assert.equal(h.sent[0].payload.includes('echo prova'), false, 'il comando non esce mai dal daemon');
+    assert.equal(h.sent[0].payload.includes('echo prova'), false, 'command never leaves the daemon');
     assert.equal(payload.badge, 1);
-    // tempi nel log (solo numeri): dall'inizio della richiesta alla notifica, compreso il ritardo di 5 s
-    const sentLog = h.logLines.map((l) => JSON.parse(l)).find((l) => l.event === 'push_sent' && l.kind === 'approvazione');
-    assert.ok(sentLog, 'push_sent con il tipo di notifica');
+    // timings in log (numbers only): from request start to notification, including 5 s delay
+    const sentLog = h.logLines.map((l) => JSON.parse(l)).find((l) => l.event === 'push_sent' && l.kind === 'approval');
+    assert.ok(sentLog, 'push_sent with notification kind');
     assert.ok(Number.isFinite(sentLog.detectMs) && sentLog.detectMs >= 5000, `detectMs=${sentLog.detectMs}`);
     assert.ok(Number.isFinite(sentLog.sendMs));
     const st = (await h.req({ path: '/api/state', cookie })).json();
-    assert.equal(st.state.attention[0].attention.kind, 'approvazione');
-    assert.equal(st.state.attention[0].attention.detail, 'Comando da eseguire');
+    assert.equal(st.state.attention[0].attention.kind, 'approval');
+    assert.equal(st.state.attention[0].attention.approvalAction, 'run_command');
   } finally {
     await h.stop();
   }
 });
 
-test('SSE: stato iniziale e aggiornamento push quando cambia qualcosa', async () => {
+test('SSE: initial state and push update when something changes', async () => {
   const h = await startHarness();
   try {
     const cookie = await h.pair();
@@ -287,7 +292,7 @@ test('SSE: stato iniziale e aggiornamento push quando cambia qualcosa', async ()
   }
 });
 
-test('file statici: intestazioni di sicurezza, ETag/304, sw.js con build id, path traversal e file nascosti bloccati', async () => {
+test('static files: security headers, ETag/304, sw.js with build id, path traversal and hidden files blocked', async () => {
   const h = await startHarness({
     files: {
       '.nascosto': 'segreto',
@@ -311,7 +316,7 @@ test('file statici: intestazioni di sicurezza, ETag/304, sw.js con build id, pat
 
     const sw = await h.req({ path: '/sw.js' });
     assert.match(sw.text, /const B='[0-9a-f]{12}';/);
-    // Elenco di pre-cache: indice come "/", niente worker, licenze, file nascosti o con nomi che romperebbero il letterale.
+    // Precache list: index as "/", no worker, licenses, hidden files or names that would break the literal.
     assert.match(sw.text, /const L='\["\/","\/app\.js","\/css\/app\.css"\]';/);
     assert.equal(sw.headers['service-worker-allowed'], '/');
     assert.equal((await h.req({ path: '/css/app.css' })).headers['content-type'], 'text/css; charset=utf-8');
@@ -327,19 +332,19 @@ test('file statici: intestazioni di sicurezza, ETag/304, sw.js con build id, pat
   }
 });
 
-test('guardia Tailscale opzionale: solo i login ammessi (blocca anche Funnel, che non porta l\'identita\')', async () => {
+test('optional Tailscale guard: only allowed logins (blocks Funnel too, which does not carry identity)', async () => {
   const h = await startHarness({ configOverrides: { allowedTailscaleLogins: ['io@example.com'] } });
   try {
     assert.equal((await h.req({ path: '/' })).status, 403);
     assert.equal((await h.req({ path: '/', headers: { 'Tailscale-User-Login': 'altro@example.com' } })).status, 403);
     assert.equal((await h.req({ path: '/', headers: { 'Tailscale-User-Login': 'IO@example.com' } })).status, 200);
-    assert.equal((await h.req({ path: '/healthz' })).status, 200, 'healthz non espone nulla');
+    assert.equal((await h.req({ path: '/healthz' })).status, 200, 'healthz exposes nothing sensitive');
   } finally {
     await h.stop();
   }
 });
 
-test('nessun segreto o contenuto di chat finisce nei log', async () => {
+test('no secrets or chat content in logs', async () => {
   const h = await startHarness();
   try {
     const { code } = h.app.auth.createPairingCode();
@@ -362,16 +367,16 @@ test('nessun segreto o contenuto di chat finisce nei log', async () => {
     await h.req({ path: '/api/chats/segreta-00001', cookie });
 
     const logs = h.logLines.join('');
-    assert.ok(logs.length > 0, 'il daemon logga eventi operativi');
+    assert.ok(logs.length > 0, 'daemon logs operational events');
     for (const secret of ['TITOLO-SEGRETO', 'SOTTOTITOLO', 'CARTELLA-SEGRETA', 'RISPOSTA-SEGRETA', 'DOMANDA-SEGRETA', 'PROMPT-SEGRETO', 'tc-segreto', code.replace('-', ''), code, token, sub.endpoint, sub.keys.p256dh, sub.keys.auth, 'vapid_private', '"d":']) {
-      assert.equal(logs.includes(secret), false, `il log non deve contenere: ${secret.slice(0, 12)}...`);
+      assert.equal(logs.includes(secret), false, `log must not contain: ${secret.slice(0, 12)}...`);
     }
   } finally {
     await h.stop();
   }
 });
 
-test('preferenze per chat: preferita e silenziata si salvano nel daemon, compaiono nello stato e non toccano Cursor', async () => {
+test('per-chat prefs: favorite and muted saved in daemon, appear in state and do not touch Cursor', async () => {
   const h = await startHarness();
   try {
     const cookie = await h.pair();
@@ -383,12 +388,12 @@ test('preferenze per chat: preferita e silenziata si salvano nel daemon, compaio
     assert.deepEqual(r.json(), { ok: true, favorite: true, muted: false });
     h.tick();
     assert.equal((await card()).favorite, true);
-    // un campo non indicato resta com'e'
+    // omitted field stays as-is
     const m = await h.req({ method: 'POST', path: `/api/chats/${ID}/prefs`, cookie, body: { muted: true } });
     assert.deepEqual(m.json(), { ok: true, favorite: true, muted: true });
     const off = await h.req({ method: 'POST', path: `/api/chats/${ID}/prefs`, cookie, body: { favorite: false } });
     assert.deepEqual(off.json(), { ok: true, favorite: false, muted: true });
-    // validazione
+    // validation
     assert.equal((await h.req({ method: 'POST', path: `/api/chats/${ID}/prefs`, cookie, body: { favorite: 'si' } })).json().error, 'bad_prefs');
     assert.equal((await h.req({ method: 'POST', path: `/api/chats/${ID}/prefs`, cookie, body: {} })).json().error, 'bad_prefs');
     assert.equal((await h.req({ method: 'POST', path: `/api/chats/chat-inesistente-9/prefs`, cookie, body: { favorite: true } })).status, 404);
@@ -411,7 +416,7 @@ async function newQuestionPush(h, cookie, { mute, quiet } = {}) {
   await new Promise((r) => setImmediate(r));
 }
 
-test('silenziare: una chat silenziata non riceve push; il log dice solo il motivo', async () => {
+test('mute: muted chat gets no push; log states reason only', async () => {
   const h = await startHarness();
   try {
     const cookie = await h.pair();
@@ -423,7 +428,7 @@ test('silenziare: una chat silenziata non riceve push; il log dice solo il motiv
   }
 });
 
-test('silenziare: un progetto silenziato non riceve push', async () => {
+test('mute: muted workspace gets no push', async () => {
   const h = await startHarness();
   try {
     const cookie = await h.pair();
@@ -449,7 +454,7 @@ test('silenziare: un progetto silenziato non riceve push', async () => {
   }
 });
 
-test('orari senza notifiche: dentro la fascia niente push, fuori si; validazione e lettura', async () => {
+test('quiet hours: no push inside window, yes outside; validation and read', async () => {
   const h = await startHarness();
   try {
     const cookie = await h.pair();
@@ -457,13 +462,13 @@ test('orari senza notifiche: dentro la fascia niente push, fuori si; validazione
     assert.deepEqual(q, { enabled: false, from: '22:00', to: '07:00' });
     assert.equal((await h.req({ method: 'POST', path: '/api/settings/quiet', cookie, body: { enabled: true, from: '25:00', to: '07:00' } })).status, 400);
     assert.equal((await h.req({ method: 'POST', path: '/api/settings/quiet', cookie, body: { enabled: 'si' } })).status, 400);
-    // fascia che contiene sempre l'istante di prova: dalle 00:00 alle 23:59 meno un minuto non basta, quindi si usa l'ora locale corrente
+    // window that always contains test instant: 00:00–23:59 minus one minute is not enough, use current local hour
     const d = new Date(T0);
     const hh = (n) => String(n).padStart(2, '0');
     const from = `${hh(d.getHours())}:00`;
     const to = `${hh((d.getHours() + 1) % 24)}:00`;
     await newQuestionPush(h, cookie, { quiet: { enabled: true, from, to } });
-    assert.equal(h.sent.length, 0, 'silenzio');
+    assert.equal(h.sent.length, 0, 'quiet');
     assert.ok(h.logLines.some((l) => l.includes('orario senza notifiche')));
   } finally {
     await h.stop();
@@ -474,17 +479,17 @@ test('orari senza notifiche: dentro la fascia niente push, fuori si; validazione
     const cookie = await h2.pair();
     const d = new Date(T0);
     const hh = (n) => String(n).padStart(2, '0');
-    // fascia che NON contiene l'istante: parte due ore dopo
+    // window that does NOT contain instant: starts two hours later
     const from = `${hh((d.getHours() + 2) % 24)}:00`;
     const to = `${hh((d.getHours() + 3) % 24)}:00`;
     await newQuestionPush(h2, cookie, { quiet: { enabled: true, from, to } });
-    assert.equal(h2.sent.length, 1, 'fuori fascia: arriva');
+    assert.equal(h2.sent.length, 1, 'outside window: delivered');
   } finally {
     await h2.stop();
   }
 });
 
-test('dispositivi abbinati: elenco senza segreti, scollegare un altro dispositivo (non il corrente), sessione e notifiche rimosse', async () => {
+test('paired devices: list without secrets, revoke another device (not current), session and notifications removed', async () => {
   const h = await startHarness();
   try {
     const mine = await h.pair();
@@ -498,19 +503,19 @@ test('dispositivi abbinati: elenco senza segreti, scollegare un altro dispositiv
     const ipad = list.find((d) => d.label === 'iPad');
     assert.ok(ipad && ipad.current === false && /^[0-9a-f]{16}$/.test(ipad.id));
     const raw = JSON.stringify(list);
-    assert.ok(!raw.includes(otherCookie.split('=')[1]), 'il token non esce mai');
+    assert.ok(!raw.includes(otherCookie.split('=')[1]), 'token never exposed');
     assert.ok(!/tokenHash|token_hash/.test(raw));
 
-    // senza sessione: 401
+    // without session: 401
     assert.equal((await h.req({ path: '/api/devices' })).status, 401);
-    // il dispositivo corrente non si scollega da qui
+    // current device cannot be revoked from here
     const cur = list.find((d) => d.current);
     const r1 = await h.req({ method: 'POST', path: `/api/devices/${cur.id}/revoke`, cookie: mine, body: {} });
     assert.equal(r1.status, 409);
     assert.equal(r1.json().error, 'current_device');
     assert.equal((await h.req({ method: 'POST', path: '/api/devices/0000000000000000/revoke', cookie: mine, body: {} })).status, 404);
 
-    // l'altro dispositivo funziona, poi viene scollegato
+    // other device works, then is revoked
     assert.equal((await h.req({ path: '/api/state', cookie: otherCookie })).status, 200);
     const r2 = await h.req({ method: 'POST', path: `/api/devices/${ipad.id}/revoke`, cookie: mine, body: {} });
     assert.equal(r2.status, 200);
@@ -521,7 +526,7 @@ test('dispositivi abbinati: elenco senza segreti, scollegare un altro dispositiv
   }
 });
 
-test('conversazione: pagine dal fondo, tool come righe senza parametri, testo tagliato, parametri validati, nessun contenuto nei log', async () => {
+test('conversation: pages from bottom, tools as rows without params, truncated text, validated params, no content in logs', async () => {
   const h = await startHarness();
   try {
     const cookie = await h.pair();
@@ -544,11 +549,11 @@ test('conversazione: pagine dal fondo, tool come righe senza parametri, testo ta
     assert.equal(p1.from, 50);
     assert.equal(p1.hasMore, true);
     assert.ok(p1.items.every((i) => i.index >= 50 && i.index < 70));
-    assert.ok(p1.items.every((i, k, a) => k === 0 || a[k - 1].index < i.index), 'ordine cronologico');
-    assert.ok(!p1.items.some((i) => i.role !== 'tool' && !i.text), 'bubble vuoti saltati');
+    assert.ok(p1.items.every((i, k, a) => k === 0 || a[k - 1].index < i.index), 'chronological order');
+    assert.ok(!p1.items.some((i) => i.role !== 'tool' && !i.text), 'empty bubbles skipped');
     const tool = p1.items.find((i) => i.role === 'tool');
-    assert.equal(tool.label, 'Esegue un comando');
-    assert.ok(!JSON.stringify(p1).includes('SEGRETO'), 'nessun comando');
+    assert.equal(tool.action, 'run_command');
+    assert.ok(!JSON.stringify(p1).includes('SEGRETO'), 'no command in payload');
     const last = p1.items.find((i) => i.index === 67);
     assert.equal(last.text.length, 6000);
     assert.equal(last.truncated, true);

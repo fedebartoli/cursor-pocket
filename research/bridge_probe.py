@@ -1,18 +1,18 @@
 #!/usr/bin/env python3
 """
-Prototipo di ricerca (solo `pending` provato dal vivo; il resto NON e' testato su un'istanza reale).
-Solo libreria standard. Serve per rispondere alle AskQuestion native dell'Agents Window via CDP.
+Research prototype (only `pending` verified live; the rest NOT tested on a real instance).
+Standard library only. Used to answer native Agents Window AskQuestion prompts via CDP.
 
-Prerequisito per i comandi CDP: Cursor avviato con --remote-debugging-port=9222 (vedi launch-cursor-cdp.sh).
+Prerequisite for CDP commands: Cursor started with --remote-debugging-port=9222 (see launch-cursor-cdp.sh).
 
-Comandi:
-  pending            legge dal DB le domande native in attesa (ultimo bubble ask_question con stato loading)
-  sidebar            elenca le righe chat della sidebar (data-sidebar-item-key, testo, selezionata)
-  tray               descrive il questionario visibile (testo, opzioni, pulsanti)
-  open <composerId>  seleziona la chat nella sidebar
-  answer <json>      risponde al questionario visibile, es.:
-                     '{"selections":[["A"]],"freeform":{"0":"testo"},"submit":true}'
-                     selections[i] = badge (A, B, ...) o etichetta delle opzioni dello step i
+Commands:
+  pending            read native pending questions from the DB (last ask_question bubble with loading state)
+  sidebar            list sidebar chat rows (data-sidebar-item-key, text, selected)
+  tray               describe the visible questionnaire (text, options, buttons)
+  open <composerId>  select the chat in the sidebar
+  answer <json>      answer the visible questionnaire, e.g.:
+                     '{"selections":[["A"]],"freeform":{"0":"text"},"submit":true}'
+                     selections[i] = badge (A, B, ...) or label of options for step i
 """
 import base64, json, os, socket, sqlite3, struct, sys, urllib.request
 
@@ -20,7 +20,7 @@ PORT = int(os.environ.get("CURSOR_CDP_PORT", "9222"))
 DB = os.path.expanduser("~/Library/Application Support/Cursor/User/globalStorage/state.vscdb")
 
 
-# ---------- websocket minimale ----------
+# ---------- minimal websocket ----------
 def _ws(url):
     hp, path = url[5:].split("/", 1)
     host, port = hp.split(":")
@@ -100,7 +100,7 @@ class Page:
         self.call("Input.insertText", {"text": text})
 
 
-# ---------- JS lato pagina (selettori da verificare dal vivo) ----------
+# ---------- page-side JS (selectors to verify live) ----------
 JS_TRAY = r"""
 (() => {
   const tray = document.querySelector('.glass-questionnaire-tray');

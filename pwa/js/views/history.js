@@ -1,5 +1,5 @@
-// Conversazione intera di una chat, SOLO LETTURA, a pagine dal fondo: si parte dagli ultimi messaggi e si caricano i precedenti
-// su richiesta. I tool compaiono come righe discrete (tipo di azione, mai comandi o percorsi).
+// Full chat conversation, READ-ONLY, paginated from the bottom: start at latest messages and load older on demand.
+// Tools appear as discrete rows (action type, never commands or paths).
 import { api } from '../api.js';
 import { CATEGORY_ICON } from '../activity.js';
 import { appbar, banner, emptyState, skeleton } from '../components.js';
@@ -7,14 +7,23 @@ import { commit, h, replace } from '../dom.js';
 import { timeAgo } from '../format.js';
 import { icon } from '../icons.js';
 import { getLive } from '../live.js';
+import { t } from '../i18n/index.js';
 import { renderMarkdown } from '../markdown.js';
 
 const PAGE = 30;
-const STATE_TEXT = { running: 'in corso', error: 'non riuscita', stopped: 'interrotta' };
+
+function toolStateText(state) {
+  if (state === 'running') return t('history.stateRunning');
+  if (state === 'error') return t('history.stateError');
+  if (state === 'stopped') return t('history.stateStopped');
+  return '';
+}
 
 function toolLine(item) {
   const mark = item.state === 'running' ? icon('spinner', { size: 14, className: 'spin' }) : item.state === 'error' ? icon('xCircle', { size: 14 }) : icon(CATEGORY_ICON[item.category] ?? 'wrench', { size: 14 });
-  return h('div', { class: `hist-tool${item.state ? ` ${item.state}` : ''}` }, h('span.hist-tool-mark', { 'aria-hidden': 'true' }, mark), item.label, STATE_TEXT[item.state] ? ` \u00b7 ${STATE_TEXT[item.state]}` : '');
+  const suffix = toolStateText(item.state);
+  const label = item.action ? t(`activity.action.${item.action}`) : '';
+  return h('div', { class: `hist-tool${item.state ? ` ${item.state}` : ''}` }, h('span.hist-tool-mark', { 'aria-hidden': 'true' }, mark), label, suffix ? ` \u00b7 ${suffix}` : '');
 }
 
 function message(item) {
@@ -25,16 +34,16 @@ function message(item) {
   return h(
     'article',
     { class: `hist-msg ${item.role}` },
-    h('div.hist-meta', null, icon(item.role === 'user' ? 'user' : 'message', { size: 14 }), h('span', null, item.role === 'user' ? 'Tu' : 'Agente'), h('span.hint', null, timeAgo(item.at))),
+    h('div.hist-meta', null, icon(item.role === 'user' ? 'user' : 'message', { size: 14 }), h('span', null, item.role === 'user' ? t('history.roleUser') : t('history.roleAgent')), h('span.hint', null, timeAgo(item.at))),
     body,
-    item.truncated ? h('p.hint', null, 'Messaggio lungo: qui si vede solo l\u2019inizio.') : null,
+    item.truncated ? h('p.hint', null, t('history.truncatedHint')) : null,
   );
 }
 
 export function mountHistory(root, id) {
   const enc = encodeURIComponent(id);
-  let items = []; // dal piu' vecchio al piu' recente
-  let from = null; // indice del primo bubble caricato
+  let items = []; // oldest to newest
+  let from = null; // index of first loaded bubble
   let hasMore = false;
   let loading = true;
   let error = null;
@@ -57,7 +66,7 @@ export function mountHistory(root, id) {
       error = null;
     } catch (err) {
       if (!alive) return;
-      error = err.status === 404 ? 'Chat non trovata. Potrebbe essere stata archiviata o eliminata in Cursor.' : 'Non riesco a leggere la conversazione adesso.';
+      error = err.status === 404 ? t('history.notFound') : t('history.readError');
     }
     loading = false;
     render();
@@ -76,11 +85,11 @@ export function mountHistory(root, id) {
       from = p.from;
       hasMore = p.hasMore;
     } catch {
-      error = 'Non riesco a caricare i messaggi precedenti.';
+      error = t('history.loadOlderError');
     }
     loading = false;
     render();
-    // Resta sullo stesso punto: i messaggi nuovi compaiono sopra.
+    // Stay at the same scroll position: new messages appear above.
     window.scrollTo(0, document.documentElement.scrollHeight - before);
   }
 
@@ -88,13 +97,13 @@ export function mountHistory(root, id) {
     if (!alive) return;
     const lv = getLive();
     const card = lv.payload?.state?.workspaces?.flatMap((w) => w.chats).find((c) => c.id === id) ?? null;
-    const out = [appbar({ title: card?.name || 'Conversazione', backHref: `#/chat/${enc}` })];
-    if (lv.offline) out.push(banner({ text: 'Daemon non raggiungibile', detail: 'Questi dati potrebbero non essere aggiornati.' }));
-    if (error) out.push(emptyState({ iconName: 'info', title: 'Conversazione non disponibile', text: error }));
+    const out = [appbar({ title: card?.name || t('history.defaultTitle'), backHref: `#/chat/${enc}` })];
+    if (lv.offline) out.push(banner({ text: t('history.offlineTitle'), detail: t('history.offlineDetail') }));
+    if (error) out.push(emptyState({ iconName: 'info', title: t('history.unavailableTitle'), text: error }));
     else if (loading && !items.length) out.push(skeleton(3));
-    else if (!items.length) out.push(emptyState({ iconName: 'message', title: 'Nessun messaggio', text: 'Questa chat non ha ancora messaggi.' }));
+    else if (!items.length) out.push(emptyState({ iconName: 'message', title: t('history.emptyTitle'), text: t('history.emptyText') }));
     else {
-      if (hasMore) out.push(h('button', { class: 'btn block hist-older', type: 'button', disabled: loading, onClick: loadOlder }, loading ? icon('spinner', { size: 18, className: 'spin' }) : icon('chevronUp', { size: 18 }), 'Messaggi precedenti'));
+      if (hasMore) out.push(h('button', { class: 'btn block hist-older', type: 'button', disabled: loading, onClick: loadOlder }, loading ? icon('spinner', { size: 18, className: 'spin' }) : icon('chevronUp', { size: 18 }), t('history.loadOlder')));
       out.push(h('div.hist-list', null, items.map((it) => (it.role === 'tool' ? toolLine(it) : message(it)))));
     }
     commit(host, out);

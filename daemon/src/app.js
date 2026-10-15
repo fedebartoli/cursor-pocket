@@ -1,4 +1,4 @@
-// Composizione dei moduli del daemon (usata da index.js e dai test di integrazione).
+// Daemon module composition (used by index.js and integration tests).
 import path from 'node:path';
 import { Actions } from './actions.js';
 import { Auth } from './auth.js';
@@ -18,8 +18,8 @@ import { Watcher } from './watcher.js';
 const DAY = 24 * 3_600_000;
 
 /**
- * Stato di salute esposto ai client: volutamente stabile (niente orari), per non causare invii inutili.
- * `actions`: ok (si puo' rispondere) | off (Cursor senza porta di debug) | no_window | disabled.
+ * Health status exposed to clients: intentionally stable (no timestamps), to avoid useless pushes.
+ * `actions`: ok (can respond) | off (Cursor without debug port) | no_window | disabled.
  */
 export function publicStatus(s, actions = 'off') {
   return { ok: s.ok, error: s.lastError ? 'db' : null, actions };
@@ -27,7 +27,7 @@ export function publicStatus(s, actions = 'off') {
 
 /**
  * @param {{ config: object, logger: object, now?: Function, send?: Function, actionsDeps?: { ui?: object, sleep?: Function, awake?: { spawn?: Function, exists?: Function, power?: object } } }} p
- *   `actionsDeps` serve ai test: interfaccia di Cursor finta e attese veloci.
+ *   `actionsDeps` for tests: fake Cursor UI and fast sleeps.
  */
 export function createApp({ config, logger, now = Date.now, send, actionsDeps = {} } = {}) {
   const store = new Store(path.join(config.dataDir, 'store.db'));
@@ -72,7 +72,7 @@ export function createApp({ config, logger, now = Date.now, send, actionsDeps = 
   watcher.on('status', publish);
   actions.on('change', publish);
   watcher.on('event', (ev) => {
-    // Il badge usa lo stato appena pubblicato: l'evento arriva dopo lo snapshot.
+    // Badge uses state just published: event arrives after the snapshot.
     notifier.notify(ev).catch((err) => logger.error('notify_failed', errorFields(err)));
   });
 
@@ -101,7 +101,7 @@ export function createApp({ config, logger, now = Date.now, send, actionsDeps = 
       maintenance = setInterval(maintain, DAY);
       maintenance.unref();
       await awake.init();
-      void notifier.publicKey; // genera le chiavi VAPID al primo avvio
+      void notifier.publicKey; // generate VAPID keys on first startup
       await http.listen();
       watcher.start();
       actions.start();

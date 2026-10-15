@@ -1,14 +1,14 @@
-// Replica di `hash()` di VS Code (vs/base/common/hash.ts) limitata alle stringhe.
-// Cursor la usa per costruire gli id delle sezioni della sidebar, e noi ne abbiamo bisogno per
-// ritrovare l'ordine manuale dei workspace salvato in `cursor/glassSidebarSettings`.
+// Replica of VS Code's `hash()` (vs/base/common/hash.ts) limited to strings.
+// Cursor uses it to build Agents Window sidebar section ids, and we need it to
+// match the manual workspace order saved in `cursor/glassSidebarSettings`.
 //
-// Dettaglio interno di Cursor: tenerlo isolato in `daemon/src/cursor/`.
+// Cursor internal detail: keep isolated in `daemon/src/cursor/`.
 
 function numberHash(value, initial) {
   return (((initial << 5) - initial) + value) | 0;
 }
 
-/** Hash int32 con segno di una stringa, calcolato sulle unita' di codice UTF-16. */
+/** Signed int32 hash of a string, computed over UTF-16 code units. */
 export function stringHash(s, seed = 0) {
   let h = numberHash(149417, seed);
   for (let i = 0; i < s.length; i++) h = numberHash(s.charCodeAt(i), h);

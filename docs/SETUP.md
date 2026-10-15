@@ -1,230 +1,230 @@
 # Setup
 
-Guida per far girare il daemon sul Mac e usare la PWA dall'iPhone. Stato: notifiche push e sola lettura funzionano senza altro;
-le azioni (rispondere, approvare, scrivere, fermare, nuova chat, rinomina/fissa/archivia) richiedono Cursor avviato con una porta di debug
-locale e sono state provate dal vivo su un Cursor vero (FINDINGS 10.x e 11.x). Si attivano come alla sezione 6.
+Guide to run the daemon on the Mac and use the PWA from the iPhone. Status: push notifications and read-only work without anything else;
+actions (reply, approve, write, stop, new chat, rename/pin/archive) require Cursor started with a local debug
+port and have been VERIFIED LIVE on a real Cursor (FINDINGS 10.x and 11.x). Enable them as in section 6.
 
-## 1. Requisiti
-- Mac con Cursor 3.x (Agents Window) e Node >= 22.13 (`node -v`). Nessun `npm install`: zero dipendenze.
-- iPhone con iOS >= 16.4 (le notifiche push delle PWA esistono solo dalla versione 16.4 e solo per l'app installata
-  nella schermata Home).
-- Tailscale su Mac e iPhone, con MagicDNS e certificati HTTPS attivi per la tailnet (vedi sezione 4).
+## 1. Requirements
+- Mac with Cursor 3.x (Agents Window) and Node >= 22.13 (`node -v`). No `npm install`: zero dependencies.
+- iPhone with iOS >= 16.4 (PWA push notifications exist only from version 16.4 and only for the app installed
+  on the Home screen).
+- Tailscale on Mac and iPhone, with MagicDNS and HTTPS certificates enabled for the tailnet (see section 4).
 
-## 2. Avviare il daemon
+## 2. Starting the daemon
 ```
 cd daemon
 npm start
 ```
-- Ascolta solo su `127.0.0.1:8787` (porta con `CP_PORT`): dalla rete non e' raggiungibile.
-- Legge il database di Cursor in sola lettura (`mode=ro`, `query_only`): non scrive mai in quel database.
-- Conserva i propri dati in `daemon/data/` (permessi 0700): ignorati, sessioni, sottoscrizioni push, chiavi VAPID.
-  Cancellare la cartella equivale a ricominciare da zero (sessioni e notifiche da riattivare).
-- Controlli rapidi: `npm run status` (daemon attivo o no, dispositivi abbinati, sottoscrizioni push, richieste ignorate),
-  `npm run probe` (legge il database di Cursor e riassume chat e gruppi in modo anonimo; con `-- --names` mostra i nomi
-  dei workspace, utile per confrontare l'ordine con la sidebar di Cursor).
+- Listens only on `127.0.0.1:8787` (port from `CP_PORT`): not reachable from the network.
+- Reads the Cursor database in read-only mode (`mode=ro`, `query_only`): never writes to that database.
+- Stores its own data in `daemon/data/` (permissions 0700): ignored items, sessions, push subscriptions, VAPID keys.
+  Deleting the folder means starting from scratch (sessions and notifications must be re-enabled).
+- Quick checks: `npm run status` (daemon running or not, “Dispositivi abbinati” (Paired devices), push subscriptions, ignored requests),
+  `npm run probe` (reads the Cursor database and summarizes chats and groups anonymously; with `-- --names` shows
+  workspace names, useful for comparing order with the Cursor sidebar).
 
-### Avvio automatico (consigliato per l'uso quotidiano)
+### Automatic startup (recommended for daily use)
 ```
-tools/launchd.sh install     # crea il servizio e avvia il daemon
-tools/launchd.sh status      # stato del servizio e della porta
-tools/launchd.sh restart     # dopo aver aggiornato il codice
-tools/launchd.sh uninstall   # lo toglie (dati e log restano)
-tools/launchd.sh print       # mostra il plist senza installare nulla
+tools/launchd.sh install     # creates the service and starts the daemon
+tools/launchd.sh status      # service and port status
+tools/launchd.sh restart     # after updating the code
+tools/launchd.sh uninstall   # removes it (data and logs remain)
+tools/launchd.sh print       # shows the plist without installing anything
 ```
-- Crea SOLO `~/Library/LaunchAgents/local.cursor-pocket.daemon.plist` (servizio dell'utente: nessun amministratore) e la cartella
-  dei log `~/Library/Logs/cursor-pocket/`. Non tocca Cursor ne' Tailscale. macOS puo' mostrare l'avviso "elemento in background
-  aggiunto": e' il servizio di `node`.
-- Il daemon parte al login e riparte da solo se si ferma per un errore; se lo fermi tu in modo pulito (`launchctl bootout`,
-  `kill` senza `-9`) resta fermo fino al login successivo o a `restart`.
-- Usa il percorso REALE di `node` (non il collegamento temporaneo di fnm/nvm): se cambi versione di Node o lo sposti, rilancia
-  `tools/launchd.sh install`. Le variabili `CP_*` presenti nell'ambiente al momento dell'installazione vengono copiate nel plist
-  (l'installazione ne stampa i nomi).
-- Se la porta e' occupata (per esempio un `npm start` ancora attivo) l'installazione si ferma con un messaggio: chiudi prima
-  quel daemon.
-- Tieni il progetto fuori da Documenti, Scrivania e Download: i servizi lanciati da launchd non vi accedono senza permessi
-  extra. Il log contiene solo contatori e tipi di evento.
-- Dopo un riavvio del Mac servono comunque Cursor e Tailscale aperti: il primo e' la fonte dei dati, il secondo la strada
-  dall'iPhone. `tailscale serve` ricorda la sua configurazione.
+- Creates ONLY `~/Library/LaunchAgents/local.cursor-pocket.daemon.plist` (user service: no administrator) and the log folder
+  `~/Library/Logs/cursor-pocket/`. Does not touch Cursor or Tailscale. macOS may show the “background item added” notice: it is the `node`
+  service.
+- The daemon starts at login and restarts on its own if it stops due to an error; if you stop it cleanly (`launchctl bootout`,
+  `kill` without `-9`) it stays stopped until the next login or `restart`.
+- Uses the REAL path to `node` (not the temporary fnm/nvm symlink): if you change Node version or move it, run
+  `tools/launchd.sh install` again. `CP_*` variables present in the environment at install time are copied into the plist
+  (installation prints their names).
+- If the port is in use (for example an `npm start` still running) installation stops with a message: shut down that
+  daemon first.
+- Keep the project outside Documents, Desktop, and Downloads: services launched by launchd cannot access them without
+  extra permissions. The log contains only counters and event types.
+- After a Mac restart you still need Cursor and Tailscale running: the first is the data source, the second the path
+  from the iPhone. `tailscale serve` remembers its configuration.
 
-## 3. Provare la PWA senza toccare i dati reali
+## 3. Try the PWA without touching real data
 ```
 cd daemon
-npm run demo                 # database di Cursor finto, push simulati, porta 8799
-npm run demo -- --animate    # dopo 15 s una chat finisce, dopo 30 s ne compare una con una domanda
+npm run demo                 # fake Cursor database, simulated push, port 8799
+npm run demo -- --animate    # after 15 s a chat finishes, after 30 s one appears with a question
 ```
-Il comando stampa l'indirizzo (`http://127.0.0.1:8799/`) e un codice di abbinamento. Nessun dato reale viene letto. Il
-server dimostrativo simula anche Cursor (domande a una e due voci, azioni): `npm run demo -- --no-actions` simula invece
-la porta di debug chiusa.
+The command prints the address (`http://127.0.0.1:8799/`) and a pairing code. No real data is read. The
+demo server also simulates Cursor (one- and two-option questions, actions): `npm run demo -- --no-actions` instead simulates
+the debug port closed.
 
-### Verifica automatica nel browser (facoltativa, per chi sviluppa)
+### Automatic browser check (optional, for developers)
 ```
-node tools/ui-check.mjs webkit            # il motore di Safari, viewport iPhone 14
-node tools/ui-check.mjs chromium --dark   # tema scuro; --shots salva gli screenshot
+node tools/ui-check.mjs webkit            # Safari engine, iPhone 14 viewport
+node tools/ui-check.mjs chromium --dark   # dark theme; --shots saves screenshots
 ```
-Percorre l'app contro il server dimostrativo (138-140 controlli: logo, questionario, compositore, approvazione, doppio tocco, CSP...). Serve
-`playwright-core` con i browser installati (`npx playwright install chromium webkit`), fuori dal repository, che non ne
-dipende: se non e' risolvibile imposta `PLAYWRIGHT_CORE=/percorso/node_modules/playwright-core/index.mjs`. Non sostituisce una
-prova su un iPhone vero (zoom con doppio tocco, tastiera, schermo intero).
+Runs through the app against the demo server (138-140 checks: logo, questionnaire, composer, approval, double tap, CSP...). Requires
+`playwright-core` with browsers installed (`npx playwright install chromium webkit`), outside the repository, which does not
+depend on it: if it cannot be resolved set `PLAYWRIGHT_CORE=/percorso/node_modules/playwright-core/index.mjs`. Does not replace a
+test on a real iPhone (double-tap zoom, keyboard, full screen).
 
-## 4. Rendere il daemon raggiungibile dall'iPhone (HTTPS con Tailscale)
-Le notifiche push richiedono HTTPS. `tailscale serve` espone il daemon con un certificato valido SOLO dentro la tua
-tailnet (non su Internet).
+## 4. Make the daemon reachable from the iPhone (HTTPS with Tailscale)
+Push notifications require HTTPS. `tailscale serve` exposes the daemon with a valid certificate ONLY inside your
+tailnet (not on the Internet).
 
-1. Una volta sola, nel pannello di amministrazione di Tailscale (pagina DNS) abilita "HTTPS Certificates".
-   Nota di privacy: il nome della macchina (`<mac>.<tailnet>.ts.net`) finisce nei registri pubblici di Certificate
-   Transparency. Senza questo passaggio `tailscale serve` non puo' ottenere il certificato.
-2. Sul Mac: `tailscale serve --bg 8787` (eseguito e verificato con Tailscale 1.104.1). L'indirizzo e'
-   `https://<mac>.<tailnet>.ts.net/`. La PRIMA richiesta HTTPS puo' impiegare circa 30 secondi perche' Tailscale ottiene il
-   certificato; le successive sono immediate. L'app di Tailscale deve essere connessa: da ferma non risultano i certificati.
-3. Controllo: `tailscale serve status` (deve riportare `(tailnet only)`). Per togliere l'esposizione:
-   `tailscale serve --https=443 off` oppure `tailscale serve reset`.
-4. Non usare `tailscale funnel`: rende il servizio pubblico su Internet. EFFETTO COLLATERALE VERIFICATO: se su questo Mac
-   e' acceso il Funnel anche solo per un'ALTRA porta/progetto (es. 8443), il nome `<mac>.<tailnet>.ts.net` ottiene un
-   indirizzo pubblico su Internet. Dal Mac il nome si risolve ancora verso Tailscale (`dig +short <nome>` mostra 100.x), ma
-   `dig +short <nome> @8.8.8.8` mostra indirizzi pubblici che sulla 443 chiudono la connessione. Sul telefono il sintomo
-   osservato e' stato: PWA ferma sullo scheletro e anche Safari che non carica l'indirizzo (la causa lato iPhone e' dedotta
-   da questo, non provata dentro l'iPhone). Controllo: `tailscale serve status --json` e cerca `AllowFunnel`. Rimedio:
-   spegnere il Funnel (`tailscale funnel --https=<porta> off`): NON basta, il record DNS pubblico resta registrato (verificato
-   anche sul DNS autorevole) e il telefono continuava a non caricare. Ha funzionato dare al Mac un nuovo nome
-   (`tailscale set --hostname=<nuovo>`, poi `tailscale serve reset` e `tailscale serve --bg 8787`): il nuovo nome non ha
-   indirizzo pubblico, ma cambia l'indirizzo della PWA (reinstallare e abbinare di nuovo). Dalla versione con timeout l'app mostra "Daemon non
-   raggiungibile" dopo 10 secondi invece di restare ferma.
-5. Facoltativo ma consigliato: `CP_ALLOWED_TS_LOGINS=tuo@account npm start` accetta solo richieste che portano
-   quell'identita' Tailscale (intestazione aggiunta da `serve`; blocca anche un eventuale Funnel, che non la porta).
+1. Once, in the Tailscale admin panel (DNS page) enable “HTTPS Certificates”.
+   Privacy note: the machine name (`<mac>.<tailnet>.ts.net`) ends up in public Certificate
+   Transparency logs. Without this step `tailscale serve` cannot obtain the certificate.
+2. On the Mac: `tailscale serve --bg 8787` (run and verified with Tailscale 1.104.1). The address is
+   `https://<mac>.<tailnet>.ts.net/`. The FIRST HTTPS request may take about 30 seconds because Tailscale obtains the
+   certificate; later ones are immediate. The Tailscale app must be connected: when stopped certificates are not available.
+3. Check: `tailscale serve status` (must report `(tailnet only)`). To remove exposure:
+   `tailscale serve --https=443 off` or `tailscale serve reset`.
+4. Do not use `tailscale funnel`: makes the service public on the Internet. VERIFIED SIDE EFFECT: if on this Mac
+   Funnel is on even for another port/project (e.g. 8443), the name `<mac>.<tailnet>.ts.net` gets a
+   public address on the Internet. From the Mac the name still resolves to Tailscale (`dig +short <nome>` shows 100.x), but
+   `dig +short <nome> @8.8.8.8` shows public addresses that close the connection on 443. On the phone the observed symptom
+   was: PWA stuck on the skeleton and Safari not loading the address either (the cause on the iPhone side is inferred
+   from this, not verified inside the iPhone). Check: `tailscale serve status --json` and look for `AllowFunnel`. Fix:
+   turn off Funnel (`tailscale funnel --https=<porta> off`): NOT enough, the public DNS record stays registered (verified
+   on the authoritative DNS too) and the phone still would not load. What worked was giving the Mac a new name
+   (`tailscale set --hostname=<nuovo>`, then `tailscale serve reset` and `tailscale serve --bg 8787`): the new name has no
+   public address, but changes the PWA URL (reinstall and pair again). From the version with timeout the app shows “Daemon non
+   raggiungibile” (Daemon unreachable) after 10 seconds instead of staying stuck.
+5. Optional but recommended: `CP_ALLOWED_TS_LOGINS=tuo@account npm start` accepts only requests carrying
+   that Tailscale identity (header added by `serve`; also blocks any Funnel, which does not send it).
 
-## 5. Installare la PWA e abbinare l'iPhone
-1. Su Mac: `cd daemon && npm run pair` stampa un codice `XXXX-XXXX` (monouso, valido 15 minuti).
-2. Su iPhone, in Safari, apri `https://<mac>.<tailnet>.ts.net/`.
-3. Condividi, poi "Aggiungi alla schermata Home". Apri l'app DALLA Home: Safari e l'app installata non condividono i dati,
-   quindi l'abbinamento va fatto dentro l'app installata.
-4. Inserisci il codice. L'accesso resta valido 90 giorni di inattivita' (cookie `HttpOnly`, `SameSite=Strict`).
-5. Impostazioni, "Attiva notifiche", consenti, poi "Invia notifica di prova".
+## 5. Install the PWA and pair the iPhone
+1. On Mac: `cd daemon && npm run pair` prints a code `XXXX-XXXX` (single use, valid 15 minutes).
+2. On iPhone, in Safari, open `https://<mac>.<tailnet>.ts.net/`.
+3. Share, then “Add to Home Screen”. Open the app FROM the Home screen: Safari and the installed app do not share data,
+   so pairing must be done inside the installed app.
+4. Enter the code. Access stays valid for 90 days of inactivity (`HttpOnly` cookie, `SameSite=Strict`).
+5. “Impostazioni” (Settings), “Attiva notifiche”, allow, then “Invia notifica di prova”.
 
-Il badge sull'icona mostra quante chat richiedono attenzione.
+The badge on the icon shows how many chats “Richiedono attenzione” (Need attention).
 
-## 6. Rispondere dal telefono (Fase 2, facoltativo)
-Rispondere alle domande di Cursor, saltarle e scrivere messaggi a una chat richiedono che Cursor sia avviato con una porta di
-debug locale. Senza, l'app resta in sola lettura (notifiche, elenco, "Ignora") e le Impostazioni lo spiegano.
+## 6. Reply from the phone (Phase 2, optional)
+Answering Cursor questions, skipping them, and sending messages to a chat requires Cursor started with a local
+debug port. Without it, the app stays read-only (notifications, list, “Ignora” (Ignore)) and “Impostazioni” (Settings) explains it.
 
-1. Chiudi Cursor con Cmd+Q. ATTENZIONE: le chat in corso si interrompono; aspetta che abbiano finito.
-2. Dalla cartella del progetto: `tools/cursor-cdp.sh`. Apre Cursor con `--remote-debugging-port=9222`; non modifica impostazioni
-   di Cursor ne' file in `~/.cursor`: l'opzione vale solo per quell'avvio. `tools/cursor-cdp.sh status` dice se la porta risponde.
-3. Nelle Impostazioni dell'app il riquadro "Rispondere dal telefono" passa ad "Attivo" da solo (il daemon controlla ogni 5 s).
-   Da terminale: `cd daemon && npm run cdp -- status`.
-4. Per toglierla: chiudi Cursor e riaprilo normalmente (Dock, Spotlight). Dopo ogni riavvio del Mac o di Cursor va rifatto il
-   passo 2: l'opzione non e' permanente. Un lanciatore permanente (app o Comando Rapido) non e' stato creato.
+1. Quit Cursor with Cmd+Q. WARNING: in-progress chats are interrupted; wait until they finish.
+2. From the project folder: `tools/cursor-cdp.sh`. Opens Cursor with `--remote-debugging-port=9222`; does not change Cursor settings
+   or files in `~/.cursor`: the option applies only to that launch. `tools/cursor-cdp.sh status` says whether the port responds.
+3. In the app’s “Impostazioni” (Settings) the “Rispondere dal telefono” panel switches to “Attivo” on its own (the daemon checks every 5 s).
+   From the terminal: `cd daemon && npm run cdp -- status`.
+4. To disable it: quit Cursor and reopen it normally (Dock, Spotlight). After every Mac or Cursor restart repeat
+   step 2: the option is not permanent. A permanent launcher (app or Shortcut) has not been created.
 
-Cosa fa dal telefono, in chat:
-- Domanda in attesa: scegli le opzioni (una o piu', secondo la domanda), oppure "Altro" e scrivi la risposta, poi "Invia
-  risposta". "Salta" salta la domanda (chiede una seconda conferma). "Ignora" toglie solo il pallino dall'app.
-- Messaggio: il campo in fondo alla chat invia un nuovo messaggio a Cursor. Se l'agente sta lavorando Cursor decide se
-  metterlo in coda o inviarlo subito. Non parte se la chat ha una domanda in attesa (rispondi prima) o se nel campo di
-  scrittura di Cursor c'e' gia' una bozza.
-- L'esito compare sotto forma di conferma; se il daemon non riesce a confermare che Cursor abbia registrato l'azione lo dice,
-  senza fingere un successo.
+What you can do from the phone, in a chat:
+- Pending question: choose options (one or more, depending on the question), or “Altro” and write the answer, then “Invia
+  risposta”. “Salta” skips the question (asks for a second confirmation). “Ignora” removes only the dot in the app.
+- Message: the field at the bottom of the chat sends a new message to Cursor. If the agent is working Cursor decides whether
+  to queue it or send it immediately. It does not send if the chat has a pending question (answer first) or if Cursor’s compose
+  field already has a draft.
+- The outcome appears as confirmation; if the daemon cannot confirm Cursor recorded the action it says so,
+  without faking success.
 
-Da sapere:
-- RISCHIO: la porta ascolta solo su 127.0.0.1 (non e' raggiungibile dalla rete), ma finche' e' aperta qualunque programma sul
-  Mac puo' controllare Cursor. Attivala solo se vuoi le azioni.
-- Il daemon pilota la finestra Agents come un utente: apre la chat nella sidebar, compila, e poi riapre la chat che avevi
-  aperta (`CP_RESTORE_SELECTION=false` per non farlo). Evita di usare Cursor mentre rispondi dal telefono.
-- La finestra Agents deve essere aperta. Che Cursor possa restare in secondo piano (o il Mac con lo schermo spento) e' da
-  verificare dal vivo (FINDINGS 10.5): se un'azione non si completa, porta Cursor in primo piano e riprova.
-- Stato di maturita': provata su un finto Cursor e su una pagina di prova, NON su un Cursor vero. Se un aggiornamento di
-  Cursor cambia l'interfaccia le azioni possono fallire con un errore chiaro; i selettori sono in
-  `daemon/src/cursor/agents-ui.js`. Diagnostica: `npm run cdp -- status | inspect | tray` (stampa la struttura, mai i testi;
-  `--names` e `--texts` li mostrano: solo per prove tue, mai da condividere). Cosa resta da verificare: FINDINGS 10.5.
+Good to know:
+- RISK: the port listens only on 127.0.0.1 (not reachable from the network), but while open any program on the
+  Mac can control Cursor. Enable it only if you want actions.
+- The daemon drives the Agents window like a user: opens the chat in the sidebar, fills in, then reopens the chat you had
+  open (`CP_RESTORE_SELECTION=false` to skip that). Avoid using Cursor while replying from the phone.
+- The Agents window must be open. Whether Cursor can stay in the background (or the Mac with the screen off) is to be
+  VERIFIED LIVE (FINDINGS 10.5): if an action does not complete, bring Cursor to the foreground and retry.
+- Maturity status: verified on a fake Cursor and a test page, NOT VERIFIED on a real Cursor. If a Cursor update
+  changes the UI actions may fail with a clear error; selectors are in
+  `daemon/src/cursor/agents-ui.js`. Diagnostics: `npm run cdp -- status | inspect | tray` (prints structure, never text;
+  `--names` and `--texts` show them: for your testing only, never share). What remains to verify: FINDINGS 10.5.
 
-## 7. Configurazione (variabili d'ambiente)
-| Variabile | Predefinito | Significato |
+## 7. Configuration (environment variables)
+| Variable | Default | Meaning |
 | --- | --- | --- |
-| `CP_PORT` | `8787` | Porta locale del daemon (solo 127.0.0.1) |
-| `CP_CURSOR_DB` | `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb` | Database di Cursor (letto solo in lettura) |
-| `CP_WORKSPACE_STORAGE` | `.../Cursor/User/workspaceStorage` | Cartelle dei workspace di Cursor |
-| `CP_DATA_DIR` | `daemon/data` | Dati propri del daemon |
-| `CP_PENDING_AFTER_HOURS` | `24` | Una richiesta in attesa piu' vecchia passa da "Richiedono attenzione" a "In sospeso" (0 = mai) |
-| `CP_MIN_RUN_SECONDS` | `20` | "Chat finita" si notifica solo se il lavoro e' durato almeno cosi' |
-| `CP_DONE_SETTLE_MS` | `5000` | Attesa di stabilita' prima di dichiarare finita una chat |
-| `CP_STALE_RUN_HOURS` | `12` | Un marcatore "in corso" piu' vecchio e' un residuo (Cursor chiuso durante il lavoro) |
-| `CP_STARTUP_GRACE_SECONDS` | `300` | All'avvio si notificano solo le domande e le approvazioni piu' recenti di cosi' |
-| `CP_APPROVAL_DELAY_SECONDS` | `8` | Un'approvazione si notifica solo se e' ancora in attesa dopo cosi' tanto (0 = subito) |
-| `CP_INCLUDE_CLASSIC` | `true` | Include le chat create nell'editor classico (senza `agentLocation`) |
-| `CP_POLL_MS` / `CP_FULL_SCAN_MS` | `1000` / `1000` | Frequenza di lettura del database (una rilettura profonda di 11 chat costa ~25 ms) |
-| `CP_PAIRING_TTL_MINUTES` | `15` | Validita' del codice di abbinamento |
-| `CP_ALLOWED_HOSTS` | (vuoto) | Nomi host aggiuntivi accettati, oltre a localhost e `*.ts.net` |
-| `CP_ALLOWED_TS_LOGINS` | (vuoto) | Account Tailscale ammessi (vedi sezione 4) |
-| `CP_VAPID_SUBJECT` | `mailto:cursor-pocket@example.com` | Contatto indicato ai servizi push nelle intestazioni VAPID. Consigliato: un indirizzo che controlli. Lo vede solo il servizio push (Apple), non e' pubblico |
-| `CP_ACTIONS` | `true` | `false` disattiva le azioni dal telefono (la PWA resta in sola lettura) |
-| `CP_APPROVALS` | `true` | `false` disattiva solo Esegui/Rifiuta dal telefono (restano risposte e messaggi) |
-| `CP_KEEP_AWAKE_CMD` | `/usr/bin/caffeinate` | comando usato da "Mac sveglio" (vuoto = funzione non disponibile) |
-| `CP_KEEP_AWAKE_GRACE_MS` | `120000` | tolleranza dopo l'ultima chat in corso prima di lasciar dormire il Mac |
-| `CP_KEEP_AWAKE_POLL_MS` | `5000` | controllo di schermo, batteria e sospensione mentre il Mac e' tenuto sveglio |
-| `CP_KEEP_AWAKE_MIN_BATTERY` | `20` | sotto questa % a batteria "a schermo chiuso" si sospende |
-| `CP_BRIGHTNESS_CMD` | `daemon/data/bin/cp-brightness` | assistente per la luminosita' (si crea con `tools/mac/build.sh`) |
-| `CP_CDP_PORT` | `9222` | Porta di debug di Cursor (solo loopback) |
-| `CP_CDP_POLL_MS` | `5000` | Ogni quanto si controlla se la porta di debug e la finestra Agents rispondono |
-| `CP_ACTION_TIMEOUT_SECONDS` | `45` | Tempo massimo di un'azione prima di rispondere "timeout" al telefono |
-| `CP_RESTORE_SELECTION` | `true` | Dopo un'azione riapre la chat che avevi aperta in Cursor |
+| `CP_PORT` | `8787` | Daemon local port (127.0.0.1 only) |
+| `CP_CURSOR_DB` | `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb` | Cursor database (read-only) |
+| `CP_WORKSPACE_STORAGE` | `.../Cursor/User/workspaceStorage` | Cursor workspace folders |
+| `CP_DATA_DIR` | `daemon/data` | Daemon’s own data |
+| `CP_PENDING_AFTER_HOURS` | `24` | A pending request older than this moves from “Richiedono attenzione” (Need attention) to “In sospeso” (Pending) (0 = never) |
+| `CP_MIN_RUN_SECONDS` | `20` | “Chat finished” is notified only if work lasted at least this long |
+| `CP_DONE_SETTLE_MS` | `5000` | Stability wait before declaring a chat finished |
+| `CP_STALE_RUN_HOURS` | `12` | An “in progress” marker older than this is a leftover (Cursor closed during work) |
+| `CP_STARTUP_GRACE_SECONDS` | `300` | At startup only questions and approvals newer than this are notified |
+| `CP_APPROVAL_DELAY_SECONDS` | `8` | An approval is notified only if still pending after this long (0 = immediately) |
+| `CP_INCLUDE_CLASSIC` | `true` | Includes chats created in the classic editor (without `agentLocation`) |
+| `CP_POLL_MS` / `CP_FULL_SCAN_MS` | `1000` / `1000` | Database read frequency (one deep re-read of 11 chats costs ~25 ms) |
+| `CP_PAIRING_TTL_MINUTES` | `15` | Pairing code validity |
+| `CP_ALLOWED_HOSTS` | (empty) | Additional host names accepted, besides localhost and `*.ts.net` |
+| `CP_ALLOWED_TS_LOGINS` | (empty) | Allowed Tailscale accounts (see section 4) |
+| `CP_VAPID_SUBJECT` | `mailto:cursor-pocket@example.com` | Contact given to push services in VAPID headers. Recommended: an address you control. Only the push service (Apple) sees it, not public |
+| `CP_ACTIONS` | `true` | `false` disables actions from the phone (PWA stays read-only) |
+| `CP_APPROVALS` | `true` | `false` disables only Run/Reject from the phone (replies and messages remain) |
+| `CP_KEEP_AWAKE_CMD` | `/usr/bin/caffeinate` | command used by “Mac sveglio” (Keep Mac awake) (empty = feature unavailable) |
+| `CP_KEEP_AWAKE_GRACE_MS` | `120000` | grace after the last in-progress chat before letting the Mac sleep |
+| `CP_KEEP_AWAKE_POLL_MS` | `5000` | screen, battery, and sleep check while the Mac is kept awake |
+| `CP_KEEP_AWAKE_MIN_BATTERY` | `20` | below this % on battery “lid closed” mode is suspended |
+| `CP_BRIGHTNESS_CMD` | `daemon/data/bin/cp-brightness` | brightness helper (created with `tools/mac/build.sh`) |
+| `CP_CDP_PORT` | `9222` | Cursor debug port (loopback only) |
+| `CP_CDP_POLL_MS` | `5000` | How often the debug port and Agents window are checked |
+| `CP_ACTION_TIMEOUT_SECONDS` | `45` | Maximum time for an action before replying “timeout” to the phone |
+| `CP_RESTORE_SELECTION` | `true` | After an action reopens the chat you had open in Cursor |
 | `CP_LOG_LEVEL` | `info` | `debug`, `info`, `warn`, `error` |
 
-## 8. Cosa arriva in notifica
-- Nuova domanda in una chat (titolo e prima domanda nel testo): una notifica per ogni domanda, mai ripetuta, di norma entro
-  pochi secondi da quando compare in Cursor. Solo le domande vere (questionario dell'agente): i comandi in esecuzione non
-  generano notifiche.
-- Approvazione richiesta: l'agente e' fermo ad aspettare un tuo "Run"/"Allow" (un comando, una modifica, uno strumento MCP,
-  una richiesta web; anche quando a chiederlo e' un hook del progetto). Parte solo se dopo `CP_APPROVAL_DELAY_SECONDS` (8 s)
-  sei ancora in attesa, cosi' non ti disturba se approvi subito dal Mac. Il testo dice solo il tipo di azione ("Comando da
-  eseguire"), mai il comando. Dal telefono (dentro l'app) puoi approvare o rifiutare un comando di terminale, con due tocchi; le altre richieste le decidi in Cursor sul Mac. Se non arriva mai, vedi
-  FINDINGS 11.4 (e il log del daemon: `approval_seen`).
-- Chat finita (dopo un lavoro di almeno `CP_MIN_RUN_SECONDS`).
-- Toccando la notifica si apre la chat. Il contenuto della notifica e' cifrato end-to-end (RFC 8291) tra il daemon e
-  l'iPhone: il servizio push vede solo che esiste una notifica, non il testo.
-- Non vengono mai inviate notifiche dallo stato iniziale all'avvio del daemon (salvo domande o approvazioni
-  recentissime, vedi `CP_STARTUP_GRACE_SECONDS`).
+## 8. What arrives in notifications
+- New question in a chat (title and first question in the body): one notification per question, never repeated, normally within
+  a few seconds of appearing in Cursor. Only real questions (agent questionnaire): running commands do not
+  generate notifications.
+- Approval requested: the agent is waiting for your “Run”/“Allow” (a command, a change, an MCP tool,
+  a web request; even when a project hook asks). Sent only if after `CP_APPROVAL_DELAY_SECONDS` (8 s)
+  you are still waiting, so it does not bother you if you approve immediately on the Mac. The text says only the action type (e.g. “Command to run” in English), never the command; the language follows the app language you chose in the PWA. From the phone (inside the app) you can approve or reject a terminal command, with two taps; other requests you decide in Cursor on the Mac. If it never arrives, see
+  FINDINGS 11.4 (and daemon log: `approval_seen`).
+- Chat finished (after work of at least `CP_MIN_RUN_SECONDS`).
+- Tapping the notification opens the chat. Notification content is end-to-end encrypted (RFC 8291) between the daemon and
+  the iPhone: the push service only sees that a notification exists, not the text.
+- Notifications are never sent from initial state at daemon startup (except very recent questions or approvals,
+  see `CP_STARTUP_GRACE_SECONDS`).
 
-## 9. Il pulsante "Ignora"
-Toglie il pallino rosso SOLO nell'app: non invia nulla a Cursor e non modifica la chat. La richiesta passa a "In sospeso"
-e si puo' ripristinare. Se la chat pone una nuova domanda, il pallino ricompare.
-Cursor lascia spesso il pallino acceso anche per richieste ormai chiuse ("residui"): l'app le mostra come "Richiesta non
-risolta" e consente di ignorarle.
+## 9. The “Ignora” (Ignore) button
+Removes the red dot ONLY in the app: sends nothing to Cursor and does not change the chat. The request moves to “In sospeso”
+and can be restored. If the chat asks a new question, the dot reappears.
+Cursor often leaves the dot on even for requests already closed (“leftovers”): the app shows them as “Richiesta non
+risolta” and lets you ignore them.
 
-## 10. Risoluzione dei problemi
-- "Daemon non raggiungibile": il daemon non gira o Tailscale e' spento su uno dei due dispositivi.
-- Errore 421 / "Host non consentito": stai usando un nome diverso da localhost o `*.ts.net`; aggiungilo con `CP_ALLOWED_HOSTS`.
-- Nessuna notifica: l'app non e' installata dalla Home, il permesso e' negato (Impostazioni iOS, Notifiche), l'indirizzo non
-  e' HTTPS, oppure il test dalle Impostazioni dell'app non riesce. Controlla anche `npm run status`.
-- "Database di Cursor non leggibile": controlla `CP_CURSOR_DB`; se Cursor e' aperto il database e' comunque leggibile.
-- Mancano chat che avevi in Cursor, o ce ne sono in meno: l'app mostra solo quelle che compaiono nell'Agents Window, quindi
-  nasconde le chat dei progetti che hai RIMOSSO dalla sidebar (anche se non le avevi archiviate). `npm run probe` riporta quante
-  ne nasconde per questo motivo.
-- Una chat che sta lavorando e' "In corso" anche se Cursor le mostra il pallino arancione: il pallino di Cursor resta acceso
-  per vecchie domande, l'app lo considera solo quando la chat e' ferma.
-- "Porta gia' in uso": un'altra istanza e' attiva, oppure cambia `CP_PORT`.
-- Sessione scaduta o revocata: l'app torna da sola alla schermata di abbinamento; genera un nuovo codice con `npm run pair`.
-- "Risposte dal telefono: non attive": Cursor non e' stato avviato con la porta di debug (sezione 6). "Finestra Agents
-  chiusa": Cursor risponde ma la finestra Agents non e' aperta.
-- "La domanda e' cambiata o e' gia' stata risolta": nel frattempo hai risposto sul Mac o l'agente ha fatto un'altra domanda;
-  l'app si aggiorna da sola. "La chat non e' visibile nella sidebar": aprila o espandi il gruppo in Cursor.
-- "Non riesco ancora a confermare...": l'azione e' partita ma Cursor non l'ha ancora scritta nel database; controlla sul Mac
-  prima di ripetere (ripetere la stessa cosa entro pochi secondi viene rifiutato per evitare doppi invii).
+## 10. Troubleshooting
+- “Daemon non raggiungibile”: the daemon is not running or Tailscale is off on one of the devices.
+- Error 421 / “Host non consentito”: you are using a name other than localhost or `*.ts.net`; add it with `CP_ALLOWED_HOSTS`.
+- No notifications: the app is not installed from Home, permission denied (iOS Settings, Notifications), the address is not
+  HTTPS, or the test from the app’s “Impostazioni” fails. Also check `npm run status`.
+- “Database di Cursor non leggibile”: check `CP_CURSOR_DB`; if Cursor is open the database is still readable.
+- Missing chats you had in Cursor, or fewer: the app shows only those in the Agents Window, so
+  it hides chats from projects you REMOVED from the sidebar (even if you did not archive them). `npm run probe` reports how many
+  are hidden for this reason.
+- A working chat is “In corso” even if Cursor shows the orange dot: Cursor’s dot stays on for
+  old questions; the app considers it only when the chat is idle.
+- “Porta gia' in uso”: another instance is active, or change `CP_PORT`.
+- Session expired or revoked: the app returns to the pairing screen on its own; generate a new code with `npm run pair`.
+- “Risposte dal telefono: non attive”: Cursor was not started with the debug port (section 6). “Finestra Agents
+  chiusa”: Cursor responds but the Agents window is not open.
+- “La domanda e' cambiata o e' gia' stata risolta”: meanwhile you answered on the Mac or the agent asked another question;
+  the app refreshes on its own. “La chat non e' visibile nella sidebar”: open it or expand the group in Cursor.
+- “Non riesco ancora a confermare...”: the action started but Cursor has not written it to the database yet; check on the Mac
+  before retrying (retrying the same thing within a few seconds is rejected to avoid double sends).
 
-## 11. Sicurezza in sintesi
-- Il daemon ascolta solo su loopback; verifica `Host` (anti DNS rebinding), `Origin` sulle richieste che modificano dati,
-  `Content-Type` JSON, limite di 16 KB per richiesta, CSP senza script o stili inline.
-- Codici di abbinamento monouso con limite di 5 tentativi falliti ogni 10 minuti; di sessioni e codici si conserva solo
-  l'impronta SHA-256.
-- Nei log finiscono solo contatori e tipi di evento: mai chiavi, token, titoli o testi delle chat.
-- Rispondere dal telefono (sezione 6) equivale a controllare un agente con accesso alla shell del Mac: usarlo solo dietro
-  Tailscale, con l'autenticazione attiva e, meglio, con `CP_ALLOWED_TS_LOGINS`. Le azioni non scrivono mai nel database di
-  Cursor: pilotano l'interfaccia come un utente e leggono il database in sola lettura per verificare. Il limite per
-  richiesta sale a 64 KB solo per le azioni (testi lunghi).
+## 11. Security in brief
+- The daemon listens only on loopback; validates `Host` (anti DNS rebinding), `Origin` on requests that modify data,
+  JSON `Content-Type`, 16 KB limit per request, CSP without inline scripts or styles.
+- Single-use pairing codes with limit of 5 failed attempts every 10 minutes; for sessions and codes only
+  the SHA-256 fingerprint is stored.
+- Logs contain only counters and event types: never keys, tokens, titles, or chat text.
+- Replying from the phone (section 6) equals controlling an agent with shell access on the Mac: use only behind
+  Tailscale, with authentication on, and preferably with `CP_ALLOWED_TS_LOGINS`. Actions never write to the Cursor
+  database: they drive the UI like a user and read the database in read-only mode to verify. The per-request limit
+  rises to 64 KB only for actions (long text).
 
-## 12. Marchio Cursor
-Il logo in alto a sinistra e nella schermata di abbinamento (`pwa/icons/cursor-logo.svg`) e' una riproduzione piatta
-dell'icona di Cursor, marchio di Anysphere: serve a riconoscere a colpo d'occhio l'app, non indica alcuna affiliazione.
-Sta in un file a parte (usato solo da `pwa/js/components.js`, funzione `logoImg`) proprio per poterlo sostituire o togliere:
-se pubblichi il progetto valuta se mantenerlo e sostituiscilo con un'icona tua cambiando solo quel file. Lo stesso logo
-e' l'icona dell'app sulla schermata Home e la favicon: le PNG (`pwa/icons/icon-192.png`, `icon-512.png`,
-`apple-touch-icon.png`) si ricavano da `cursor-logo.svg` con `node tools/make-icons.mjs` (nessuna dipendenza; l'SVG deve
-avere un `<rect>` di sfondo e dei `<path>` a linee rette, come quello incluso). Dopo un cambio iOS tiene l'icona vecchia: rimuovi
-l'app dalla Home e aggiungila di nuovo.
+## 12. Cursor branding
+The logo at top left and on the pairing screen (`pwa/icons/cursor-logo.svg`) is a flat reproduction
+of the Cursor icon, a trademark of Anysphere: it helps recognize the app at a glance, not an affiliation.
+It lives in a separate file (used only by `pwa/js/components.js`, function `logoImg`) so it can be replaced or removed:
+if you publish the project consider whether to keep it and replace it with your own icon by changing only that file. The same logo
+is the app icon on the Home screen and the favicon: the PNGs (`pwa/icons/icon-192.png`, `icon-512.png`,
+`apple-touch-icon.png`) are derived from `cursor-logo.svg` with `node tools/make-icons.mjs` (no dependencies; the SVG must
+have a background `<rect>` and straight-line `<path>` elements, like the included one). After a change iOS keeps the old icon: remove
+the app from Home and add it again.
+

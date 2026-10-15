@@ -1,19 +1,20 @@
-// Elenchi delle tre schede principali, che condividono gesti e aggiornamento:
-//   'attention'  richieste da decidere ("Richiedono attenzione"), chat "In corso" e "In sospeso"
-//   'chats'      tutte le chat raggruppate per workspace nell'ordine della sidebar di Cursor, con ricerca
-//   'favorites'  le chat con il cuore (preferenza locale al daemon)
-import { STATE, appbar, banner, chatRow, emptyState, iconButton, sectionHead, skeleton } from '../components.js';
+// Lists for the three main tabs, sharing gestures and refresh:
+//   'attention'  items needing a decision ("Richiedono attenzione"), "In corso" and "In sospeso" chats
+//   'chats'      all chats grouped by workspace in Cursor sidebar order, with search
+//   'favorites'  heart-marked chats (daemon-local preference)
+import { STATE, appbar, banner, chatRow, emptyState, iconButton, sectionHead, skeleton, workspaceDisplayName } from '../components.js';
 import { api } from '../api.js';
 import { commit, h, replace } from '../dom.js';
 import { icon } from '../icons.js';
 import { getLive, refresh } from '../live.js';
 import { environment } from '../push.js';
+import { t } from '../i18n/index.js';
 import { scrollToY, scrollTop } from '../scroll.js';
 
 const PREFS_KEY = 'cp.home.v1';
-const PREVIEW = 5; // chat mostrate per workspace prima di "Mostra altre"
-const SWIPE_W = 96; // larghezza del pulsante "Ignora" scoperto scorrendo una riga (anche in app.css: --swipe-w)
-const PTR_TRIGGER = 56; // trascinamento (px, dopo la resistenza) oltre il quale si aggiorna
+const PREVIEW = 5; // chats shown per workspace before "Mostra altre"
+const SWIPE_W = 96; // width of "Ignora" button revealed by swiping a row (also in app.css: --swipe-w)
+const PTR_TRIGGER = 56; // pull distance (px, after resistance) that triggers refresh
 const PTR_MAX = 80;
 
 function readPrefs() {
@@ -25,11 +26,15 @@ function readPrefs() {
   }
 }
 
-const TITLES = { attention: 'Attenzione', chats: 'Chat', favorites: 'Preferite' };
+function tabTitle(mode) {
+  if (mode === 'attention') return t('home.tabAttention');
+  if (mode === 'chats') return t('home.tabChats');
+  return t('home.tabFavorites');
+}
 
 export function mountHome(root, mode = 'attention') {
   const prefs = readPrefs();
-  let query = ''; // ricerca (solo scheda Chat)
+  let query = ''; // search (Chat tab only)
   const expandedLists = new Set();
   let refreshing = false;
   let alive = true;
@@ -38,11 +43,11 @@ export function mountHome(root, mode = 'attention') {
     try {
       localStorage.setItem(PREFS_KEY, JSON.stringify(prefs));
     } catch {
-      // archivio non disponibile: le preferenze valgono solo per la sessione
+      // storage unavailable: prefs apply for this session only
     }
   };
 
-  // Stato iniziale dei gruppi: quello di Cursor (`collapsed`), salvo scelta locale dell'utente.
+  // Initial group state: from Cursor (`collapsed`), unless overridden locally.
   const wsOpen = (ws) => (prefs.ws?.[ws.id] ? prefs.ws[ws.id] === 'open' : !ws.collapsed);
 
   function toggleWs(ws) {
@@ -58,21 +63,21 @@ export function mountHome(root, mode = 'attention') {
     try {
       await refresh();
     } catch {
-      // l'errore e' gia' mostrato dal banner di connessione
+      // error already shown by connection banner
     }
     refreshing = false;
     render();
   }
 
-  // --- gesti -----------------------------------------------------------------------------------------------
-  // Scorrere una riga verso sinistra scopre "Ignora" (la stessa azione della pagina chat, che resta per chi usa VoiceOver).
-  // Il tocco semplice apre la chat come prima; un trascinamento orizzontale non la apre.
+  // --- gestures --------------------------------------------------------------------------------------------
+  // Swipe a row left to reveal "Ignora" (same as chat page, which remains for VoiceOver users).
+  // Simple tap opens the chat as before; horizontal drag does not.
   async function swipeAction(card) {
     try {
       if (card.state === STATE.ATTENTION) await api.post(`/api/chats/${encodeURIComponent(card.id)}/ignore`, { key: card.attention.key });
       else await api.post(`/api/chats/${encodeURIComponent(card.id)}/prefs`, { favorite: !card.favorite });
     } catch {
-      // se la situazione e' cambiata nel frattempo l'elenco si aggiorna comunque
+      // if state changed meanwhile the list still refreshes
     }
     await refresh().catch(() => {});
     closeSwipes(null);
@@ -80,7 +85,7 @@ export function mountHome(root, mode = 'attention') {
     render();
   }
 
-  // Mentre una riga e' trascinata o aperta l'elenco non si ridisegna (si perderebbe il gesto): si recupera dopo.
+  // While a row is dragging or open, skip list redraw (would break the gesture); catch up afterward.
   let pendingRender = false;
   const swiping = () => Boolean(document.querySelector('.swipe.dragging, .swipe.open'));
   const flushRender = () => {
@@ -95,7 +100,7 @@ export function mountHome(root, mode = 'attention') {
   };
 
   function swipeRow(card, opts = { showWorkspace: true, showPrompt: true }) {
-    // Scorrendo: una richiesta viva si "Ignora" (stessa azione della pagina chat); le altre chat si fissano con il cuore.
+    // On swipe: live request gets "Ignora" (same as chat page); other chats toggle favorite via heart.
     const attention = card.state === STATE.ATTENTION;
     const wrap = h(
       'div.swipe',
@@ -104,7 +109,7 @@ export function mountHome(root, mode = 'attention') {
         'button',
         { class: `swipe-action${attention ? '' : ' fav'}`, type: 'button', tabindex: '-1', 'aria-hidden': 'true', onClick: () => swipeAction(card) },
         icon(attention ? 'eyeOff' : card.favorite ? 'heartOff' : 'heart', { size: 20 }),
-        h('span', null, attention ? 'Ignora' : card.favorite ? 'Rimuovi' : 'Preferita'),
+        h('span', null, attention ? t('home.swipeIgnore') : card.favorite ? t('home.swipeRemoveFavorite') : t('home.swipeAddFavorite')),
       ),
       chatRow(card, opts),
     );
@@ -135,7 +140,7 @@ export function mountHome(root, mode = 'attention') {
           wrap.setPointerCapture?.(pid);
           closeSwipes(wrap);
           wrap.classList.add('dragging');
-          wrap.classList.remove('open'); // durante il trascinamento comanda --swipe (partendo da `base`)
+          wrap.classList.remove('open'); // while dragging, --swipe drives offset (starting from `base`)
         }
       }
       if (axis !== 'x') return;
@@ -156,7 +161,7 @@ export function mountHome(root, mode = 'attention') {
     };
     wrap.addEventListener('pointerup', end);
     wrap.addEventListener('pointercancel', end);
-    // Dopo un trascinamento, o con la riga aperta, il tocco non apre la chat: chiude soltanto la riga.
+    // After a drag, or with row open, tap does not open chat: only closes the row.
     wrap.addEventListener(
       'click',
       (e) => {
@@ -179,7 +184,7 @@ export function mountHome(root, mode = 'attention') {
   };
   document.addEventListener('pointerdown', onOutsidePointer, true);
 
-  // Trascinare l'elenco verso il basso, quando e' in cima, lo aggiorna (iOS non lo fa da solo in una PWA).
+  // Pull list down at scroll top to refresh (iOS does not do this automatically in a PWA).
   const ptr = h('div', { class: 'ptr', 'aria-hidden': 'true' }, icon('refresh', { size: 20 }));
   document.body.append(ptr);
   let ptrY = null;
@@ -227,14 +232,14 @@ export function mountHome(root, mode = 'attention') {
     if (prefs.pushHintDismissed) return null;
     const env = environment();
     let text = null;
-    if (env.ios && !env.standalone) text = 'Per ricevere le notifiche aggiungi l\u2019app alla schermata Home.';
-    else if (env.hasApis && Notification.permission === 'default') text = 'Le notifiche non sono attive.';
+    if (env.ios && !env.standalone) text = t('home.pushHintIos');
+    else if (env.hasApis && Notification.permission === 'default') text = t('home.pushHintInactive');
     if (!text) return null;
     return banner({
       tone: 'info',
       iconName: 'bell',
       text,
-      actionLabel: 'Apri impostazioni',
+      actionLabel: t('home.openSettings'),
       href: '#/impostazioni',
       onDismiss: () => {
         prefs.pushHintDismissed = true;
@@ -247,7 +252,7 @@ export function mountHome(root, mode = 'attention') {
   function workspaceBlock(ws) {
     const open = wsOpen(ws);
     const head = sectionHead({
-      label: ws.name,
+      label: workspaceDisplayName(ws),
       count: ws.counts.total,
       alert: ws.counts.attention > 0,
       iconName: open ? 'folderOpen' : 'folder',
@@ -270,13 +275,13 @@ export function mountHome(root, mode = 'attention') {
                 render();
               },
             },
-            `Mostra altre ${hidden}`,
+            t('home.showMore', { count: hidden }),
           )
         : null;
     return [head, h('div.list', null, cards.map((c) => swipeRow(c, { showWorkspace: false })), more)];
   }
 
-  // Regioni persistenti: la ricerca non viene ricreata a ogni aggiornamento (si perderebbero focus e tastiera).
+  // Persistent regions: search is not recreated on every refresh (would lose focus and keyboard).
   const headHost = h('div.region');
   const toolsHost = h('div.region');
   const bodyHost = h('div.region');
@@ -285,8 +290,8 @@ export function mountHome(root, mode = 'attention') {
   if (search) toolsHost.append(search.el);
 
   function createSearch() {
-    const input = h('input', { class: 'search-input', type: 'search', placeholder: 'Cerca una chat', 'aria-label': 'Cerca una chat', autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', enterkeyhint: 'search' });
-    const clear = h('button', { class: 'icon-btn search-clear', type: 'button', 'aria-label': 'Cancella la ricerca', hidden: true, onClick: () => {
+    const input = h('input', { class: 'search-input', type: 'search', placeholder: t('home.searchPlaceholder'), 'aria-label': t('home.searchPlaceholder'), autocomplete: 'off', autocapitalize: 'off', spellcheck: 'false', enterkeyhint: 'search' });
+    const clear = h('button', { class: 'icon-btn search-clear', type: 'button', 'aria-label': t('home.searchClear'), hidden: true, onClick: () => {
       input.value = '';
       onInput();
       input.focus();
@@ -306,16 +311,16 @@ export function mountHome(root, mode = 'attention') {
     const out = [];
     const running = state.workspaces.flatMap((w) => w.chats).filter((c) => c.state === STATE.RUNNING);
     if (state.attention.length) {
-      out.push(sectionHead({ label: 'Richiedono attenzione', count: state.attention.length, tone: 'danger' }), h('div.list', null, state.attention.map((c) => swipeRow(c))));
+      out.push(sectionHead({ label: t('home.sectionNeedsAttention'), count: state.attention.length, tone: 'danger' }), h('div.list', null, state.attention.map((c) => swipeRow(c))));
     }
     if (running.length) {
-      out.push(sectionHead({ label: 'In corso', count: running.length, iconName: 'spinner' }), h('div.list', null, running.map((c) => swipeRow(c, { showWorkspace: true }))));
+      out.push(sectionHead({ label: t('home.sectionRunning'), count: running.length, iconName: 'spinner' }), h('div.list', null, running.map((c) => swipeRow(c, { showWorkspace: true }))));
     }
     if (state.pending.length) {
       const open = Boolean(prefs.pendingOpen);
       out.push(
         sectionHead({
-          label: 'In sospeso',
+          label: t('home.sectionPending'),
           count: state.pending.length,
           iconName: 'clock',
           expanded: open,
@@ -328,7 +333,7 @@ export function mountHome(root, mode = 'attention') {
       );
       if (open) out.push(h('div.list', null, state.pending.map((c) => chatRow(c, { showWorkspace: true }))));
     }
-    if (!out.length) out.push(emptyState({ iconName: 'checkCircle', title: 'Niente da decidere', text: 'Le domande e le approvazioni degli agenti compaiono qui.' }));
+    if (!out.length) out.push(emptyState({ iconName: 'checkCircle', title: t('home.emptyAttentionTitle'), text: t('home.emptyAttentionText') }));
     return out;
   }
 
@@ -344,20 +349,20 @@ export function mountHome(root, mode = 'attention') {
       const cards = ws.chats.filter(matches);
       if (!cards.length) continue;
       shown += cards.length;
-      out.push(sectionHead({ label: ws.name, count: cards.length, alert: cards.some((c) => c.state === STATE.ATTENTION), iconName: 'folderOpen' }), h('div.list', null, cards.map((c) => swipeRow(c, { showWorkspace: false }))));
+      out.push(sectionHead({ label: workspaceDisplayName(ws), count: cards.length, alert: cards.some((c) => c.state === STATE.ATTENTION), iconName: 'folderOpen' }), h('div.list', null, cards.map((c) => swipeRow(c, { showWorkspace: false }))));
     }
-    if (query && !shown) out.push(emptyState({ iconName: 'search', title: 'Nessun risultato' }));
+    if (query && !shown) out.push(emptyState({ iconName: 'search', title: t('home.emptySearchTitle') }));
     return out;
   }
 
   function favoritesBody(state) {
     const favs = state.workspaces.flatMap((w) => w.chats).filter((c) => c.favorite).sort((a, b) => b.lastUpdatedAt - a.lastUpdatedAt);
-    if (!favs.length) return [emptyState({ iconName: 'heart', title: 'Nessuna preferita', text: 'Tocca il cuore in una chat, o scorri una riga, per ritrovarla qui.' })];
+    if (!favs.length) return [emptyState({ iconName: 'heart', title: t('home.emptyFavoritesTitle'), text: t('home.emptyFavoritesText') })];
     return [h('div.list', null, favs.map((c) => swipeRow(c, { showWorkspace: true })))];
   }
 
   function render() {
-    if (!alive) return; // chiamata tardiva dopo un cambio di schermata
+    if (!alive) return; // late call after navigating away
     if (swiping()) {
       pendingRender = true;
       return;
@@ -369,18 +374,18 @@ export function mountHome(root, mode = 'attention') {
 
     const top = [
       appbar({
-        title: TITLES[mode],
+        title: tabTitle(mode),
         logo: true,
-        actions: [...(mode === 'chats' ? [iconButton({ label: 'Nuova chat', name: 'plus', href: '#/nuova' })] : []), iconButton({ label: 'Aggiorna', name: 'refresh', spin: refreshing, onClick: doRefresh })],
+        actions: [...(mode === 'chats' ? [iconButton({ label: t('home.newChat'), name: 'plus', href: '#/nuova' })] : []), iconButton({ label: t('home.refresh'), name: 'refresh', spin: refreshing, onClick: doRefresh })],
       }),
     ];
     if (lv.offline) {
-      top.push(banner({ text: 'Daemon non raggiungibile', detail: 'Controlla che sia attivo sul Mac e che Tailscale sia connesso.', actionLabel: 'Riprova', onAction: doRefresh }));
+      top.push(banner({ text: t('home.offlineTitle'), detail: t('home.offlineDetail'), actionLabel: t('home.retry'), onAction: doRefresh }));
     } else if (status && !status.ok) {
       top.push(
         banner({
-          text: status.error === 'db' ? 'Database di Cursor non leggibile' : 'Il daemon si sta avviando',
-          detail: status.error === 'db' ? 'I dati mostrati potrebbero non essere aggiornati.' : null,
+          text: status.error === 'db' ? t('home.dbErrorTitle') : t('home.startingTitle'),
+          detail: status.error === 'db' ? t('home.dbErrorDetail') : null,
         }),
       );
     }
@@ -389,9 +394,9 @@ export function mountHome(root, mode = 'attention') {
 
     let body;
     if (!state) body = [skeleton()];
-    else if (state.counts.total === 0) body = [emptyState({ iconName: 'terminal', title: 'Nessuna chat locale', text: 'Le chat locali dell\u2019Agents Window di Cursor compariranno qui.' })];
+    else if (state.counts.total === 0) body = [emptyState({ iconName: 'terminal', title: t('home.emptyNoChatsTitle'), text: t('home.emptyNoChatsText') })];
     else {
-      // Sistema le preferenze: niente voci per workspace che non esistono piu'.
+      // Prune prefs: drop entries for workspaces that no longer exist.
       const ids = new Set(state.workspaces.map((w) => w.id));
       const known = Object.keys(prefs.ws ?? {});
       if (known.some((k) => !ids.has(k))) {

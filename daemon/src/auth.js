@@ -1,13 +1,13 @@
-// Autenticazione: abbinamento con codice monouso + sessione con cookie HttpOnly.
+// Authentication: one-time pairing code + HttpOnly session cookie.
 //
-//  - `npm run pair` (sul Mac) genera un codice a 8 caratteri, valido pochi minuti, monouso. Si salva solo l'hash.
-//  - Il telefono invia il codice a POST /api/pair e riceve un cookie di sessione casuale (256 bit). Si salva solo l'hash.
-//  - Tentativi errati limitati (globale: dietro `tailscale serve` tutte le richieste arrivano da 127.0.0.1).
+//  - `npm run pair` (on the Mac) generates an 8-character code, valid a few minutes, single use. Only the hash is stored.
+//  - The phone POSTs the code to /api/pair and receives a random session cookie (256 bits). Only the hash is stored.
+//  - Failed attempts are rate-limited (global: behind `tailscale serve` all requests come from 127.0.0.1).
 import crypto from 'node:crypto';
 import { b64u, sha256Hex } from './util.js';
 
 export const COOKIE_NAME = 'cp_session';
-const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // senza O/0/I/1 (32 simboli)
+const CODE_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no O/0/I/1 (32 symbols)
 const CODE_LEN = 8;
 const SESSION_IDLE_MS = 90 * 24 * 3_600_000;
 const TOUCH_EVERY_MS = 5 * 60_000;
@@ -55,7 +55,7 @@ export class Auth {
     this.#now = now;
   }
 
-  /** Crea un codice di abbinamento monouso. Il testo in chiaro e' restituito UNA volta sola. */
+  /** Create a single-use pairing code. Plaintext is returned ONCE only. */
   createPairingCode() {
     const now = this.#now();
     this.#store.prunePairing(now - 24 * 3_600_000);
@@ -74,7 +74,7 @@ export class Auth {
   }
 
   /**
-   * Scambia un codice di abbinamento con una sessione.
+   * Exchange a pairing code for a session.
    * @returns {{ok: true, token: string} | {ok: false, reason: 'rate_limited'|'invalid', retryAfterMs?: number}}
    */
   pair(codeInput, { label = null } = {}) {
@@ -92,7 +92,7 @@ export class Auth {
     return { ok: true, token };
   }
 
-  /** Verifica il cookie di sessione di una richiesta. @returns {{tokenHash: string, token: string}|null} */
+  /** Verify a request's session cookie. @returns {{tokenHash: string, token: string}|null} */
   authenticate(cookieHeader) {
     const token = parseCookies(cookieHeader)[COOKIE_NAME];
     if (!token || token.length < 20 || token.length > 100) return null;
@@ -109,7 +109,7 @@ export class Auth {
   }
 
   /**
-   * Dispositivi abbinati, senza segreti: l'identificativo e' un hash dell'hash del token (non permette di autenticarsi).
+   * Paired devices, no secrets: id is a hash of the token hash (cannot authenticate).
    * @returns {{id: string, label: string|null, createdAt: number, lastSeenAt: number, current: boolean, notifications: boolean}[]}
    */
   devices(currentTokenHash) {
@@ -127,7 +127,7 @@ export class Auth {
       .sort((a, b) => b.lastSeenAt - a.lastSeenAt);
   }
 
-  /** Scollega un altro dispositivo (mai quello corrente: per quello c'e' l'uscita normale). @returns 'ok' | 'current' | 'unknown' */
+  /** Revoke another device (never the current one: use normal logout). @returns 'ok' | 'current' | 'unknown' */
   revokeDevice(id, currentTokenHash) {
     const target = this.#store.listSessions().find((x) => deviceId(x.tokenHash) === id);
     if (!target) return 'unknown';
@@ -136,7 +136,7 @@ export class Auth {
     return 'ok';
   }
 
-  /** Termina la sessione e le sue sottoscrizioni push. */
+  /** End the session and its push subscriptions. */
   logout(tokenHash) {
     this.#store.removeSubscriptionsOfSession(tokenHash);
     return this.#store.removeSession(tokenHash);

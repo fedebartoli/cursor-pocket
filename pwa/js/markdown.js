@@ -1,6 +1,6 @@
-// Formattazione minimale e SICURA del testo dell'agente: paragrafi, elenchi, titoli, codice, citazioni.
-// Costruisce solo nodi DOM con `h` (mai innerHTML) e NON interpreta i link: il testo di una chat non deve poter diventare
-// un collegamento cliccabile. Cio' che non si riconosce resta testo normale, quindi nulla va perso.
+// Minimal SAFE formatting of agent text: paragraphs, lists, headings, code, quotes.
+// Builds only DOM nodes with `h` (never innerHTML) and does NOT interpret links: chat text must not become
+// a clickable link. Unrecognized syntax stays plain text, so nothing is lost.
 import { h } from './dom.js';
 
 const FENCE = /^\s*(`{3,}|~{3,})\s*([\w+-]*)\s*$/;
@@ -12,8 +12,8 @@ const RULE = /^\s*([-*_])(\s*\1){2,}\s*$/;
 const TABLE = /^\s*\|.*\|\s*$/;
 
 /**
- * Elementi in linea: `codice`, **grassetto**, *corsivo*. Ritorna [{ t: 'text'|'code'|'strong'|'em', text }].
- * Un marcatore non chiuso resta testo.
+ * Inline elements: `code`, **bold**, *italic*. Returns [{ t: 'text'|'code'|'strong'|'em', text }].
+ * An unclosed marker stays plain text.
  */
 export function parseInline(text) {
   const out = [];
@@ -58,7 +58,7 @@ export function parseInline(text) {
   return out;
 }
 
-/** Blocchi: p | h | ul | ol | code | quote | table | hr. */
+/** Blocks: p | h | ul | ol | code | quote | table | hr. */
 export function parseBlocks(text) {
   const lines = String(text ?? '').replace(/\r\n?/g, '\n').split('\n');
   const blocks = [];
@@ -147,7 +147,7 @@ export function parseBlocks(text) {
       continue;
     }
     if (list && /^\s{2,}\S/.test(line)) {
-      // riga di continuazione di una voce di elenco
+      // list item continuation line
       list.items[list.items.length - 1] += `\n${line.trim()}`;
       continue;
     }
@@ -167,7 +167,7 @@ function inlineNodes(text) {
   });
 }
 
-/** Nodi DOM per il testo (da inserire in un contenitore). */
+/** DOM nodes for the text (to insert in a container). */
 export function renderMarkdown(text) {
   return parseBlocks(text).map((b) => {
     switch (b.type) {

@@ -1,7 +1,8 @@
-// "Attivita' recente" di una chat: cosa sta facendo l'agente (tipo di azione, mai comandi o percorsi) e gli ultimi
-// messaggi. Il daemon manda gia' etichette italiane e categorie: qui si sceglie solo l'icona.
+// Chat "recent activity": what the agent is doing (action type, never commands or paths) and latest
+// messages. Action codes from the daemon are translated here; categories pick the icon.
 import { h } from './dom.js';
 import { timeAgo } from './format.js';
+import { t } from './i18n/index.js';
 import { icon } from './icons.js';
 
 export const CATEGORY_ICON = {
@@ -24,10 +25,15 @@ function iconFor(item) {
   return CATEGORY_ICON[item.category] ?? 'wrench';
 }
 
-const STATE_TEXT = { running: 'in corso', error: 'non riuscita', stopped: 'interrotta' };
+function stateTextFor(item) {
+  if (item.state === 'running') return t('activity.stateRunning');
+  if (item.state === 'error') return t('activity.stateError');
+  if (item.state === 'stopped') return t('activity.stateStopped');
+  return null;
+}
 
 function row(item) {
-  const stateText = STATE_TEXT[item.state];
+  const stateText = stateTextFor(item);
   const mark =
     item.state === 'running'
       ? icon('spinner', { size: 16, className: 'spin' })
@@ -41,7 +47,7 @@ function row(item) {
     h(
       'div.activity-body',
       null,
-      h('div.activity-label', null, item.label, stateText ? h('span.activity-state', null, ` \u00b7 ${stateText}`) : null),
+      h('div.activity-label', null, item.action ? t(`activity.action.${item.action}`) : '', stateText ? h('span.activity-state', null, ` \u00b7 ${stateText}`) : null),
       item.preview ? h('div.activity-preview', null, item.preview) : null,
     ),
     item.at ? h('span.hint.activity-time', null, timeAgo(item.at)) : null,
@@ -49,16 +55,16 @@ function row(item) {
 }
 
 /**
- * Pannello dell'attivita'. `mode`:
- *  - 'working': la chat sta lavorando (o un'azione e' in corso);
- *  - 'waiting': si e' appena risposto o scritto e l'agente non ha ancora lasciato tracce;
- *  - 'idle': solo cronologia recente.
- * Con elenco vuoto e modo 'idle' non si mostra nulla.
+ * Activity panel. `mode`:
+ *  - 'working': chat is working (or an action is in progress);
+ *  - 'waiting': just answered or sent and the agent has not left traces yet;
+ *  - 'idle': recent history only.
+ * With empty list and mode 'idle' shows nothing.
  */
 export function activityPanel(items, mode) {
   const list = items ?? [];
   if (!list.length && mode === 'idle') return null;
-  const title = { working: 'L\u2019agente sta lavorando', waiting: 'Inviato: in attesa dell\u2019agente', idle: 'Attivit\u00e0 recente' }[mode];
+  const title = { working: t('activity.titleWorking'), waiting: t('activity.titleWaiting'), idle: t('activity.titleIdle') }[mode];
   const busy = mode !== 'idle';
   return h(
     'section',

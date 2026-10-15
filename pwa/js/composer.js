@@ -1,23 +1,24 @@
-// Compositore dei messaggi (Fase 2): campo di testo e invio a una chat, fissato in fondo alla schermata.
+// Message composer (Phase 2): text field and send to a chat, fixed at the bottom of the screen.
 //
-// Resta SEMPRE lo stesso nodo DOM mentre la schermata si aggiorna (altrimenti si perderebbero testo e focus);
-// `update()` cambia solo disponibilita' e avvisi. Le bozze restano in memoria per chat: mai su disco.
+// ALWAYS the same DOM node while the screen updates (otherwise text and focus would be lost);
+// `update()` only changes availability and notices. Drafts stay in memory per chat: never on disk.
 import { createAttachments } from './attachments.js';
 import { h } from './dom.js';
+import { t } from './i18n/index.js';
 import { icon } from './icons.js';
 
-export const MESSAGE_MAX = 8000; // come LIMITS.messageChars del daemon
+export const MESSAGE_MAX = 8000; // same as daemon LIMITS.messageChars
 const MAX_HEIGHT = 140;
 const STATUS_MS = 9000;
 const STOP_ARM_MS = 4000;
 
-const drafts = new Map(); // chatId -> testo
+const drafts = new Map(); // chatId -> text
 
 /**
  * @param {object} p
  * @param {string} p.chatId
- * @param {(text: string, images: string[]) => Promise<string>} p.onSend  invia (images = id delle immagini gia' caricate); risolve con il testo di esito, rifiuta con Error(messaggio)
- * @param {() => Promise<string>} [p.onStop]  ferma l'agente (solo mentre lavora e il campo e' vuoto); stessa convenzione di onSend
+ * @param {(text: string, images: string[]) => Promise<string>} p.onSend  send (images = ids of uploaded images); resolves with outcome text, rejects with Error(message)
+ * @param {() => Promise<string>} [p.onStop]  stop the agent (only while working and the field is empty); same convention as onSend
  */
 export function createComposer({ chatId, onSend, onStop }) {
   let mode = 'ready'; // 'ready' | 'blocked' | 'unavailable' | 'hidden'
@@ -34,25 +35,27 @@ export function createComposer({ chatId, onSend, onStop }) {
     class: 'composer-input',
     rows: 1,
     maxlength: MESSAGE_MAX,
-    placeholder: 'Scrivi a Cursor',
-    'aria-label': 'Messaggio per Cursor',
+    placeholder: t('composer.placeholderReady'),
+    'aria-label': t('composer.messageLabel'),
     autocapitalize: 'sentences',
     enterkeyhint: 'enter',
   });
-  const sendBtn = h('button', { class: 'send', type: 'submit', 'aria-label': 'Invia messaggio' }, icon('arrowUp', { size: 22 }));
+  const sendBtn = h('button', { class: 'send', type: 'submit', 'aria-label': t('composer.sendMessage') }, icon('arrowUp', { size: 22 }));
+  // Tapping the button must not take focus from the field (iOS would close the keyboard and move the button before the click).
+  sendBtn.addEventListener('mousedown', (ev) => ev.preventDefault());
   const sendIcon = sendBtn.firstChild;
   const stopIcon = icon('stop', { size: 18 });
   const files = createAttachments({ onChange: () => sync(), onError: (t) => showStatus(t, true), onNote: (t) => showStatus(t) });
   const form = h('form', { class: 'composer', novalidate: true }, files.button, area, sendBtn);
   const el = h('div', { class: 'dock' }, hintEl, statusEl, files.strip, form, files.input);
 
-  // L'altezza segue il testo (fino a un massimo). CSSOM: consentito dalla CSP, a differenza dell'attributo style.
+  // Height follows text (up to a max). CSSOM: allowed by CSP, unlike the style attribute.
   function fit() {
     area.style.height = 'auto';
     area.style.height = `${Math.min(area.scrollHeight, MAX_HEIGHT)}px`;
   }
 
-  // Come in Cursor: mentre l'agente lavora e il campo e' vuoto, il pulsante di invio diventa "Ferma".
+  // Like Cursor: while the agent works and the field is empty, the send button becomes "Stop".
   const stopping = () => running && mode === 'ready' && onStop && area.value.trim().length === 0 && files.count() === 0;
 
   function disarm() {
@@ -62,13 +65,15 @@ export function createComposer({ chatId, onSend, onStop }) {
 
   function sync() {
     const locked = busy || mode !== 'ready';
-    area.disabled = locked;
+    // While sending, read-only (not disabled): disabling a focused field makes iOS drop the keyboard and the layout jumps.
+    area.disabled = mode !== 'ready';
+    area.readOnly = busy;
     files.setLocked(locked);
     const stop = stopping();
     if (!stop) disarm();
     sendBtn.classList.toggle('stop', Boolean(stop));
     sendBtn.classList.toggle('armed', Boolean(stop && armed));
-    sendBtn.setAttribute('aria-label', stop ? (armed ? 'Tocca ancora per fermare l\u2019agente' : 'Ferma l\u2019agente') : 'Invia messaggio');
+    sendBtn.setAttribute('aria-label', stop ? (armed ? t('composer.tapAgainToStop') : t('composer.stopAgent')) : t('composer.sendMessage'));
     sendBtn.replaceChildren(stop ? stopIcon : sendIcon);
     sendBtn.disabled = stop ? busy : locked || files.uploading() || (area.value.trim().length === 0 && files.readyIds().length === 0);
   }
@@ -97,7 +102,7 @@ export function createComposer({ chatId, onSend, onStop }) {
   async function doStop() {
     if (!armed) {
       armed = true;
-      showStatus('Tocca ancora per fermare l\u2019agente.');
+      showStatus(t('composer.tapAgainToStopHint'));
       clearTimeout(armTimer);
       armTimer = setTimeout(() => {
         armed = false;
@@ -114,7 +119,7 @@ export function createComposer({ chatId, onSend, onStop }) {
     try {
       showStatus(await onStop());
     } catch (err) {
-      showStatus(err?.message || 'Non sono riuscito a fermare l\u2019agente.', true);
+      showStatus(err?.message || t('composer.stopFailed'), true);
     }
     busy = false;
     sync();
@@ -133,24 +138,24 @@ export function createComposer({ chatId, onSend, onStop }) {
       const msg = await onSend(text, ids);
       area.value = '';
       drafts.delete(chatId);
-      files.clearLocal(); // il daemon li ha gia' cancellati dopo l'invio
+      files.clearLocal(); // daemon already deleted them after send
       fit();
-      area.blur(); // chiude la tastiera: lo stato della chat dev'essere visibile
+      area.blur(); // dismiss keyboard: chat state should be visible
       showStatus(msg);
     } catch (err) {
-      showStatus(err?.message || 'Invio non riuscito.', true);
+      showStatus(err?.message || t('composer.sendFailed'), true);
     }
     busy = false;
     sync();
   });
 
   sync();
-  // La bozza ripristinata puo' essere lunga: l'altezza si calcola quando il nodo e' in pagina.
+  // Restored draft may be long: height is computed once the node is in the page.
   queueMicrotask(fit);
 
   return {
     el,
-    /** Mostra per qualche secondo un esito deciso altrove (es. risposta a una domanda: il questionario nel frattempo sparisce). */
+    /** Show for a few seconds an outcome decided elsewhere (e.g. answer to a question: the form disappears in the meantime). */
     flash(text, error = false) {
       showStatus(text, error);
     },
@@ -163,8 +168,8 @@ export function createComposer({ chatId, onSend, onStop }) {
       lastSig = sig;
       mode = next;
       running = Boolean(r);
-      // Con una domanda in attesa il compositore sparisce (la domanda e' li' sopra); senza azioni resta solo la riga
-      // di spiegazione: un campo disattivato permanente occuperebbe spazio senza servire.
+      // With a pending question the composer hides (the question is above); without actions only the
+      // explanation line remains: a permanent disabled field would waste space for nothing.
       el.hidden = next === 'blocked' || next === 'hidden';
       el.setAttribute('data-mode', next);
       const note = hint || '';
@@ -174,7 +179,7 @@ export function createComposer({ chatId, onSend, onStop }) {
         hintEl.append(note);
         if (hintLink) hintEl.append(' ', h('a', { class: 'link', href: hintLink.href }, hintLink.label));
       }
-      area.placeholder = next === 'ready' ? 'Scrivi a Cursor' : next === 'blocked' ? 'Rispondi prima alla domanda' : 'Scrittura non disponibile';
+      area.placeholder = next === 'ready' ? t('composer.placeholderReady') : next === 'blocked' ? t('composer.placeholderBlocked') : t('composer.placeholderUnavailable');
       sync();
     },
     destroy() {

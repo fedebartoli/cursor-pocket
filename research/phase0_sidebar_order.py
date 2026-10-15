@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-Fase 0 - ordine dei gruppi nella sidebar dell'Agents Window (SOLA LETTURA, mode=ro).
+Phase 0 - Agents Window sidebar group order (READ ONLY, mode=ro).
 
-Cursor salva la configurazione della sidebar nella ItemTable del database globale, chiave
-`cursor/glassSidebarSettings` (JSON). I gruppi manuali sono in `sectionOrderByGroupBy[groupBy]`.
+Cursor stores sidebar configuration in the global database ItemTable, key
+`cursor/glassSidebarSettings` (JSON). Manual groups are in `sectionOrderByGroupBy[groupBy]`.
 
-Per groupBy == "workspace" gli id di sezione sono `__environment_instance_<hash>__`, dove <hash> e' la funzione
-hash() di VS Code (int32 con segno) applicata alla chiave di gruppo `local:path:<cartella>` (o `local:home`).
-Questo script ricostruisce quegli id dalle chat e verifica che coincidano con quelli salvati.
+For groupBy == "workspace", section ids are `__environment_instance_<hash>__`, where <hash> is VS Code's
+hash() (signed int32) applied to the group key `local:path:<folder>` (or `local:home`).
+This script reconstructs those ids from chats and checks they match the saved ones.
 
-Non stampa percorsi, nomi di repository o titoli: solo conteggi e posizioni.
+Does not print paths, repo names, or titles: counts and positions only.
 """
 import collections, json, os, sqlite3
 from urllib.parse import unquote, urlparse
@@ -25,7 +25,7 @@ def connect():
     return con
 
 
-# --- hash() di VS Code (vs/base/common/hash.ts), su code unit UTF-16 ---
+# --- VS Code hash() (vs/base/common/hash.ts), on UTF-16 code units ---
 def _i32(x):
     return ((x + 2**31) % 2**32) - 2**31
 
@@ -58,7 +58,7 @@ def env_path(j):
 
 
 def ws_path(j):
-    """Percorso della cartella da workspaceIdentifier (se presente)."""
+    """Folder path from workspaceIdentifier (if present)."""
     wi = j.get("workspaceIdentifier") or {}
     uri = wi.get("uri")
     if isinstance(uri, dict):
@@ -75,7 +75,7 @@ def main():
     con = connect()
     d = json.loads(con.execute("select value from ItemTable where key='cursor/glassSidebarSettings'").fetchone()[0])
     print("groupBy:", d["groupBy"], "| sortGroupsBy:", d["sortGroupsBy"], "| sortAgentsBy:", d["sortAgentsBy"])
-    print("ipotesi: includere chat con agentLocation nullo:", include_null_loc)
+    print("hypothesis: include chats with null agentLocation:", include_null_loc)
 
     chats = []
     for cid, wsid, arch, sub, rec, val in con.execute(
@@ -84,7 +84,7 @@ def main():
         chats.append({"cid": cid, "ws": wsid, "arch": arch, "sub": sub, "rec": rec or 0, "j": j,
                       "loc": j.get("agentLocation"), "path": env_path(j) or (ws_path(j) if not j.get("agentLocation") else None)})
 
-    # candidati di chiave -> id di sezione
+    # key candidates -> section id
     sections = collections.defaultdict(list)
     for c in chats:
         loc = c["loc"]
@@ -96,23 +96,23 @@ def main():
         sections[section_id(key)].append(c)
 
     stored = d.get("sectionOrderByGroupBy", {}).get("workspace", [])
-    print(f"\nid salvati (ordine manuale 'workspace'): {len(stored)} | sezioni ricostruite dalle chat: {len(sections)}")
+    print(f"\nsaved ids (manual 'workspace' order): {len(stored)} | sections reconstructed from chats: {len(sections)}")
     matched = 0
     for pos, sid in enumerate(stored):
         cs = sections.get(sid)
         if cs is None:
-            print(f"  #{pos:2d}  NON ricostruito")
+            print(f"  #{pos:2d}  NOT reconstructed")
             continue
         matched += 1
         visible = [c for c in cs if not c["arch"] and not c["sub"] and not c["j"].get("isDraft")]
-        print(f"  #{pos:2d}  ok   chat visibili={len(visible):3d} (totali={len(cs)})  "
-              f"ultima attivita'={max((c['rec'] for c in cs), default=0)}")
-    print(f"=> corrispondenze: {matched}/{len(stored)}")
+        print(f"  #{pos:2d}  ok   visible chats={len(visible):3d} (total={len(cs)})  "
+              f"last activity={max((c['rec'] for c in cs), default=0)}")
+    print(f"=> matches: {matched}/{len(stored)}")
 
     extra = [(sid, cs) for sid, cs in sections.items() if sid not in stored]
     vis_extra = [(sid, [c for c in cs if not c['arch'] and not c['sub'] and not c['j'].get('isDraft')]) for sid, cs in extra]
-    print(f"\nsezioni con chat locali NON presenti nell'ordine salvato: {len(extra)}; "
-          f"di cui con almeno una chat visibile: {sum(1 for _, v in vis_extra if v)}")
+    print(f"\nsections with local chats NOT in saved order: {len(extra)}; "
+          f"with at least one visible chat: {sum(1 for _, v in vis_extra if v)}")
 
 
 if __name__ == "__main__":

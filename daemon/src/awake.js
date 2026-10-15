@@ -1,16 +1,16 @@
-// Mac sveglio mentre un agente lavora (opzionale, spento di default).
+// Keep Mac awake while an agent is working (optional, off by default).
 //
-// Livello 1 - sempre disponibile su macOS, nessun permesso: con la funzione accesa e almeno una chat "in corso" il daemon
-// tiene in vita un `caffeinate -i -m -s -w <pid>` (se il daemon muore muore anche lui). Finito il lavoro, dopo una breve
-// tolleranza (una chat tra un passo e l'altro non deve far riaddormentare il Mac) viene chiuso. Lo schermo si spegne come al
-// solito (nessun `-d`). Con lo schermo chiuso `-s` tiene sveglio solo con l'alimentatore collegato.
+// Level 1 - always available on macOS, no permission: with the feature on and at least one chat "running", the daemon
+// keeps a `caffeinate -i -m -s -w <pid>` alive (if the daemon dies, it dies too). When work finishes, after a short
+// grace period (a chat between steps must not let the Mac sleep) it is stopped. The display sleeps as usual (no `-d`).
+// With the lid closed, `-s` keeps awake only on AC power.
 //
-// Livello 2 - "anche a schermo chiuso e a batteria" (richiede `tools/mac/power-setup.sh`, una tantum, con sudo): mentre un
-// agente lavora il daemon imposta `pmset disablesleep 1`; lo rimette a 0 con QUATTRO protezioni: fine del lavoro, spegnimento
-// del daemon, processo di guardia (se il daemon muore all'improvviso) e batteria sotto soglia a batteria.
+// Level 2 - "lid closed on battery too" (requires one-time `tools/mac/power-setup.sh` with sudo): while an agent works
+// the daemon sets `pmset disablesleep 1`; reset to 0 with FOUR safeguards: end of work, daemon shutdown,
+// guard process (if the daemon dies unexpectedly), and battery below threshold on battery power.
 //
-// Luminosita' a zero (opzionale, serve `tools/mac/build.sh`): con lo schermo chiuso e il Mac sveglio l'illuminazione puo' restare
-// accesa dentro la borsa; si porta a 0 e si ripristina all'apertura o a fine lavoro (il valore salvato sopravvive a un crash).
+// Zero brightness (optional, needs `tools/mac/build.sh`): with lid closed and Mac awake, backlight may stay on in a bag;
+// set to 0 and restore on open or end of work (saved value survives a crash).
 import { spawn as realSpawn } from 'node:child_process';
 import fs from 'node:fs';
 import { errorFields } from './log.js';
@@ -36,7 +36,7 @@ export class KeepAwake {
   #running = 0;
   #closedActive = false;
   #lowBattery = false;
-  #saved = null; // luminosita' prima di azzerarla
+  #saved = null; // brightness before dimming
   #closedAvailable = false;
   #availableAt = 0;
   #chain = Promise.resolve();
@@ -79,7 +79,7 @@ export class KeepAwake {
     this.#kick();
   }
 
-  /** Stato per la PWA. Aggiorna (con cache breve) la disponibilita' della regola sudoers. */
+  /** State for the PWA. Refreshes (with short cache) sudoers rule availability. */
   async describe() {
     if (this.supported && Date.now() - this.#availableAt > AVAILABLE_TTL_MS) {
       this.#closedAvailable = await this.power.canControlSleep();
@@ -95,7 +95,7 @@ export class KeepAwake {
     };
   }
 
-  /** All'avvio: rimette a posto cio' che un arresto brusco precedente potrebbe aver lasciato (sospensione, luminosita'). */
+  /** On startup: fix what an abrupt previous shutdown may have left (sleep, brightness). */
   async init() {
     if (this.store.getMeta(META.sleepSet) === '1') {
       try {
@@ -114,7 +114,7 @@ export class KeepAwake {
     }
   }
 
-  /** Chiamata a ogni lettura di Cursor con il numero di chat che stanno lavorando. */
+  /** Called on every Cursor read with the number of chats currently working. */
   update(runningCount) {
     this.#running = runningCount;
     const want = this.enabled && this.supported && runningCount > 0;
@@ -180,14 +180,14 @@ export class KeepAwake {
       try {
         p.kill('SIGTERM');
       } catch {
-        // gia' terminato
+        // already exited
       }
       this.logger.info('keep_awake_off');
     }
     return this.#queue(() => this.#releaseAll());
   }
 
-  /** Un passo di controllo: sospensione, batteria, schermo. Solo con la funzione in corso. */
+  /** One control pass: sleep, battery, display. Only while keep-awake is active. */
   async #reconcile() {
     if (!this.#proc) return;
     const b = await this.power.battery();
@@ -233,7 +233,7 @@ export class KeepAwake {
       this.store.setMeta(META.sleepSet, '0');
       this.logger.info('keep_awake_closed_off');
     } catch (err) {
-      this.logger.error('keep_awake_release_failed', errorFields(err)); // resta il segno in meta: all'avvio si riprova
+      this.logger.error('keep_awake_release_failed', errorFields(err)); // meta flag remains: retried on startup
     }
     this.#armGuard();
   }
@@ -250,7 +250,7 @@ export class KeepAwake {
   }
 
   async #releaseAll() {
-    if (this.#proc) return; // nel frattempo e' ripartito
+    if (this.#proc) return; // restarted in the meantime
     await this.#restoreBrightness();
     if (this.#closedActive) await this.#releaseSleep();
     this.#killGuard();
@@ -262,11 +262,11 @@ export class KeepAwake {
     try {
       g?.kill('SIGTERM');
     } catch {
-      // gia' terminato
+      // already exited
     }
   }
 
-  /** Processo di guardia: se il daemon sparisce, rimette la sospensione normale e la luminosita'. */
+  /** Guard process: if the daemon disappears, restore normal sleep and brightness. */
   #armGuard() {
     this.#killGuard();
     if (!this.#closedActive && this.#saved === null) return;
@@ -280,7 +280,7 @@ export class KeepAwake {
     }
   }
 
-  /** Allo spegnimento del daemon: tutto torna come prima prima di uscire. */
+  /** On daemon shutdown: restore everything before exit. */
   async close() {
     await this.#stop();
   }

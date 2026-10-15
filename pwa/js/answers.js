@@ -1,12 +1,12 @@
-// Stato delle risposte a un questionario di `ask_question`: logica pura, senza DOM (si prova in Node).
+// Answer state for an `ask_question` questionnaire: pure logic, no DOM (testable in Node).
 //
-// Regole (le stesse controllate dal daemon in `validateAnswers`):
-//  - scelta singola: una sola opzione OPPURE "Altro" con testo; toccare di nuovo l'opzione scelta non la toglie
-//    (a differenza di Cursor, qui e' un normale gruppo "radio");
-//  - scelta multipla: qualunque combinazione di opzioni piu' "Altro" con testo;
-//  - "Altro" scelto richiede un testo non vuoto.
+// Rules (same checks as daemon `validateAnswers`):
+//  - single choice: one option OR "Other" with text; tapping the selected option again does not deselect
+//    (unlike Cursor, this is a normal "radio" group);
+//  - multiple choice: any combination of options plus "Other" with text;
+//  - "Other" selected requires non-empty text.
 
-export const FREEFORM_MAX = 4000; // come LIMITS.freeformChars del daemon
+export const FREEFORM_MAX = 4000; // same as daemon LIMITS.freeformChars
 
 export class AnswerState {
   /** @param {{questions: {id: string, options: {id: string}[], allowMultiple?: boolean}[]}} question */
@@ -31,7 +31,7 @@ export class AnswerState {
     return this.items.get(qid)?.text ?? '';
   }
 
-  /** Tocco su un'opzione. Ritorna false se la domanda o l'opzione non esistono. */
+  /** Tap on an option. Returns false if the question or option does not exist. */
   toggle(qid, optionId) {
     const q = this.#q(qid);
     const it = this.items.get(qid);
@@ -46,7 +46,7 @@ export class AnswerState {
     return true;
   }
 
-  /** Tocco su "Altro". Ritorna lo stato di "Altro" dopo il tocco. */
+  /** Tap on "Other". Returns the "Other" state after the tap. */
   toggleOther(qid) {
     const q = this.#q(qid);
     const it = this.items.get(qid);
@@ -72,7 +72,7 @@ export class AnswerState {
     return it.ids.size > 0 || it.other;
   }
 
-  /** Quante domande non hanno ancora una risposta valida. */
+  /** How many questions still lack a valid answer. */
   missing() {
     return (this.question?.questions ?? []).filter((q) => !this.isQuestionComplete(q.id)).length;
   }
@@ -81,7 +81,7 @@ export class AnswerState {
     return (this.question?.questions?.length ?? 0) > 0 && this.missing() === 0;
   }
 
-  /** Corpo della richiesta `answer`. L'ordine delle opzioni segue quello della domanda. */
+  /** Body of the `answer` request. Option order follows the question. */
   payload() {
     return this.question.questions.map((q) => {
       const it = this.items.get(q.id);
@@ -94,7 +94,7 @@ export class AnswerState {
   }
 }
 
-/** Lettera dell'opzione (A, B, C...), come i badge di Cursor. Oltre le 26 opzioni si usa il numero. */
+/** Option letter (A, B, C...), like Cursor badges. Beyond 26 options use the number. */
 export function optionBadge(index) {
   return index < 26 ? String.fromCharCode(65 + index) : String(index + 1);
 }

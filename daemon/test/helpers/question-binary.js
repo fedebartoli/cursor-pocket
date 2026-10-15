@@ -1,4 +1,4 @@
-// Codificatore protobuf minimo per i test: costruisce un `toolCallBinary` come quello osservato in Cursor.
+// Minimal protobuf encoder for tests: builds a `toolCallBinary` like the one observed in Cursor.
 const varint = (n) => {
   const out = [];
   let v = n;

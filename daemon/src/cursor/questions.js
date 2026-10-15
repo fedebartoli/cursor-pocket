@@ -1,18 +1,18 @@
-// Normalizza i parametri della tool call `ask_question` di Cursor (stringa JSON) in una forma stabile per la PWA.
+// Normalizes Cursor `ask_question` tool call params (JSON string) into a stable shape for the PWA.
 //
-// Formato interno di Cursor (verificato in Fase 0/1): {title?, questions:[{id, prompt, options:[{id,label}], allowMultiple?}]}
-// Dettaglio interno: tenuto in `daemon/src/cursor/`.
+// Cursor internal format (verified in Phase 0/1): {title?, questions:[{id, prompt, options:[{id,label}], allowMultiple?}]}
+// Internal detail: kept in `daemon/src/cursor/`.
 import { clampStr, safeJsonParse } from '../util.js';
 
 const MAX_QUESTIONS = 8;
 const MAX_OPTIONS = 12;
 
-/** Id con cui Cursor registra la risposta libera ("Other...") di una domanda (bundle: `questionnaireUtils.js`). */
+/** Id Cursor uses to record freeform ("Other...") answer for a question (bundle: `questionnaireUtils.js`). */
 export const FREEFORM_ID = '__freeform_other__';
 
 /**
- * Cursor non mostra le opzioni la cui etichetta e' "other", "other: ...", "other - ..." o "other (...)": in fondo mette
- * sempre la propria voce "Other..." con il campo libero (bundle: funzione `Ylk`). La PWA fa lo stesso.
+ * Cursor hides options whose label is "other", "other: ...", "other - ...", or "other (...)": at the bottom it always
+ * adds its own "Other..." entry with the freeform field (bundle: function `Ylk`). The PWA does the same.
  */
 export function isOtherLabel(label) {
   const s = String(label ?? '').toLowerCase().trim();
@@ -47,16 +47,16 @@ export function normalizeQuestionParams(rawParams) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Decodifica di `toolFormerData.toolCallBinary`.
+// Decode `toolFormerData.toolCallBinary`.
 //
-// Cursor scrive il bubble di una domanda appena l'agente la formula, con `status: loading` e SENZA `params`: il testo in
-// chiaro arriva solo a fine turno (da pochi secondi ad oltre un minuto dopo, FINDINGS 10.4c). Gia' al momento della
-// creazione, pero', il bubble contiene `toolCallBinary`: la tool call serializzata in Protocol Buffers (base64), con la
-// stessa domanda. Struttura osservata (nessuno schema ufficiale, ricavata e confrontata con `params` su domande vere):
-//   campo 23 { campo 1 { campo 1: titolo, campo 2 (ripetuto): domanda { 1: id, 2: testo, 3 (ripetuto): opzione { 1: id, 2: etichetta }, 4: scelta multipla } } }
-//   campo 57: toolCallId, campo 59: istante di creazione.
-// Il decodificatore e' volutamente rigido: a ogni dubbio (dati troncati, campi inattesi, testo non UTF-8) risponde null e
-// la domanda si legge da `params` appena disponibile, come prima.
+// Cursor writes the question bubble as soon as the agent asks, with `status: loading` and WITHOUT `params`: plain text
+// arrives only at end of turn (seconds to over a minute later, FINDINGS 10.4c). At creation time, though, the bubble
+// already contains `toolCallBinary`: the tool call serialized as Protocol Buffers (base64), with the same question.
+// Observed structure (no official schema, derived and compared with `params` on real questions):
+//   field 23 { field 1 { field 1: title, field 2 (repeated): question { 1: id, 2: text, 3 (repeated): option { 1: id, 2: label }, 4: multiple choice } } }
+//   field 57: toolCallId, field 59: creation timestamp.
+// Decoder is intentionally strict: on any doubt (truncated data, unexpected fields, non-UTF-8 text) returns null and
+// the question is read from `params` when available, as before.
 // ---------------------------------------------------------------------------------------------------------------
 
 const MAX_BINARY_CHARS = 64_000;
@@ -74,7 +74,7 @@ function readVarint(buf, start) {
   }
 }
 
-/** Campi di un messaggio protobuf: `[{field, varint}]` o `[{field, bytes}]`; null se i dati sono malformati. */
+/** Fields of a protobuf message: `[{field, varint}]` or `[{field, bytes}]`; null if data is malformed. */
 function readFields(buf) {
   const out = [];
   let i = 0;
@@ -117,7 +117,7 @@ function utf8(bytes) {
 
 const bytesOf = (fields, n) => fields.find((e) => e.field === n && e.bytes)?.bytes ?? null;
 
-/** Domanda dal `toolCallBinary` (base64) nella stessa forma di `params`; null se non e' una domanda leggibile. */
+/** Question from `toolCallBinary` (base64) in the same shape as `params`; null if not a readable question. */
 export function decodeQuestionBinary(base64) {
   if (typeof base64 !== 'string' || !base64 || base64.length > MAX_BINARY_CHARS) return null;
   const top = readFields(Buffer.from(base64, 'base64'));

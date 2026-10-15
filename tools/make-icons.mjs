@@ -1,14 +1,13 @@
 #!/usr/bin/env node
-// Genera le icone per la schermata Home (PNG per iOS e per il manifest) a partire dal logo `pwa/icons/cursor-logo.svg`,
-// senza dipendenze: legge dall'SVG lo sfondo e i poligoni (solo tratti rettilinei: M L H V e minuscole, Z) e li
-// rasterizza con campionamento multiplo (anti-alias). Le PNG sono a tutto campo, senza angoli arrotondati: li applica
-// iOS da solo.
+// Generate Home screen icons (PNG for iOS and the manifest) from the `pwa/icons/cursor-logo.svg` logo,
+// with no dependencies: reads background and polygons from the SVG (straight segments only: M L H V and lowercase, Z) and
+// rasterizes with multisampling (anti-alias). PNGs are full-bleed, no rounded corners: iOS applies those itself.
 //
-// Il marchio e' di Anysphere (vedi docs/SETUP.md, "Marchio Cursor"). Per usare un'altra immagine basta sostituire
-// `cursor-logo.svg` con un SVG dello stesso tipo (un <rect> di sfondo, un <g transform="translate/scale"> con dei
-// <path> a linee rette con fill/stroke esadecimali) e rilanciare questo script.
+// The mark is owned by Anysphere (see docs/SETUP.md, "Cursor branding"). To use another image, replace
+// `cursor-logo.svg` with an SVG of the same kind (one background <rect>, a <g transform="translate/scale"> with
+// straight-line <path>s with hex fill/stroke) and run this script again.
 //
-// Uso:  node tools/make-icons.mjs
+// Usage:  node tools/make-icons.mjs
 import fs from 'node:fs';
 import path from 'node:path';
 import zlib from 'node:zlib';
@@ -18,7 +17,7 @@ const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '..');
 const outDir = path.join(root, 'pwa', 'icons');
 const logoFile = path.join(outDir, 'cursor-logo.svg');
 
-// --- lettura del logo --------------------------------------------------------------------------------------------
+// --- logo read ---------------------------------------------------------------------------------------------------
 
 const fail = (msg) => {
   console.error(`make-icons: ${msg}`);
@@ -28,12 +27,12 @@ const fail = (msg) => {
 const attrsOf = (tag) => Object.fromEntries([...tag.matchAll(/([\w-]+)="([^"]*)"/g)].map((m) => [m[1], m[2]]));
 const hexColor = (v, what) => {
   const m = /^#([0-9a-f]{3}|[0-9a-f]{6})$/i.exec(v ?? '');
-  if (!m) fail(`colore non supportato in ${what}: ${v} (serve #rgb o #rrggbb)`);
+  if (!m) fail(`unsupported color in ${what}: ${v} (expected #rgb or #rrggbb)`);
   const h = m[1].length === 3 ? [...m[1]].map((c) => c + c).join('') : m[1];
   return [0, 2, 4].map((i) => parseInt(h.slice(i, i + 2), 16));
 };
 
-/** Percorso SVG di soli segmenti rettilinei -> elenco di punti. */
+/** Straight-segment SVG path -> list of points. */
 function parsePath(d) {
   const tokens = [...d.matchAll(/([A-Za-z])|(-?(?:\d+\.?\d*|\.\d+)(?:e[-+]?\d+)?)/gi)].map((m) => (m[1] ? m[1] : Number(m[2])));
   const pts = [];
@@ -42,12 +41,12 @@ function parsePath(d) {
   let y = 0;
   let i = 0;
   const num = () => {
-    if (typeof tokens[i] !== 'number') fail(`percorso SVG non valido: ${d}`);
+    if (typeof tokens[i] !== 'number') fail(`invalid SVG path: ${d}`);
     return tokens[i++];
   };
   while (i < tokens.length) {
     if (typeof tokens[i] === 'string') cmd = tokens[i++];
-    else if (cmd === 'M') cmd = 'L'; // coppie successive a un M sono linee
+    else if (cmd === 'M') cmd = 'L'; // pairs after M are lines
     else if (cmd === 'm') cmd = 'l';
     if (cmd === 'Z' || cmd === 'z') continue;
     switch (cmd) {
@@ -74,14 +73,14 @@ function parsePath(d) {
         y += num();
         break;
       default:
-        fail(`comando SVG non supportato: ${cmd} (solo linee rette)`);
+        fail(`unsupported SVG command: ${cmd} (straight lines only)`);
     }
     pts.push([x, y]);
   }
   return pts;
 }
 
-/** "translate(a b) scale(s) translate(c d)" -> matrice affine [a, b, c, d, e, f] (solo translate e scale). */
+/** "translate(a b) scale(s) translate(c d)" -> affine matrix [a, b, c, d, e, f] (translate and scale only). */
 function parseTransform(t) {
   let m = [1, 0, 0, 1, 0, 0];
   const mul = (n) => {
@@ -91,7 +90,7 @@ function parseTransform(t) {
     const v = args.split(/[\s,]+/).filter(Boolean).map(Number);
     if (fn === 'translate') mul([1, 0, 0, 1, v[0], v[1] ?? 0]);
     else if (fn === 'scale') mul([v[0], 0, 0, v[1] ?? v[0], 0, 0]);
-    else fail(`trasformazione SVG non supportata: ${fn}`);
+    else fail(`unsupported SVG transform: ${fn}`);
   }
   return m;
 }
@@ -99,23 +98,23 @@ function parseTransform(t) {
 function readLogo(file) {
   const svg = fs.readFileSync(file, 'utf8').replace(/<!--[\s\S]*?-->/g, '');
   const vb = /viewBox="([^"]+)"/.exec(svg)?.[1]?.split(/[\s,]+/).map(Number);
-  if (vb?.length !== 4 || vb.some(Number.isNaN)) fail('viewBox mancante o non valido');
+  if (vb?.length !== 4 || vb.some(Number.isNaN)) fail('missing or invalid viewBox');
   const rect = /<rect\b[^>]*>/.exec(svg)?.[0];
-  if (!rect) fail('manca il <rect> di sfondo');
+  if (!rect) fail('missing background <rect>');
   const group = /<g\b[^>]*>/.exec(svg)?.[0];
-  if (!group) fail('manca il <g> con le forme');
+  if (!group) fail('missing <g> with shapes');
   const g = attrsOf(group);
   const paths = [...svg.matchAll(/<path\b[^>]*>/g)].map((m) => {
     const a = attrsOf(m[0]);
     return { pts: parsePath(a.d ?? ''), fill: a.fill ? hexColor(a.fill, 'fill') : null, stroke: a.stroke ? hexColor(a.stroke, 'stroke') : null };
   });
-  if (!paths.length) fail('nessun <path> trovato');
+  if (!paths.length) fail('no <path> found');
   const m = parseTransform(g.transform);
   const det = m[0] * m[3] - m[1] * m[2];
-  if (!det) fail('trasformazione non invertibile');
+  if (!det) fail('non-invertible transform');
   return {
     viewBox: vb,
-    background: hexColor(attrsOf(rect).fill, 'sfondo'),
+    background: hexColor(attrsOf(rect).fill, 'background'),
     paths,
     strokeHalf: Number(g['stroke-width'] ?? 0) / 2,
     matrix: m,
@@ -123,7 +122,7 @@ function readLogo(file) {
   };
 }
 
-// --- rasterizzazione ---------------------------------------------------------------------------------------------
+// --- rasterization -----------------------------------------------------------------------------------------------
 
 function insidePolygon(x, y, pts) {
   let inside = false;
@@ -148,10 +147,10 @@ function distToEdges(x, y, pts) {
   return best;
 }
 
-/** Colore di un punto nello spazio del viewBox: l'ultima forma disegnata che lo copre, altrimenti lo sfondo. */
+/** Color at a point in viewBox space: last shape that covers it, else background. */
 function colorAt(logo, vx, vy) {
   const [a, b, c, d, e, f] = logo.matrix;
-  // punto nello spazio locale del gruppo (inversa della matrice)
+  // point in the group's local space (inverse of the matrix)
   const px = vx - e;
   const py = vy - f;
   const x = (d * px - c * py) / logo.det;
@@ -164,13 +163,13 @@ function colorAt(logo, vx, vy) {
   return logo.background;
 }
 
-const SAMPLES = 5; // 5x5 campioni per pixel
+const SAMPLES = 5; // 5x5 samples per pixel
 
 function render(logo, size) {
   const [vx0, vy0, vw, vh] = logo.viewBox;
   const raw = Buffer.alloc((size * 3 + 1) * size);
   for (let y = 0; y < size; y++) {
-    const row = y * (size * 3 + 1); // il primo byte di ogni riga e' il filtro PNG (0 = nessuno)
+    const row = y * (size * 3 + 1); // first byte of each row is the PNG filter (0 = none)
     for (let x = 0; x < size; x++) {
       const sum = [0, 0, 0];
       for (let j = 0; j < SAMPLES; j++) {
@@ -219,7 +218,7 @@ function png(size, raw) {
   const ihdr = Buffer.alloc(13);
   ihdr.writeUInt32BE(size, 0);
   ihdr.writeUInt32BE(size, 4);
-  ihdr[8] = 8; // profondita'
+  ihdr[8] = 8; // bit depth
   ihdr[9] = 2; // RGB
   return Buffer.concat([
     Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
@@ -229,11 +228,11 @@ function png(size, raw) {
   ]);
 }
 
-// --- uscita ------------------------------------------------------------------------------------------------------
+// --- output ------------------------------------------------------------------------------------------------------
 
 const logo = readLogo(logoFile);
 const targets = { 'apple-touch-icon.png': 180, 'icon-192.png': 192, 'icon-512.png': 512 };
 for (const [name, size] of Object.entries(targets)) {
   fs.writeFileSync(path.join(outDir, name), png(size, render(logo, size)));
 }
-console.log('Icone generate in pwa/icons/ da cursor-logo.svg:', Object.keys(targets).join(', '));
+console.log('Icons written to pwa/icons/ from cursor-logo.svg:', Object.keys(targets).join(', '));

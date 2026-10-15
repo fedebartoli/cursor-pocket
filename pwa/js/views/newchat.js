@@ -1,5 +1,5 @@
-// Nuova chat locale su un progetto: si sceglie il progetto, si scrive il primo messaggio (con immagini facoltative) e Cursor
-// la avvia sul Mac ("This Mac"). Il daemon controlla progetto e ambiente prima di inviare.
+// New local chat on a project: pick project, write first message (optional images), Cursor starts it on the Mac ("This Mac").
+// The daemon validates project and environment before sending.
 import { describeActionError } from '../action-errors.js';
 import { api } from '../api.js';
 import { createAttachments } from '../attachments.js';
@@ -8,8 +8,9 @@ import { commit, h, replace } from '../dom.js';
 import { icon } from '../icons.js';
 import { getLive, refresh } from '../live.js';
 import { MESSAGE_MAX } from '../composer.js';
+import { t } from '../i18n/index.js';
 
-let lastSection = null; // solo in memoria: il progetto scelto l'ultima volta
+let lastSection = null; // in-memory only: last chosen project
 const FIND_CHAT_MS = 9000;
 
 export function mountNewChat(root) {
@@ -18,34 +19,34 @@ export function mountNewChat(root) {
   let note = null; // { text, error }
   let draft = '';
   let sectionId = lastSection;
-  let shown = null; // cosa c'e' in formHost: 'form' | 'noactions' | 'noprojects'
-  let opts = null; // scelte lette da Cursor per il progetto: { branch: { current, options }, model: { current, options } }
-  let optsFor = null; // progetto a cui si riferiscono
+  let shown = null; // what formHost shows: 'form' | 'noactions' | 'noprojects'
+  let opts = null; // choices read from Cursor for the project: { branch: { current, options }, model: { current, options } }
+  let optsFor = null; // project these options belong to
   let optsLoading = false;
-  const pick = { branch: null, model: null }; // null = come e' in Cursor
+  const pick = { branch: null, model: null }; // null = as in Cursor
   const host = h('div.region');
   const formHost = h('div.region');
   replace(root, h('div', { class: 'screen' }, host, formHost));
 
-  const area = h('textarea', { class: 'composer-input newchat-input', rows: 5, maxlength: MESSAGE_MAX, placeholder: 'Che cosa deve fare l\u2019agente?', 'aria-label': 'Primo messaggio', autocapitalize: 'sentences' });
-  const files = createAttachments({ onChange: () => syncSend(), onError: (t) => setNote(t, true), onNote: (t) => setNote(t, false) });
+  const area = h('textarea', { class: 'composer-input newchat-input', rows: 5, maxlength: MESSAGE_MAX, placeholder: t('newchat.messagePlaceholder'), 'aria-label': t('newchat.messageAria'), autocapitalize: 'sentences' });
+  const files = createAttachments({ onChange: () => syncSend(), onError: (msg) => setNote(msg, true), onNote: (msg) => setNote(msg, false) });
   files.button.classList.add('wide');
-  files.button.append('Allega immagini');
-  const startBtn = h('button', { class: 'btn primary block', type: 'submit' }, icon('send', { size: 18 }), 'Avvia chat');
-  // Elenco a scelta singola (non un <select>: WebKit ne inietta lo stile e la CSP rigorosa dell'app lo segnala).
-  const picker = h('div', { class: 'project-list', role: 'radiogroup', 'aria-label': 'Progetto', id: 'newchat-project' });
+  files.button.append(t('newchat.attachImages'));
+  const startBtn = h('button', { class: 'btn primary block', type: 'submit' }, icon('send', { size: 18 }), t('newchat.startChat'));
+  // Single-choice list (not a <select>: WebKit injects styling and the app's strict CSP flags it).
+  const picker = h('div', { class: 'project-list', role: 'radiogroup', 'aria-label': t('newchat.projectAria'), id: 'newchat-project' });
   const noteEl = h('p', { class: 'hint', role: 'status', hidden: true });
   const optsHost = h('div', { class: 'newchat-opts' });
   const form = h(
     'form',
     { class: 'panel newchat', novalidate: true },
-    h('div', { class: 'newchat-label' }, 'Progetto'),
+    h('div', { class: 'newchat-label' }, t('newchat.projectLabel')),
     picker,
     optsHost,
-    h('label', { class: 'newchat-label', for: 'newchat-text' }, 'Primo messaggio'),
+    h('label', { class: 'newchat-label', for: 'newchat-text' }, t('newchat.firstMessageLabel')),
     area,
     files.strip,
-    h('div', { class: 'newchat-tools' }, files.button, h('span', { class: 'hint grow' }, 'Parte in locale, su This Mac.')),
+    h('div', { class: 'newchat-tools' }, files.button, h('span', { class: 'hint grow' }, t('newchat.localHint'))),
     noteEl,
     startBtn,
     files.input,
@@ -73,9 +74,9 @@ export function mountNewChat(root) {
   }
 
 
-  // Ramo e modello: si leggono da Cursor solo a richiesta (apre e richiude i menu sul Mac). Se non si sceglie nulla, vale cio' che c'e' in Cursor.
+  // Branch and model: read from Cursor on demand (opens and closes menus on the Mac). If unset, Cursor's current values apply.
   function choiceGroup(label, key, current, options, iconName) {
-    const rows = [{ value: null, text: `Come in Cursor (${current ?? '?'})` }, ...options.filter((o) => o !== current).map((o) => ({ value: o, text: o })), ...(options.includes(current) ? [{ value: current, text: `${current} (attuale)` }] : [])];
+    const rows = [{ value: null, text: t('newchat.asInCursor', { current: current ?? '?' }) }, ...options.filter((o) => o !== current).map((o) => ({ value: o, text: o })), ...(options.includes(current) ? [{ value: current, text: t('newchat.optionCurrent', { current }) }] : [])];
     return h(
       'div',
       { class: 'choice' },
@@ -113,15 +114,15 @@ export function mountNewChat(root) {
           'button',
           { class: 'btn', type: 'button', disabled: busy || optsLoading || !sectionId, onClick: loadOpts },
           icon(optsLoading ? 'refresh' : 'cpu', { size: 18, className: optsLoading ? 'spin' : '' }),
-          optsLoading ? 'Leggo da Cursor\u2026' : 'Scegli ramo e modello',
+          optsLoading ? t('newchat.readingFromCursor') : t('newchat.chooseBranchModel'),
         ),
       );
       return;
     }
     optsHost.replaceChildren(
-      choiceGroup('Ramo', 'branch', opts.branch.current, opts.branch.options, 'branch'),
-      choiceGroup('Modello', 'model', opts.model.current, opts.model.options, 'cpu'),
-      h('p', { class: 'hint' }, 'Cursor ricorda l\u2019ultima scelta: dopo l\u2019avvio il daemon rimette ramo e modello come erano.'),
+      choiceGroup(t('newchat.branch'), 'branch', opts.branch.current, opts.branch.options, 'branch'),
+      choiceGroup(t('newchat.model'), 'model', opts.model.current, opts.model.options, 'cpu'),
+      h('p', { class: 'hint' }, t('newchat.rememberChoiceHint')),
     );
   }
 
@@ -209,7 +210,7 @@ export function mountNewChat(root) {
     const images = files.readyIds();
     if (busy || files.uploading() || !sectionId || (!text && !images.length)) return;
     busy = true;
-    setNote('Avvio la chat in Cursor\u2026', false);
+    setNote(t('newchat.startingInCursor'), false);
     syncSend();
     try {
       const body = { sectionId, text };
@@ -223,7 +224,7 @@ export function mountNewChat(root) {
       draft = '';
       area.value = '';
       lastSection = sectionId;
-      setNote('Chat avviata.', false);
+      setNote(t('newchat.started'), false);
       await waitForChat(res.chatId);
       if (alive) location.hash = `#/chat/${encodeURIComponent(res.chatId)}`;
       return;
@@ -242,8 +243,8 @@ export function mountNewChat(root) {
     const lv = getLive();
     const workspaces = lv.payload?.state?.workspaces ?? [];
     const actionsOk = lv.payload?.status?.actions === 'ok' && !lv.offline;
-    const top = [appbar({ title: 'Nuova chat', backHref: '#/chat' })];
-    if (lv.offline) top.push(banner({ text: 'Daemon non raggiungibile' }));
+    const top = [appbar({ title: t('newchat.title'), backHref: '#/chat' })];
+    if (lv.offline) top.push(banner({ text: t('newchat.offlineTitle') }));
     commit(host, top);
     const show = (kind, node) => {
       if (shown === kind) return;
@@ -251,11 +252,11 @@ export function mountNewChat(root) {
       formHost.replaceChildren(node);
     };
     if (!actionsOk) {
-      show('noactions', emptyState({ iconName: 'plug', title: 'Azioni non disponibili', text: 'Per avviare una chat da qui servono la porta di debug di Cursor e la finestra Agents aperta. Vedi Impostazioni.' }));
+      show('noactions', emptyState({ iconName: 'plug', title: t('newchat.noActionsTitle'), text: t('newchat.noActionsText') }));
       return;
     }
     if (!workspaces.length) {
-      show('noprojects', emptyState({ iconName: 'folder', title: 'Nessun progetto', text: 'Servono chat locali esistenti: da qui si avvia una chat su un progetto che ne ha gia\u2019 una.' }));
+      show('noprojects', emptyState({ iconName: 'folder', title: t('newchat.noProjectsTitle'), text: t('newchat.noProjectsText') }));
       return;
     }
     fillProjects(workspaces);

@@ -1,7 +1,8 @@
-// Immagini da allegare a un messaggio (compositore di una chat e "nuova chat"): pulsante, anteprime e caricamento.
-// Ogni immagine si ridimensiona sul telefono e si carica subito sul daemon (resta li' al massimo 30 minuti o fino all'invio).
+// Images to attach to a message (chat composer and "new chat"): button, previews, and upload.
+// Each image is resized on the phone and uploaded immediately to the daemon (kept at most 30 minutes or until send).
 import { api } from './api.js';
 import { h } from './dom.js';
+import { t } from './i18n/index.js';
 import { icon } from './icons.js';
 import { MAX_IMAGES, prepareImage } from './images.js';
 
@@ -12,7 +13,7 @@ export function createAttachments({ onChange, onError, onNote }) {
   const items = []; // { id, url, state: 'uploading' | 'ready' }
   let locked = false;
   const input = h('input', { type: 'file', accept: 'image/*', multiple: true, hidden: true, 'aria-hidden': 'true', tabindex: '-1' });
-  const button = h('button', { class: 'attach', type: 'button', 'aria-label': 'Allega immagini' }, icon('image', { size: 22 }));
+  const button = h('button', { class: 'attach', type: 'button', 'aria-label': t('attachments.attachImages') }, icon('image', { size: 22 }));
   const strip = h('div', { class: 'attach-strip', hidden: true });
 
   const full = () => items.length >= MAX_IMAGES;
@@ -28,8 +29,8 @@ export function createAttachments({ onChange, onError, onNote }) {
           'div',
           { class: `attach-item${it.state === 'uploading' ? ' loading' : ''}` },
           h('img', { src: it.url, alt: '' }),
-          it.state === 'uploading' ? h('span', { class: 'attach-wait', 'aria-label': 'Caricamento' }, icon('spinner', { size: 18, className: 'spin' })) : null,
-          h('button', { class: 'attach-remove', type: 'button', 'aria-label': 'Rimuovi immagine', onClick: () => remove(it) }, icon('close', { size: 14 })),
+          it.state === 'uploading' ? h('span', { class: 'attach-wait', 'aria-label': t('attachments.loading') }, icon('spinner', { size: 18, className: 'spin' })) : null,
+          h('button', { class: 'attach-remove', type: 'button', 'aria-label': t('attachments.removeImage'), onClick: () => remove(it) }, icon('close', { size: 14 })),
         ),
       ),
     );
@@ -47,7 +48,7 @@ export function createAttachments({ onChange, onError, onNote }) {
 
   async function add(files) {
     const room = MAX_IMAGES - items.length;
-    if (files.length > room) onNote?.(`Al massimo ${MAX_IMAGES} immagini per messaggio.`);
+    if (files.length > room) onNote?.(t('attachments.maxImages', { count: MAX_IMAGES }));
     for (const file of files.slice(0, room)) {
       const it = { id: null, url: URL.createObjectURL(file), state: 'uploading' };
       items.push(it);
@@ -55,7 +56,7 @@ export function createAttachments({ onChange, onError, onNote }) {
       onChange();
       try {
         const blob = await prepareImage(file);
-        if (!items.includes(it)) continue; // tolta nel frattempo
+        if (!items.includes(it)) continue; // removed in the meantime
         URL.revokeObjectURL(it.url);
         it.url = URL.createObjectURL(blob);
         const r = await api.upload(blob);
@@ -69,7 +70,7 @@ export function createAttachments({ onChange, onError, onNote }) {
         onChange();
       } catch (err) {
         remove(it, { remote: false });
-        onError(err?.message || 'Immagine non caricata.');
+        onError(err?.message || t('attachments.uploadFailed'));
       }
     }
   }
@@ -92,7 +93,7 @@ export function createAttachments({ onChange, onError, onNote }) {
       locked = Boolean(v);
       refreshButton();
     },
-    /** Dopo un invio riuscito il daemon ha gia' cancellato i file: si toglie solo l'anteprima. */
+    /** After a successful send the daemon already deleted the files: only remove the preview. */
     clearLocal() {
       for (const it of [...items]) remove(it, { remote: false });
     },

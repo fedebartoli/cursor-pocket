@@ -1,8 +1,8 @@
-// Scorrimento verticale della schermata corrente.
+// Vertical scroll of the current screen.
 //
-// Nelle schermate con la barra in basso (elenchi, impostazioni) la pagina non scorre: scorre solo il contenitore
-// `#app` e il documento resta fermo. Cosi' su iOS il rimbalzo di fine corsa riguarda il contenuto e mai la barra,
-// che non puo' piu' muoversi. Nelle chat (compositore in fondo, tastiera) scorre invece la finestra, come prima.
+// On screens with the bottom bar (lists, settings) the page does not scroll: only the `#app` container
+// scrolls and the document stays fixed. On iOS bounce at the end applies to content, never the bar,
+// which can no longer move. On chats (composer at bottom, keyboard) the window scrolls as before.
 const appEl = () => document.getElementById('app');
 const inner = () => document.body.classList.contains('has-tabbar');
 

@@ -1,21 +1,20 @@
-// Azioni sull'interfaccia dell'Agents Window di Cursor via CDP (Fase 2): aprire una chat, rispondere al questionario
-// di `ask_question`, saltarlo, scrivere un messaggio.
+// Agents Window UI actions in Cursor via CDP (Phase 2): open a chat, answer the `ask_question` questionnaire,
+// skip it, send a message.
 //
-// QUESTO e' il solo file che conosce la struttura della pagina di Cursor: selettori in `SEL`, script eseguiti nella
-// pagina in `pageKit`/`pageDo`. Se un aggiornamento di Cursor li rompe, si corregge qui (vedi FINDINGS sez. 10).
+// THIS is the only file that knows Cursor's page structure: selectors in `SEL`, in-page scripts in `pageKit`/`pageDo`.
+// If a Cursor update breaks them, fix here (see FINDINGS sec. 10).
 //
-// Origine dei selettori: bundle `out/vs/workbench/workbench.glass.main.js` di Cursor 3.24 (lettura, mai modifiche):
-//  - questionario: componente `kVC` (classe `glass-questionnaire-tray`), opzioni `ui-tray-option`, campo libero
-//    `questionnaire-freeform-option` ("Other..."), footer con azione primaria ("Next"/"Continue") e "Skip";
-//  - cliccare un'opzione di una domanda a scelta SINGOLA gia' selezionata la DESELEZIONA (funzione `Weg`); con scelta
-//    singola selezionare un'opzione fa avanzare da solo allo step successivo (`Jnl`); l'invio finale e' sempre il
-//    pulsante primario;
-//  - composer: editor Lexical `aislash-editor-input` e pulsante con aria-label "Send message";
-//  - sidebar: righe con attributo `data-sidebar-item-key` (forma `row:<id>`).
-// Cio' che non e' ancora provato su un'istanza reale e' segnato [DA VERIFICARE] e coperto da diagnostica (`inspect`).
+// Selector sources: Cursor 3.24 bundle `out/vs/workbench/workbench.glass.main.js` (read-only, never modified):
+//  - questionnaire: component `kVC` (class `glass-questionnaire-tray`), options `ui-tray-option`, freeform field
+//    `questionnaire-freeform-option` ("Other..."), footer with primary action ("Next"/"Continue") and "Skip";
+//  - clicking an option on a SINGLE-choice question that is already selected DESELECTS it (function `Weg`); with single
+//    choice, selecting an option advances to the next step on its own (`Jnl`); final submit is always the primary button;
+//  - composer: Lexical editor `aislash-editor-input` and button with aria-label "Send message";
+//  - sidebar: rows with attribute `data-sidebar-item-key` (shape `row:<id>`).
+// Anything not yet verified on a real instance is marked [TO VERIFY] and covered by diagnostics (`inspect`).
 //
-// Regole di sicurezza: nessun contenuto di chat nei log o negli errori; gli script di pagina non scrivono nulla se non
-// tramite eventi di input (clic, testo, tasti) uguali a quelli di un utente.
+// Safety rules: no chat content in logs or errors; page scripts write nothing except via input events (click, text, keys)
+// identical to a user's.
 import { sleep as realSleep } from '../util.js';
 import { CdpError, CdpSession, KEYS, MODIFIER, listPageTargets, probeCdp } from './cdp.js';
 import { FREEFORM_ID } from './questions.js';
@@ -34,50 +33,53 @@ export const SEL = Object.freeze({
   secondary: '.ui-tray-footer__secondary button',
   sidebarRowAttr: 'data-sidebar-item-key',
   sidebarRow: '[data-sidebar-item-key]',
-  // Cursor 3.24 reale: editor tiptap/ProseMirror; i selettori Lexical restano per le versioni precedenti.
+  // Real Cursor 3.24: tiptap/ProseMirror editor; Lexical selectors remain for older versions.
   composer: '.ui-prompt-input-editor__input[contenteditable="true"], .aislash-editor-input[contenteditable="true"], [data-lexical-editor="true"][contenteditable="true"]',
   composerReadonly: '.aislash-editor-input-readonly, .ui-prompt-input-tiptap-readonly',
-  // Cursor tiene vivi i pannelli di piu' chat: ognuno ha `data-glass-agent-id` = composerId; quelli non in primo piano
-  // portano `data-keep-alive-hidden`. Composer, vassoio e invio si cercano SOLO nel pannello in primo piano.
+  // Cursor keeps multiple chat panels alive: each has `data-glass-agent-id` = composerId; off-screen ones carry
+  // `data-keep-alive-hidden`. Composer, tray, and send are searched ONLY in the foreground panel.
   panel: '[data-agent-panel-conversation-shell]',
   panelAgentAttr: 'data-glass-agent-id',
   panelHidden: '[data-keep-alive-hidden]',
   send: 'button[aria-label="Send message"]',
-  // Mentre l'agente lavora e il campo e' vuoto il pulsante di invio diventa "Stop generation".
+  // While the agent runs and the field is empty, the send button becomes "Stop generation".
   stop: 'button[aria-label="Stop generation"]',
-  // Approvazione di un comando di terminale (Cursor 3.24): la carta `.ui-shell-tool-call` sta dentro la riga del
-  // transcript, che porta `data-message-id` = id del bubble nel database. In fondo ha "Skip" e "Run" (piu' il menu
-  // delle opzioni e il pulsante della modalita' di esecuzione automatica, che NON si toccano).
+  // Terminal command approval (Cursor 3.24): card `.ui-shell-tool-call` sits inside the transcript row, which carries
+  // `data-message-id` = bubble id from the database. At the bottom: "Skip" and "Run" (plus the options menu and auto-run
+  // mode button, which we do NOT touch).
   shellCard: '.ui-shell-tool-call',
-  // Menu contestuale di una riga (tasto destro) e rinomina in linea: voci `role=menuitem`; il campo del nome e' un input
-  // `ui-text-editable` dentro la riga, con il testo gia' selezionato.
+  // Row context menu (right-click) and inline rename: `role=menuitem` entries; the name field is a `ui-text-editable`
+  // input inside the row, with text already selected.
   menuItem: '[role="menuitem"],[role="menuitemcheckbox"]',
   renameInput: 'input.ui-text-editable',
   customize: 'button[aria-label="Customize Sidebar"]',
-  // Allegati del compositore: il campo file (accetta image/*) sta nella barra del compositore; l'anteprima di ogni immagine ha
-  // il suo pulsante "Remove image". Si cerca solo nel pannello in primo piano.
+  // Sidebar toggle: while hidden the rows stay in the DOM but have no size.
+  showSidebar: 'button[aria-label="Show Sidebar"]',
+  hideSidebar: 'button[aria-label="Hide Sidebar"]',
+  // Composer attachments: file input (accepts image/*) is in the composer bar; each image preview has its own
+  // "Remove image" button. Search only in the foreground panel.
   fileInput: 'input[type="file"]',
   imagePreview: '.ui-prompt-input-image-preview',
   imageRemove: '.ui-prompt-input-image-preview button[aria-label="Remove image"]',
   fileMark: 'data-cp-file-target',
-  // Testata di un gruppo (progetto) della sidebar: contiene il pulsante "New Agent" che apre una chat nuova gia' su quel progetto.
+  // Sidebar group (project) header: contains "New Agent" to open a new chat already on that project.
   sectionHead: '[data-section-head]',
   newAgent: 'button[aria-label="New Agent"]',
   selectTrigger: '.ui-select-trigger',
-  // Menu dei rami (elenco con ricerca): ogni riga ha il nome in data-branch-name e aria-selected.
+  // Branch menu (searchable list): each row has the name in data-branch-name and aria-selected.
   branchOption: '[role="option"][data-component="search-menu-row"]',
   branchName: '[data-branch-name]',
   messageIdAttr: 'data-message-id',
 });
 
-// Etichette dei due pulsanti della carta (inglese; italiano per le interfacce localizzate). "Run Everything (...)" e'
-// il selettore della modalita' automatica: l'espressione e' ancorata di proposito perche' NON lo catturi.
+// Labels for the card's two buttons (English; Italian for localized UIs). "Run Everything (...)" is the auto-run mode
+// selector: the pattern is anchored on purpose so we do NOT match it.
 const APPROVE_LABEL = '^(run|esegui)\\s*(\\u23ce|\\u21b5|enter)?$';
 const REJECT_LABEL = '^(skip|salta)$';
-// Voci del menu del modello che NON sono modelli.
+// Model menu entries that are NOT models.
 const NOT_A_MODEL = /^(context|effort|model|max mode|add models)\b/i;
 const escapeRe = (t) => String(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-// Voci del menu di una riga (inglese; italiano per le interfacce localizzate).
+// Row menu entries (English; Italian for localized UIs).
 const MENU = Object.freeze({
   rename: '^(rename|rinomina)$',
   pin: '^(pin|fissa)$',
@@ -89,15 +91,15 @@ const MENU = Object.freeze({
 });
 
 // ---------------------------------------------------------------------------------------------------------------
-// Codice eseguito NELLA PAGINA di Cursor. Le due funzioni sono autosufficienti (niente variabili del modulo):
-// vengono inviate come testo con Function.prototype.toString.
+// Code run IN Cursor's page. Both functions are self-contained (no module variables): sent as text via
+// Function.prototype.toString.
 // ---------------------------------------------------------------------------------------------------------------
 
 /* eslint-disable no-undef */
 function pageKit(SEL, APPROVE_LABEL, REJECT_LABEL) {
   const K = { SEL };
-  // Su Cursor 3.24 reale `innerText` del questionario e' VUOTO anche se l'elemento e' visibile (verificato dal vivo):
-  // si ripiega su `textContent`.
+  // On real Cursor 3.24 the questionnaire's `innerText` is EMPTY even when visible (verified live): fall back to
+  // `textContent`.
   K.text = (el) => (el ? String(el.innerText || el.textContent || '') : '').replace(/\s+/g, ' ').trim();
   K.visible = (el) => {
     if (!el || !el.isConnected) return false;
@@ -192,6 +194,7 @@ function pageKit(SEL, APPROVE_LABEL, REJECT_LABEL) {
   K.menuItems = () => [...document.querySelectorAll(SEL.menuItem)].filter(K.visible);
   K.menuItem = (re) => K.menuItems().find((m) => new RegExp(re, 'i').test(K.text(m))) || null;
   K.renameInput = () => [...document.querySelectorAll(SEL.renameInput)].find(K.visible) || null;
+  K.sidebarButton = (sel) => [...document.querySelectorAll(sel)].find(K.visible) || null;
   K.customize = () => [...document.querySelectorAll(SEL.customize)].find(K.visible) || null;
   K.stop = () => [...K.scope().querySelectorAll(SEL.stop)].find(K.visible) || null;
   K.sectionHeads = (name) => [...document.querySelectorAll(SEL.sectionHead)].filter((e) => K.text(e).trim() === name);
@@ -200,7 +203,7 @@ function pageKit(SEL, APPROVE_LABEL, REJECT_LABEL) {
     return heads.length === 1 ? heads[0].querySelector(SEL.newAgent) : null;
   };
   K.selectTriggers = () => [...document.querySelectorAll(SEL.selectTrigger)].filter(K.visible);
-  // Il pulsante del modello sta nella barra del compositore: e' l'unico con testo e senza aria-label.
+  // The model button is in the composer bar: the only one with text and no aria-label.
   K.modelButton = () => {
     const c = K.composer();
     let root = c;
@@ -234,7 +237,7 @@ function pageDo(a, K) {
         return el ? K.clickable(el) : null;
       }
       case 'freeform': {
-        // Si clicca l'etichetta (non il centro: a campo aperto al centro c'e' l'editor, che non commuta la selezione).
+        // Click the label (not the center: when expanded the editor is in the center and does not toggle selection).
         const ff = K.freeformRoot(tray);
         return ff ? ff.querySelector(SEL.optionLabel) || ff.querySelector(SEL.optionBadge) || K.clickable(ff) : null;
       }
@@ -268,6 +271,10 @@ function pageDo(a, K) {
         return K.renameInput();
       case 'customize':
         return K.customize();
+      case 'showSidebar':
+        return K.sidebarButton(SEL.showSidebar);
+      case 'hideSidebar':
+        return K.sidebarButton(SEL.hideSidebar);
       case 'removeImage':
         return K.imageRemove();
       case 'newAgent':
@@ -328,14 +335,19 @@ function pageDo(a, K) {
     case 'selectedKey': {
       const row = K.rows().find(K.rowSelected);
       if (row) return K.rowKey(row);
-      // Nessun marcatore di riga selezionata in Cursor 3.24: la chat aperta si riconosce dal pannello in primo piano.
+      // No selected-row marker in Cursor 3.24: the open chat is inferred from the foreground panel.
       const agent = K.panelAgent();
       return agent ? `row:${agent}` : null;
+    }
+    case 'sidebarState': {
+      const rows = K.rows();
+      return { rows: rows.length, visible: rows.filter(K.visible).length, canShow: !!K.sidebarButton(SEL.showSidebar) };
     }
     case 'composerInfo': {
       const c = K.composer();
       const s = K.send();
       return {
+        panel: K.panelAgent(),
         composer: c ? { text: K.editorText(c), empty: K.editorText(c) === '' } : null,
         send: s ? { disabled: K.isDisabled(s) } : null,
         stop: !!K.stop(),
@@ -346,7 +358,7 @@ function pageDo(a, K) {
     case 'sectionCount':
       return K.sectionHeads(a.name).length;
     case 'pinState': {
-      // Le chat fissate stanno in cima alla sidebar, PRIMA della prima intestazione di progetto.
+      // Pinned chats sit at the top of the sidebar, BEFORE the first project header.
       const row = K.findRow(a.id);
       if (!row) return { found: false, pinned: false };
       const head = document.querySelector(SEL.sectionHead);
@@ -355,7 +367,7 @@ function pageDo(a, K) {
     case 'rowKeys':
       return K.rows().map((r) => K.rowKey(r));
     case 'newChatState': {
-      // Schermata "nuova chat": nessun pannello di conversazione, tre selettori (progetto, ramo, ambiente) e il compositore.
+      // "New chat" screen: no conversation panel, three selectors (project, branch, environment) and the composer.
       const triggers = [...document.querySelectorAll(SEL.selectTrigger)].filter(K.visible).map((e) => K.text(e).trim());
       return { composer: !!K.composer(), triggers };
     }
@@ -402,7 +414,7 @@ function pageDo(a, K) {
       return { editing: !!i, focused: !!i && document.activeElement === i, value: i ? String(i.value || '') : '' };
     }
     case 'outline': {
-      // Solo struttura: nomi di attributi e classi, mai testi.
+      // Structure only: attribute and class names, never text content.
       const attrNames = (el) => (el ? [...el.attributes].map((x) => x.name).filter((n) => n !== 'style').slice(0, 14) : null);
       const tray = K.tray();
       const opts = tray ? K.regularOptions(tray) : [];
@@ -435,7 +447,7 @@ function pageDo(a, K) {
       };
     }
     default:
-      throw new Error(`operazione sconosciuta: ${a.op}`);
+      throw new Error(`unknown operation: ${a.op}`);
   }
 }
 /* eslint-enable no-undef */
@@ -445,13 +457,13 @@ function expressionFor(args) {
 }
 
 // ---------------------------------------------------------------------------------------------------------------
-// Parte Node: operazioni di alto livello
+// Node side: high-level operations
 // ---------------------------------------------------------------------------------------------------------------
 
 const norm = (s) => String(s ?? '').toLowerCase().normalize('NFKD').replace(/[^\p{L}\p{N}]+/gu, '');
 const words = (s) => (String(s ?? '').toLowerCase().normalize('NFKD').match(/[\p{L}\p{N}]{4,}/gu) || []).slice(0, 14);
 
-/** Il testo visibile del questionario contiene questa domanda? (il prompt e' Markdown: si confronta in modo tollerante) */
+/** Does visible questionnaire text contain this question? (prompt is Markdown: compare tolerantly) */
 export function promptMatches(trayText, prompt) {
   const t = norm(trayText);
   const p = norm(prompt);
@@ -464,7 +476,7 @@ export function promptMatches(trayText, prompt) {
   return hits / ws.length >= 0.7;
 }
 
-/** Indice della domanda mostrata ora nel tray (-1 se nessuna o ambigua). */
+/** Index of the question currently shown in the tray (-1 if none or ambiguous). */
 export function currentQuestionIndex(view, questions) {
   const hits = [];
   questions.forEach((q, i) => {
@@ -472,7 +484,7 @@ export function currentQuestionIndex(view, questions) {
   });
   if (hits.length === 1) return hits[0];
   if (hits.length > 1) {
-    // piu' prompt simili: decide chi ha piu' etichette di opzione presenti nel testo visibile
+    // multiple similar prompts: pick whoever has more option labels present in visible text
     const t = norm(view.text);
     const score = (i) => questions[i].options.filter((o) => norm(o.label) && t.includes(norm(o.label).slice(0, 16))).length;
     hits.sort((a, b) => score(b) - score(a));
@@ -491,7 +503,7 @@ async function waitFor(fn, { timeoutMs = 3000, intervalMs = 100, sleep = realSle
   }
 }
 
-/** Contesto di una sessione CDP: wrapper comodi per gli script di pagina. */
+/** CDP session context: convenient wrappers for page scripts. */
 class Ctx {
   constructor(session, { sleep }) {
     this.s = session;
@@ -510,50 +522,50 @@ class Ctx {
     return this.page({ op: 'locate', ...args });
   }
 
-  /** Clic reale sull'elemento (con ripiego su element.click() se coperto o senza dimensioni). */
+  /** Real click on the element (falls back to element.click() if covered or zero-sized). */
   async clickTarget(args) {
     const loc = await this.locate(args);
-    if (!loc.found) throw new UiError('not_found', `elemento non trovato: ${args.target}`);
-    if (loc.disabled) throw new UiError('disabled', `elemento disattivato: ${args.target}`);
+    if (!loc.found) throw new UiError('not_found', `element not found: ${args.target}`);
+    if (loc.disabled) throw new UiError('disabled', `element disabled: ${args.target}`);
     if (loc.covered || loc.w < 2 || loc.h < 2) {
       if (await this.page({ op: 'jsclick', ...args })) return;
-      throw new UiError('click_failed', `clic non riuscito: ${args.target}`);
+      throw new UiError('click_failed', `click failed: ${args.target}`);
     }
     await this.s.click(loc.x, loc.y);
   }
 
-  /** Sposta il mouse sull'elemento (i pulsanti di una riga compaiono solo al passaggio). */
+  /** Move the mouse over the element (row buttons appear only on hover). */
   async hover(args) {
     const loc = await this.locate(args);
-    if (!loc.found) throw new UiError('not_found', `elemento non trovato: ${args.target}`);
+    if (!loc.found) throw new UiError('not_found', `element not found: ${args.target}`);
     await this.s.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: loc.x, y: loc.y });
     await realSleep(200);
   }
 
-  /** Tasto destro al centro dell'elemento (menu contestuale). */
+  /** Right-click at the element center (context menu). */
   async rightClick(args) {
     const loc = await this.locate(args);
-    if (!loc.found) throw new UiError('not_found', `elemento non trovato: ${args.target}`);
+    if (!loc.found) throw new UiError('not_found', `element not found: ${args.target}`);
     const base = { x: loc.x, y: loc.y, button: 'right', clickCount: 1 };
     await this.s.send('Input.dispatchMouseEvent', { type: 'mouseMoved', x: loc.x, y: loc.y });
     await this.s.send('Input.dispatchMouseEvent', { ...base, type: 'mousePressed', buttons: 2 });
     await this.s.send('Input.dispatchMouseEvent', { ...base, type: 'mouseReleased', buttons: 0 });
   }
 
-  /** Collega file locali al campo file del compositore in primo piano (come la scelta dal selettore di file). */
+  /** Attach local files to the foreground composer file input (as if chosen from the file picker). */
   async setFiles(files) {
-    if (!(await this.page({ op: 'markFileInput' }))) throw new UiError('no_file_input', 'campo allegati non trovato');
+    if (!(await this.page({ op: 'markFileInput' }))) throw new UiError('no_file_input', 'attachment field not found');
     try {
       const { root } = await this.s.send('DOM.getDocument', { depth: 0 });
       const { nodeId } = await this.s.send('DOM.querySelector', { nodeId: root.nodeId, selector: `[${'data-cp-file-target'}]` });
-      if (!nodeId) throw new UiError('no_file_input', 'campo allegati non trovato');
+      if (!nodeId) throw new UiError('no_file_input', 'attachment field not found');
       await this.s.send('DOM.setFileInputFiles', { files, nodeId });
     } finally {
       await this.page({ op: 'unmarkFileInput' }).catch(() => {});
     }
   }
 
-  /** Toglie dal compositore tutte le immagini allegate (pulsante "Remove image"). */
+  /** Remove all attached images from the composer ("Remove image" buttons). */
   async clearImages() {
     for (let i = 0; i < 12; i++) {
       const loc = await this.locate({ target: 'removeImage' });
@@ -563,7 +575,39 @@ class Ctx {
     }
   }
 
-  /** Scrive testo con il focus gia' sull'elemento; `\n` diventa Maiusc+Invio (a capo senza inviare). */
+  /**
+   * If Cursor's sidebar is hidden (rows exist but have no size), show it so rows can be found and clicked.
+   * `restoreSidebar()` hides it again at the end of the session, leaving the Mac as it was.
+   */
+  async ensureSidebar() {
+    const st = await this.page({ op: 'sidebarState' });
+    if (st.visible > 0 || !st.canShow) return false;
+    await this.clickTarget({ target: 'showSidebar' });
+    const shown = await waitFor(async () => ((await this.page({ op: 'sidebarState' })).visible > 0 ? true : null), { timeoutMs: 2500, sleep: this.sleep });
+    if (!shown) return false;
+    this.sidebarOpenedByUs = true;
+    // Let the sidebar finish its animation before clicking rows: wait until the number of visible rows stops changing.
+    let last = -1;
+    await waitFor(async () => {
+      const n = (await this.page({ op: 'sidebarState' })).visible;
+      const stable = n === last;
+      last = n;
+      return stable ? true : null;
+    }, { timeoutMs: 1500, intervalMs: 150, sleep: this.sleep });
+    return true;
+  }
+
+  async restoreSidebar() {
+    if (!this.sidebarOpenedByUs) return;
+    this.sidebarOpenedByUs = false;
+    try {
+      await this.clickTarget({ target: 'hideSidebar' });
+    } catch {
+      // best-effort: must never fail the action
+    }
+  }
+
+  /** Type text with focus already on the element; `\n` becomes Shift+Enter (newline without sending). */
   async typeText(text) {
     const lines = String(text).replace(/\r\n?/g, '\n').split('\n');
     for (let i = 0; i < lines.length; i++) {
@@ -578,6 +622,9 @@ class Ctx {
 }
 
 export class AgentsUi {
+  // composerId -> normalized text this daemon typed in that chat's composer and has not seen sent. Memory only.
+  #typed = new Map();
+
   /**
    * @param {{ port: number, restoreSelection?: boolean, sleep?: Function, WebSocketImpl?: Function }} opts
    */
@@ -588,12 +635,12 @@ export class AgentsUi {
     this.WebSocketImpl = WebSocketImpl;
   }
 
-  /** Stato leggero (solo HTTP): la porta risponde? */
+  /** Lightweight state (HTTP only): does the port respond? */
   probe() {
     return probeCdp(this.port);
   }
 
-  /** La finestra Agents e' raggiungibile? Solo HTTP, mai un'eccezione. */
+  /** Is the Agents window reachable? HTTP only, never throws. */
   async hasWindow() {
     try {
       await this.#target();
@@ -609,24 +656,29 @@ export class AgentsUi {
       targets.find((x) => /agents/i.test(x.title)) ||
       targets.find((x) => /glass/i.test(x.url)) ||
       null;
-    if (!t) throw new UiError('no_window', 'finestra Agents non trovata');
+    if (!t) throw new UiError('no_window', 'Agents window not found');
     return t;
   }
 
-  /** Apre una sessione sulla finestra Agents, esegue `fn(ctx)` e chiude sempre. */
+  /** Open a session on the Agents window, run `fn(ctx)`, always close. */
   async withSession(fn) {
     const target = await this.#target();
     const session = await CdpSession.open(target.wsUrl, { WebSocketImpl: this.WebSocketImpl });
     try {
-      // La pagina si comporta come se avesse il focus anche se Cursor e' in secondo piano (vale solo per questa sessione).
+      // Page behaves as if focused even when Cursor is in the background (this session only).
       await session.send('Emulation.setFocusEmulationEnabled', { enabled: true }).catch(() => {});
-      return await fn(new Ctx(session, { sleep: this.sleep }));
+      const ctx = new Ctx(session, { sleep: this.sleep });
+      try {
+        return await fn(ctx);
+      } finally {
+        await ctx.restoreSidebar();
+      }
     } finally {
       session.close();
     }
   }
 
-  /** Diagnostica per `npm run cdp -- inspect`: porta, finestre e STRUTTURA della pagina (mai testi). */
+  /** Diagnostics for `npm run cdp -- inspect`: port, windows, and page STRUCTURE (never text). */
   async inspect() {
     const p = await this.probe();
     if (!p.up) return { up: false };
@@ -635,26 +687,29 @@ export class AgentsUi {
     try {
       out.page = await this.withSession((ctx) => ctx.page({ op: 'outline' }));
     } catch (err) {
-      out.pageError = err.code || 'errore';
+      out.pageError = err.code || 'error';
     }
     return out;
   }
 
-  /** Stato del questionario visibile (o null). */
+  /** Visible questionnaire state (or null). */
   readTray() {
     return this.withSession((ctx) => ctx.readTray());
   }
 
   async #openChat(ctx, composerId) {
+    await ctx.ensureSidebar();
     const previous = await ctx.page({ op: 'selectedKey' }).catch(() => null);
     const loc = await ctx.locate({ target: 'row', id: composerId });
-    if (!loc.found) throw new UiError('row_not_found', 'chat non trovata nella sidebar di Cursor');
-    if (previous && previous === loc.key) return previous; // gia' aperta: niente da fare
-    await ctx.clickTarget({ target: 'row', id: composerId });
-    // [DA VERIFICARE] il marcatore di riga selezionata; se non esiste, si attende un tempo breve.
-    const selected = await waitFor(async () => (await ctx.page({ op: 'selectedKey' }).catch(() => null)) === loc.key, { timeoutMs: 1500, sleep: this.sleep });
-    if (!selected) await this.sleep(500);
-    return previous;
+    if (!loc.found) throw new UiError('row_not_found', 'chat not found in Cursor sidebar');
+    if (previous && previous === loc.key) return previous; // already open: nothing to do
+    // Never go on with the wrong chat open: a message typed there would end up in a different conversation.
+    for (let attempt = 0; attempt < 2; attempt++) {
+      await ctx.clickTarget({ target: 'row', id: composerId });
+      const selected = await waitFor(async () => (await ctx.page({ op: 'selectedKey' }).catch(() => null)) === loc.key, { timeoutMs: 1500, sleep: this.sleep });
+      if (selected) return previous;
+    }
+    throw new UiError('chat_not_open', 'Cursor did not open the chat');
   }
 
   async #restore(ctx, previous, composerId) {
@@ -665,7 +720,7 @@ export class AgentsUi {
       const id = previous.replace(/^row:/, '');
       await ctx.clickTarget({ target: 'row', id });
     } catch {
-      // ripristino best-effort: non deve mai far fallire l'azione
+      // best-effort restore: must never fail the action
     }
   }
 
@@ -674,9 +729,9 @@ export class AgentsUi {
   }
 
   /**
-   * Risponde al questionario di una chat.
+   * Answer a chat questionnaire.
    * @param {{ composerId: string, question: {questions: object[]}, answers: {optionIds: string[], freeform?: string}[] }} p
-   *   `answers` e' allineato a `question.questions`; `freeform` non vuoto = voce "Other..." con quel testo.
+   *   `answers` aligns with `question.questions`; non-empty `freeform` = "Other..." entry with that text.
    */
   async answer({ composerId, question, answers }) {
     const qs = question.questions;
@@ -684,28 +739,28 @@ export class AgentsUi {
       const previous = await this.#openChat(ctx, composerId);
       try {
         let view = await this.#waitTray(ctx);
-        if (!view) throw new UiError('no_tray', 'questionario non visibile');
-        if (!qs.some((q) => promptMatches(view.text, q.prompt))) throw new UiError('mismatch', 'il questionario mostrato non e\' quello atteso');
+        if (!view) throw new UiError('no_tray', 'questionnaire not visible');
+        if (!qs.some((q) => promptMatches(view.text, q.prompt))) throw new UiError('mismatch', 'questionnaire on screen is not the expected one');
 
         const done = new Array(qs.length).fill(false);
         for (let guard = 0; guard < qs.length * 4 + 6; guard++) {
           view = view ?? (await ctx.readTray());
           if (!view) {
             if (done.every(Boolean)) return { submitted: true };
-            throw new UiError('tray_closed', 'il questionario e\' stato chiuso prima di completarlo');
+            throw new UiError('tray_closed', 'questionnaire closed before completion');
           }
           const qi = currentQuestionIndex(view, qs);
-          if (qi < 0) throw new UiError('mismatch', 'domanda mostrata non riconosciuta');
+          if (qi < 0) throw new UiError('mismatch', 'question on screen not recognized');
 
           if (!done[qi]) {
             await this.#applyAnswer(ctx, qs[qi], answers[qi]);
             done[qi] = true;
-            await this.sleep(250); // lascia aggiornare l'interfaccia (avanzamento automatico, stato del pulsante)
+            await this.sleep(250); // let UI update (auto-advance, button state)
             view = null;
             continue;
           }
 
-          // La domanda corrente e' a posto ma siamo ancora qui: si preme il pulsante primario ("Next" o "Continue").
+          // Current question is done but tray still open: press primary ("Next" or "Continue").
           const enabled = await waitFor(
             async () => {
               const v = await ctx.readTray();
@@ -717,12 +772,12 @@ export class AgentsUi {
             view = null;
             continue;
           }
-          if (!enabled) throw new UiError('primary_disabled', 'pulsante di avanzamento non disponibile');
+          if (!enabled) throw new UiError('primary_disabled', 'continue button not available');
           await ctx.clickTarget({ target: 'primary' });
           await this.sleep(400);
           view = null;
         }
-        throw new UiError('tray_still_open', 'il questionario e\' ancora aperto');
+        throw new UiError('tray_still_open', 'questionnaire is still open');
       } finally {
         await this.#restore(ctx, previous, composerId);
       }
@@ -733,11 +788,11 @@ export class AgentsUi {
     const free = typeof ans.freeform === 'string' ? ans.freeform : '';
     const wantFree = free.trim().length > 0;
     const wanted = new Set(ans.optionIds.filter((id) => id !== FREEFORM_ID).map((id) => q.options.findIndex((o) => o.id === id)));
-    if ([...wanted].some((i) => i < 0)) throw new UiError('bad_answer', 'opzione sconosciuta');
+    if ([...wanted].some((i) => i < 0)) throw new UiError('bad_answer', 'unknown option');
 
     const regular = async () => {
       const v = await ctx.readTray();
-      if (!v) throw new UiError('tray_closed', 'questionario chiuso');
+      if (!v) throw new UiError('tray_closed', 'questionnaire closed');
       return v;
     };
     const clickOption = async (i) => {
@@ -747,8 +802,8 @@ export class AgentsUi {
 
     if (!q.allowMultiple) {
       if (wantFree) {
-        // Scelta singola con testo libero: prima si toglie un'opzione eventualmente selezionata (un clic su quella
-        // gia' selezionata la deseleziona), poi si sceglie "Other...".
+        // Single choice with freeform: first deselect any selected option (clicking an already selected one
+        // deselects it), then choose "Other...".
         const v = await regular();
         const sel = v.options.findIndex((o) => o.selected);
         if (sel >= 0) await clickOption(sel);
@@ -756,54 +811,54 @@ export class AgentsUi {
         const i = [...wanted][0];
         const v = await regular();
         const dom = v.options[i];
-        if (!dom) throw new UiError('mismatch', 'opzione non presente nel questionario');
-        if (!dom.selected) await clickOption(i); // se e' gia' selezionata NON si clicca: la deselezionerebbe
+        if (!dom) throw new UiError('mismatch', 'option not present in questionnaire');
+        if (!dom.selected) await clickOption(i); // if already selected do NOT click: would deselect
         return;
       }
     } else {
       for (let i = 0; i < q.options.length; i++) {
         const v = await regular();
         const dom = v.options[i];
-        if (!dom) throw new UiError('mismatch', 'opzione non presente nel questionario');
+        if (!dom) throw new UiError('mismatch', 'option not present in questionnaire');
         if (dom.selected !== wanted.has(i)) await clickOption(i);
       }
     }
 
-    // Voce "Other..." con il campo libero.
+    // "Other..." entry with freeform field.
     const v = await regular();
     if (wantFree) {
-      if (!v.freeform.present) throw new UiError('mismatch', 'campo libero non presente');
+      if (!v.freeform.present) throw new UiError('mismatch', 'freeform field not present');
       if (!v.freeform.selected || !v.freeform.editorVisible) {
         await ctx.clickTarget({ target: 'freeform' });
         await waitFor(async () => (await regular()).freeform.editorVisible, { timeoutMs: 1500, sleep: this.sleep });
       }
       await ctx.clickTarget({ target: 'freeformEditor' });
       const focus = await ctx.focusState('freeformEditor');
-      if (!focus.found || !focus.focused) throw new UiError('focus_failed', 'campo libero senza focus');
+      if (!focus.found || !focus.focused) throw new UiError('focus_failed', 'freeform field not focused');
       if (focus.text && norm(focus.text) !== norm(free)) {
-        // c'e' gia' una bozza diversa nel campo: la si sostituisce (Cmd+A poi si riscrive)
+        // different draft already in the field: replace it (Cmd+A then retype)
         await ctx.s.pressKey({ key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, nativeVirtualKeyCode: 65 }, { modifiers: MODIFIER.meta });
       }
       if (norm(focus.text) !== norm(free)) await ctx.typeText(free);
       const typed = await waitFor(async () => norm((await ctx.focusState('freeformEditor')).text) === norm(free), { timeoutMs: 2000, sleep: this.sleep });
-      if (!typed) throw new UiError('type_failed', 'testo non inserito nel campo libero');
+      if (!typed) throw new UiError('type_failed', 'text not entered in freeform field');
     } else if (v.freeform.present && v.freeform.selected && q.allowMultiple) {
-      await ctx.clickTarget({ target: 'freeform' }); // multipla: si toglie "Other..." se non richiesta
+      await ctx.clickTarget({ target: 'freeform' }); // multiple: turn off "Other..." if not wanted
     }
   }
 
-  /** Salta il questionario (pulsante "Skip" di Cursor). */
+  /** Skip the questionnaire (Cursor "Skip" button). */
   async skip({ composerId, question }) {
     return this.withSession(async (ctx) => {
       const previous = await this.#openChat(ctx, composerId);
       try {
         const view = await this.#waitTray(ctx);
-        if (!view) throw new UiError('no_tray', 'questionario non visibile');
-        if (!question.questions.some((q) => promptMatches(view.text, q.prompt))) throw new UiError('mismatch', 'il questionario mostrato non e\' quello atteso');
-        if (!view.secondary) throw new UiError('not_found', 'pulsante Salta non trovato');
+        if (!view) throw new UiError('no_tray', 'questionnaire not visible');
+        if (!question.questions.some((q) => promptMatches(view.text, q.prompt))) throw new UiError('mismatch', 'questionnaire on screen is not the expected one');
+        if (!view.secondary) throw new UiError('not_found', 'Skip button not found');
         await ctx.clickTarget({ target: 'secondary' });
         const gone = await waitFor(async () => (await ctx.readTray()) === null, { timeoutMs: 4000, sleep: this.sleep });
-        if (!gone) throw new UiError('tray_still_open', 'il questionario e\' ancora aperto');
+        if (!gone) throw new UiError('tray_still_open', 'questionnaire is still open');
         return { skipped: true };
       } finally {
         await this.#restore(ctx, previous, composerId);
@@ -812,12 +867,12 @@ export class AgentsUi {
   }
 
   /**
-   * Approva ("Run") o rifiuta ("Skip") il comando in attesa. Si agisce solo sulla carta il cui `data-message-id` e'
-   * il bubble che il daemon ha letto dal database: se non c'e' o non ha i due pulsanti, nessun clic.
+   * Approve ("Run") or reject ("Skip") the pending command. Only act on the card whose `data-message-id` is the bubble
+   * the daemon read from the database: if missing or without both buttons, no click.
    * @param {{ composerId: string, bubbleId: string, decision: 'approve' | 'reject' }} p
    */
   async approval({ composerId, bubbleId, decision }) {
-    if (decision !== 'approve' && decision !== 'reject') throw new UiError('bad_decision', 'decisione non valida');
+    if (decision !== 'approve' && decision !== 'reject') throw new UiError('bad_decision', 'invalid decision');
     return this.withSession(async (ctx) => {
       const previous = await this.#openChat(ctx, composerId);
       try {
@@ -828,9 +883,9 @@ export class AgentsUi {
           },
           { timeoutMs: 4000, sleep: this.sleep },
         );
-        if (!state) throw new UiError('no_approval', 'richiesta di approvazione non visibile in Cursor');
+        if (!state) throw new UiError('no_approval', 'approval request not visible in Cursor');
         await ctx.clickTarget({ target: decision, messageId: bubbleId });
-        // La carta perde i pulsanti appena la decisione e' registrata.
+        // Card loses buttons as soon as the decision is recorded.
         const gone = await waitFor(
           async () => {
             const st = await ctx.page({ op: 'approvalState', messageId: bubbleId });
@@ -846,8 +901,8 @@ export class AgentsUi {
   }
 
   /**
-   * Ferma l'agente della chat: clic su "Stop generation" nel pannello della chat. Il pulsante sparisce (torna "Send" o
-   * "voice") quando Cursor ha fermato la generazione.
+   * Stop the chat agent: click "Stop generation" in the chat panel. Button disappears (back to "Send" or "voice") when
+   * Cursor has stopped generation.
    * @returns {Promise<{ clicked: boolean, settled: boolean }>}
    */
   async stop({ composerId }) {
@@ -861,7 +916,7 @@ export class AgentsUi {
           },
           { timeoutMs: 3000, sleep: this.sleep },
         );
-        if (!info) throw new UiError('not_running', 'la chat non sta lavorando in Cursor');
+        if (!info) throw new UiError('not_running', 'chat is not running in Cursor');
         await ctx.clickTarget({ target: 'stop' });
         const gone = await waitFor(
           async () => {
@@ -878,10 +933,11 @@ export class AgentsUi {
   }
 
 
-  /** Tasto destro sulla riga e clic sulla voce `label` del menu (regex). */
+  /** Right-click the row and click menu entry `label` (regex). */
   async #rowMenu(ctx, composerId, label) {
+    await ctx.ensureSidebar();
     const loc = await ctx.locate({ target: 'row', id: composerId });
-    if (!loc.found) throw new UiError('row_not_found', 'chat non trovata nella sidebar di Cursor');
+    if (!loc.found) throw new UiError('row_not_found', 'chat not found in Cursor sidebar');
     await ctx.rightClick({ target: 'row', id: composerId });
     const item = await waitFor(async () => {
       const l = await ctx.locate({ target: 'menuitem', label });
@@ -889,14 +945,14 @@ export class AgentsUi {
     }, { timeoutMs: 2500, sleep: this.sleep });
     if (!item) {
       await ctx.s.pressKey(KEYS.escape).catch(() => {});
-      throw new UiError('no_menu_item', 'voce di menu non trovata in Cursor');
+      throw new UiError('no_menu_item', 'menu item not found in Cursor');
     }
     await ctx.clickTarget({ target: 'menuitem', label });
   }
 
-  /** Rinomina una chat dalla sidebar (menu "Rename", scrittura in linea, Invio). */
+  /** Rename a chat from the sidebar ("Rename" menu, inline edit, Enter). */
   async rename({ composerId, name }) {
-    if (typeof name !== 'string' || !name.trim()) throw new UiError('bad_name', 'nome non valido');
+    if (typeof name !== 'string' || !name.trim()) throw new UiError('bad_name', 'invalid name');
     return this.withSession(async (ctx) => {
       await this.#rowMenu(ctx, composerId, MENU.rename);
       const editing = await waitFor(async () => {
@@ -905,9 +961,9 @@ export class AgentsUi {
       }, { timeoutMs: 2500, sleep: this.sleep });
       if (!editing) {
         await ctx.s.pressKey(KEYS.escape).catch(() => {});
-        throw new UiError('no_rename_field', 'campo del nome non apparso');
+        throw new UiError('no_rename_field', 'name field did not appear');
       }
-      // Il campo deve avere il focus (e il testo selezionato), altrimenti quello che si scrive va perso: se serve lo si forza.
+      // Field must have focus (and selected text) or typing is lost: force focus if needed.
       const focused = await waitFor(async () => {
         const st = await ctx.page({ op: 'renameState' });
         if (st.focused) return st;
@@ -916,9 +972,9 @@ export class AgentsUi {
       }, { timeoutMs: 2000, sleep: this.sleep });
       if (!focused) {
         await ctx.s.pressKey(KEYS.escape).catch(() => {});
-        throw new UiError('no_rename_field', 'campo del nome senza focus');
+        throw new UiError('no_rename_field', 'name field not focused');
       }
-      // Il testo e' gia' selezionato all'apertura: scrivere lo sostituisce. Si controlla prima di confermare.
+      // Text is already selected on open: typing replaces it. Verify before confirming.
       await ctx.typeText(name);
       const typed = await waitFor(async () => {
         const st = await ctx.page({ op: 'renameState' });
@@ -926,46 +982,48 @@ export class AgentsUi {
       }, { timeoutMs: 2500, sleep: this.sleep });
       if (!typed) {
         await ctx.s.pressKey(KEYS.escape).catch(() => {});
-        throw new UiError('type_failed', 'nome non inserito');
+        throw new UiError('type_failed', 'name not entered');
       }
       await ctx.s.pressKey(KEYS.enter);
       const done = await waitFor(async () => (!(await ctx.page({ op: 'renameState' })).editing ? true : null), { timeoutMs: 3000, sleep: this.sleep });
       if (!done) {
         await ctx.s.pressKey(KEYS.escape).catch(() => {});
-        throw new UiError('rename_failed', 'rinomina non confermata');
+        throw new UiError('rename_failed', 'rename not confirmed');
       }
       return { clicked: true };
     });
   }
 
-  /** La chat e' fissata in cima alla sidebar? (sola lettura della pagina). */
+  /** Is the chat pinned at the top of the sidebar? (read-only page probe). */
   async pinState({ composerId }) {
     return this.withSession(async (ctx) => {
+      // Read-only probe run often from the phone: it never opens the sidebar (would flicker the Mac window).
       const st = await ctx.page({ op: 'pinState', id: composerId });
-      if (!st.found) throw new UiError('row_not_found', 'chat non trovata nella sidebar di Cursor');
+      if (!st.found) throw new UiError('row_not_found', 'chat not found in Cursor sidebar');
       return { pinned: st.pinned };
     });
   }
 
-  /** Fissa o toglie dai fissati (menu della riga, voce "Pin"/"Unpin"). Non fa nulla se la chat e' gia' nello stato richiesto. */
+  /** Pin or unpin (row menu, "Pin"/"Unpin"). No-op if the chat is already in the requested state. */
   async setPinned({ composerId, pinned }) {
-    if (typeof pinned !== 'boolean') throw new UiError('bad_pin', 'valore non valido');
+    if (typeof pinned !== 'boolean') throw new UiError('bad_pin', 'invalid value');
     return this.withSession(async (ctx) => {
+      await ctx.ensureSidebar();
       const before = await ctx.page({ op: 'pinState', id: composerId });
-      if (!before.found) throw new UiError('row_not_found', 'chat non trovata nella sidebar di Cursor');
+      if (!before.found) throw new UiError('row_not_found', 'chat not found in Cursor sidebar');
       if (before.pinned === pinned) return { pinned, changed: false };
-      // Si cerca SOLO la voce dello stato voluto: se il menu mostra quella opposta non si clicca nulla (mai un'inversione per errore).
+      // Look ONLY for the desired-state entry: if the menu shows the opposite, click nothing (never flip by mistake).
       await this.#rowMenu(ctx, composerId, pinned ? MENU.pin : MENU.unpin);
       const now = await waitFor(async () => {
         const st = await ctx.page({ op: 'pinState', id: composerId });
         return st.found && st.pinned === pinned ? st : null;
       }, { timeoutMs: 3000, sleep: this.sleep });
-      if (!now) throw new UiError('pin_failed', 'Cursor non ha cambiato lo stato di fissaggio');
+      if (!now) throw new UiError('pin_failed', 'Cursor did not change pin state');
       return { pinned, changed: true };
     });
   }
 
-  /** Archivia una chat (menu della riga, voce "Archive"). */
+  /** Archive a chat (row menu, "Archive" entry). */
   async archive({ composerId }) {
     return this.withSession(async (ctx) => {
       await this.#rowMenu(ctx, composerId, MENU.archive);
@@ -974,11 +1032,12 @@ export class AgentsUi {
   }
 
   /**
-   * Ripristina una chat archiviata: accende per un attimo il filtro "Archived" della sidebar (le righe archiviate non ci sono
-   * altrimenti), usa "Unarchive" dal menu della riga e rimette SEMPRE il filtro com'era.
+   * Restore an archived chat: briefly enable sidebar "Archived" filter (archived rows are hidden otherwise), use row menu
+   * "Unarchive", and ALWAYS restore the filter to how it was.
    */
   async unarchive({ composerId }) {
     return this.withSession(async (ctx) => {
+      await ctx.ensureSidebar();
       const filterIs = async () => {
         await ctx.clickTarget({ target: 'customize' });
         const st = await waitFor(async () => {
@@ -987,7 +1046,7 @@ export class AgentsUi {
         }, { timeoutMs: 2500, sleep: this.sleep });
         if (!st) {
           await ctx.s.pressKey(KEYS.escape).catch(() => {});
-          throw new UiError('no_menu_item', 'filtro delle archiviate non trovato in Cursor');
+          throw new UiError('no_menu_item', 'Archived filter not found in Cursor');
         }
         return st.checked === 'true';
       };
@@ -1005,7 +1064,7 @@ export class AgentsUi {
       }
       try {
         const shown = await waitFor(async () => ((await ctx.locate({ target: 'row', id: composerId })).found ? true : null), { timeoutMs: 3500, sleep: this.sleep });
-        if (!shown) throw new UiError('row_not_found', 'chat archiviata non trovata nella sidebar di Cursor');
+        if (!shown) throw new UiError('row_not_found', 'archived chat not found in Cursor sidebar');
         await this.#rowMenu(ctx, composerId, MENU.unarchive);
         await this.sleep(400);
         return { clicked: true };
@@ -1015,14 +1074,40 @@ export class AgentsUi {
             if (await filterIs()) await toggle();
             else await ctx.s.pressKey(KEYS.escape).catch(() => {});
           } catch {
-            // ripristino del filtro best-effort: un errore qui non deve nascondere l'esito
+            // best-effort filter restore: error here must not hide the outcome
           }
         }
       }
     });
   }
 
-  /** Scrive un messaggio nel composer della chat e lo invia (come Invio in Cursor). */
+  /** Select everything in the (foreground) composer and delete it. Used only on text that this daemon typed itself. */
+  async #clearComposer(ctx) {
+    await ctx.clickTarget({ target: 'composer' });
+    const f = await ctx.focusState('composer');
+    if (!f.found || !f.focused) return false;
+    // `commands` makes the editing command run even where the synthesized shortcut would not (e.g. headless).
+    await ctx.s.pressKey({ key: 'a', code: 'KeyA', windowsVirtualKeyCode: 65, nativeVirtualKeyCode: 65, commands: ['selectAll'] }, { modifiers: MODIFIER.meta });
+    await ctx.s.pressKey({ ...KEYS.backspace, commands: ['deleteBackward'] });
+    return Boolean(await waitFor(async () => ((await ctx.focusState('composer')).empty ? true : null), { timeoutMs: 1500, sleep: this.sleep }));
+  }
+
+  /**
+   * After a failed send: if the composer still holds exactly the text WE typed, remove it, so no stray draft is left
+   * behind (and the next attempt does not trip over it). Anything else in the field is the user's own: never touched.
+   */
+  async #discardOwnText(ctx, composerId, text) {
+    try {
+      const f = await ctx.focusState('composer');
+      if (f.found && !f.empty && norm(f.text) === norm(text)) await this.#clearComposer(ctx);
+      const after = await ctx.focusState('composer');
+      if (!after.found || after.empty) this.#typed.delete(composerId);
+    } catch {
+      // best-effort: the original error is what the caller needs to see
+    }
+  }
+
+  /** Type a message in the chat composer and send (like Enter in Cursor). */
   async sendMessage({ composerId, text, files = [] }) {
     return this.withSession(async (ctx) => {
       const previous = await this.#openChat(ctx, composerId);
@@ -1031,10 +1116,24 @@ export class AgentsUi {
           const i = await ctx.page({ op: 'composerInfo' });
           return i.composer ? i : null;
         }, { timeoutMs: 3500, sleep: this.sleep });
-        if (!info) throw new UiError('no_composer', 'campo di scrittura non trovato');
-        if (info.tray) throw new UiError('question_pending', 'la chat ha una domanda in attesa');
-        // Non si mescola mai il messaggio con una bozza scritta dall'utente sul Mac.
-        if (!info.composer.empty || info.images > 0) throw new UiError('draft_not_empty', 'nel campo di scrittura c\'e\' gia\' una bozza');
+        if (!info) throw new UiError('no_composer', 'composer field not found');
+        if (info.tray) throw new UiError('question_pending', 'chat has a pending question');
+        // The composer on screen must belong to the requested chat: never type into another conversation.
+        if (info.panel && info.panel !== composerId) throw new UiError('chat_not_open', 'the open chat is not the requested one');
+        // Never mix the message with a draft the user typed on the Mac. A draft that is exactly what this daemon typed
+        // earlier (a failed attempt) or the very same text being sent is ours: clear it and carry on.
+        let draftText = info.composer.text;
+        if (!info.composer.empty) {
+          const mine = this.#typed.get(composerId);
+          if (info.images === 0 && (norm(draftText) === norm(text) || (mine && norm(draftText) === mine))) {
+            if (!(await this.#clearComposer(ctx))) throw new UiError('draft_not_empty', 'the composer already has a draft');
+            this.#typed.delete(composerId);
+            draftText = '';
+          } else {
+            throw new UiError('draft_not_empty', 'the composer already has a draft');
+          }
+        }
+        if (info.images > 0) throw new UiError('draft_not_empty', 'the composer already has a draft');
 
         let attached = false;
         try {
@@ -1045,16 +1144,18 @@ export class AgentsUi {
           if (text) {
             await ctx.clickTarget({ target: 'composer' });
             const focus = await ctx.focusState('composer');
-            if (!focus.found || !focus.focused) throw new UiError('focus_failed', 'campo di scrittura senza focus');
+            if (!focus.found || !focus.focused) throw new UiError('focus_failed', 'composer field not focused');
+            this.#typed.set(composerId, norm(text));
             await ctx.typeText(text);
             const typed = await waitFor(async () => {
               const f = await ctx.focusState('composer');
               return f.found && norm(f.text).startsWith(norm(text).slice(0, 40)) ? f : null;
             }, { timeoutMs: 3000, sleep: this.sleep });
-            if (!typed) throw new UiError('type_failed', 'testo non inserito nel campo di scrittura');
+            if (!typed) throw new UiError('type_failed', 'text not entered in composer');
           }
         } catch (e) {
           if (attached) await ctx.clearImages().catch(() => {});
+          if (text) await this.#discardOwnText(ctx, composerId, text);
           throw e;
         }
 
@@ -1064,17 +1165,24 @@ export class AgentsUi {
         }, { timeoutMs: 3000, sleep: this.sleep });
         if (!enabled) {
           if (attached) await ctx.clearImages().catch(() => {});
-          throw new UiError('send_disabled', 'pulsante di invio non disponibile');
+          if (text) await this.#discardOwnText(ctx, composerId, text);
+          throw new UiError('send_disabled', 'send button not available');
         }
+        // Last check before sending: the chat on screen must still be the requested one (someone may have switched on the Mac).
+        if (enabled.panel && enabled.panel !== composerId) throw new UiError('chat_not_open', 'the open chat changed before sending');
         await ctx.clickTarget({ target: 'send' });
 
-        // Invio avvenuto = il campo si svuota (e le anteprime delle immagini spariscono).
+        // Send succeeded = field clears (and image previews disappear).
         const cleared = await waitFor(async () => {
           const f = await ctx.focusState('composer');
           const i = await ctx.page({ op: 'composerInfo' });
           return (!f.found || f.empty) && !(i.images > 0) ? true : null;
-        }, { timeoutMs: 5000, sleep: this.sleep });
-        if (!cleared) throw new UiError('send_failed', 'il messaggio non risulta inviato');
+        }, { timeoutMs: 10000, sleep: this.sleep });
+        if (!cleared) {
+          if (text) await this.#discardOwnText(ctx, composerId, text);
+          throw new UiError('send_failed', 'message does not appear sent');
+        }
+        this.#typed.delete(composerId);
         return { sent: true };
       } finally {
         await this.#restore(ctx, previous, composerId);
@@ -1082,7 +1190,7 @@ export class AgentsUi {
     });
   }
 
-  /** Allega immagini al compositore e verifica che compaiano le anteprime. */
+  /** Attach images to the composer and verify previews appear. */
   async #attach(ctx, files) {
     const before = (await ctx.page({ op: 'attachState' })).previews;
     await ctx.setFiles(files);
@@ -1092,11 +1200,11 @@ export class AgentsUi {
     }, { timeoutMs: 6000, sleep: this.sleep });
     if (!ok) {
       await ctx.clearImages().catch(() => {});
-      throw new UiError('attach_failed', 'Cursor non ha mostrato le immagini allegate');
+      throw new UiError('attach_failed', 'Cursor did not show attached images');
     }
   }
 
-  /** Solo per prove: allega, conta le anteprime e toglie tutto senza inviare. */
+  /** Tests only: attach, count previews, remove all without sending. */
   async attachImages({ composerId, files }) {
     return this.withSession(async (ctx) => {
       const previous = await this.#openChat(ctx, composerId);
@@ -1120,7 +1228,7 @@ export class AgentsUi {
     }
   }
 
-  /** Apre il menu dei rami e ne legge le voci (il menu resta aperto). */
+  /** Open the branch menu and read entries (menu stays open). */
   async #readBranches(ctx) {
     await ctx.clickTarget({ target: 'branchTrigger' });
     const st = await waitFor(async () => {
@@ -1129,7 +1237,7 @@ export class AgentsUi {
     }, { timeoutMs: 2500, sleep: this.sleep });
     if (!st) {
       await this.#closeMenus(ctx);
-      throw new UiError('no_branch_menu', 'menu dei rami non trovato in Cursor');
+      throw new UiError('no_branch_menu', 'branch menu not found in Cursor');
     }
     return st;
   }
@@ -1138,7 +1246,7 @@ export class AgentsUi {
     const st = await this.#readBranches(ctx);
     if (!st.options.some((o) => o.name === name)) {
       await this.#closeMenus(ctx);
-      throw new UiError('branch_not_found', 'ramo non presente nell\'elenco di Cursor');
+      throw new UiError('branch_not_found', 'branch not in Cursor list');
     }
     await ctx.clickTarget({ target: 'branchOption', name });
     await this.sleep(300);
@@ -1147,10 +1255,10 @@ export class AgentsUi {
       const x = await ctx.page({ op: 'branchState' });
       return norm(x.current ?? '') === norm(name) ? x : null;
     }, { timeoutMs: 2500, sleep: this.sleep });
-    if (!now) throw new UiError('branch_failed', 'Cursor non ha cambiato il ramo');
+    if (!now) throw new UiError('branch_failed', 'Cursor did not change branch');
   }
 
-  /** Apre il menu del modello (Context / Effort / Model) e il sottomenu "Model": ritorna il modello attuale e le voci (il menu resta aperto). */
+  /** Open model menu (Context / Effort / Model) and "Model" submenu: return current model and entries (menu stays open). */
   async #readModels(ctx) {
     await ctx.clickTarget({ target: 'modelButton' });
     const first = await waitFor(async () => {
@@ -1159,7 +1267,7 @@ export class AgentsUi {
     }, { timeoutMs: 2500, sleep: this.sleep });
     if (!first) {
       await this.#closeMenus(ctx);
-      throw new UiError('no_model_menu', 'menu del modello non trovato in Cursor');
+      throw new UiError('no_model_menu', 'model menu not found in Cursor');
     }
     await ctx.hover({ target: 'menuitem', label: MENU.modelSub });
     const st = await waitFor(async () => {
@@ -1169,7 +1277,7 @@ export class AgentsUi {
     }, { timeoutMs: 2500, sleep: this.sleep });
     if (!st) {
       await this.#closeMenus(ctx);
-      throw new UiError('no_model_menu', 'elenco dei modelli non trovato in Cursor');
+      throw new UiError('no_model_menu', 'model list not found in Cursor');
     }
     return st;
   }
@@ -1178,7 +1286,7 @@ export class AgentsUi {
     const st = await this.#readModels(ctx);
     if (!st.items.includes(label)) {
       await this.#closeMenus(ctx);
-      throw new UiError('model_not_found', 'modello non presente nell\'elenco di Cursor');
+      throw new UiError('model_not_found', 'model not in Cursor list');
     }
     await ctx.clickTarget({ target: 'menuitem', label: `^${escapeRe(label)}$` });
     await this.sleep(300);
@@ -1187,12 +1295,12 @@ export class AgentsUi {
       const x = await ctx.page({ op: 'modelState' });
       return norm(x.current ?? '') === norm(label) ? x : null;
     }, { timeoutMs: 2500, sleep: this.sleep });
-    if (!now) throw new UiError('model_failed', 'Cursor non ha cambiato il modello');
+    if (!now) throw new UiError('model_failed', 'Cursor did not change model');
   }
 
   /**
-   * Applica ramo e/o modello richiesti sulla schermata "nuova chat" (solo se diversi da quelli attuali).
-   * Ritorna i valori di prima e quelli finali: Cursor ricorda l'ultima scelta come predefinita, quindi chi chiama deve rimettere `before`.
+   * Apply requested branch and/or model on the "new chat" screen (only if different from current).
+   * Returns before and after values: Cursor remembers the last choice as default, so callers must restore `before`.
    */
   async #applyChoices(ctx, { branch, model }) {
     const read = async () => ({ branch: (await ctx.page({ op: 'branchState' })).current, model: (await ctx.page({ op: 'modelState' })).current });
@@ -1203,11 +1311,11 @@ export class AgentsUi {
   }
 
   /**
-   * Legge da Cursor ramo e modello attuali e le scelte possibili della nuova chat del progetto. SOLA LETTURA: apre i menu e li chiude
-   * senza scegliere nulla, poi riapre la chat che era selezionata.
+   * Read current branch and model from Cursor and new-chat choices for the project. READ-ONLY: opens menus and closes them
+   * without selecting, then reopens the previously selected chat.
    */
   async newChatOptions({ project }) {
-    if (typeof project !== 'string' || !project.trim()) throw new UiError('bad_project', 'progetto non valido');
+    if (typeof project !== 'string' || !project.trim()) throw new UiError('bad_project', 'invalid project');
     return this.withSession(async (ctx) => {
       const st = {};
       try {
@@ -1227,19 +1335,20 @@ export class AgentsUi {
   }
 
   /**
-   * Apre la schermata "nuova chat" del progetto (pulsante "New Agent" del gruppo) e controlla progetto, ambiente locale e bozza vuota.
-   * `st` riceve la selezione di prima e le righe di prima: il chiamante, in caso di errore, la ripristina.
+   * Open the project's "new chat" screen (group "New Agent" button) and verify project, local environment, and empty draft.
+   * `st` receives prior selection and row keys: caller restores them on error.
    */
   async #openNewChat(ctx, project, st) {
+      await ctx.ensureSidebar();
       st.previous = await ctx.page({ op: 'selectedKey' }).catch(() => null);
       st.before = new Set(await ctx.page({ op: 'rowKeys' }));
       const count = await ctx.page({ op: 'sectionCount', name: project });
-      if (count === 0) throw new UiError('project_not_found', 'progetto non trovato nella sidebar di Cursor');
-      if (count > 1) throw new UiError('project_ambiguous', 'piu\' progetti con lo stesso nome nella sidebar');
+      if (count === 0) throw new UiError('project_not_found', 'project not found in Cursor sidebar');
+      if (count > 1) throw new UiError('project_ambiguous', 'multiple projects with the same name in sidebar');
       await ctx.hover({ target: 'newAgent', name: project });
       await ctx.clickTarget({ target: 'newAgent', name: project });
-    // Si attende che la schermata mostri DAVVERO il progetto richiesto (se prima c'era gia' una schermata "nuova chat",
-    // il compositore c'e' gia' e il progetto cambia solo dopo il clic).
+    // Wait until the screen really shows the requested project (if a "new chat" screen was already open, the composer is
+    // already there and the project changes only after the click).
     let last = null;
     const screen = await waitFor(async () => {
       const st = await ctx.page({ op: 'newChatState' });
@@ -1247,25 +1356,25 @@ export class AgentsUi {
       return st.composer && st.triggers.length >= 3 && norm(st.triggers[0]) === norm(project) ? st : null;
     }, { timeoutMs: 4000, sleep: this.sleep });
     if (!screen) {
-      if (last?.composer && last.triggers.length >= 3) throw new UiError('wrong_project', 'Cursor ha scelto un altro progetto');
-      throw new UiError('no_new_chat', 'la schermata della nuova chat non e\' comparsa');
+      if (last?.composer && last.triggers.length >= 3) throw new UiError('wrong_project', 'Cursor selected a different project');
+      throw new UiError('no_new_chat', 'new chat screen did not appear');
     }
-    if (norm(screen.triggers[screen.triggers.length - 1]) !== 'thismac') throw new UiError('not_local', 'la nuova chat non e\' locale (This Mac)');
+    if (norm(screen.triggers[screen.triggers.length - 1]) !== 'thismac') throw new UiError('not_local', 'new chat is not local (This Mac)');
     const info = await ctx.page({ op: 'composerInfo' });
-    if (!info.composer?.empty || info.images > 0) throw new UiError('draft_not_empty', 'nel campo di scrittura c\'e\' gia\' una bozza');
+    if (!info.composer?.empty || info.images > 0) throw new UiError('draft_not_empty', 'the composer already has a draft');
     return screen;
   }
 
   /**
-   * Apre una chat NUOVA sul progetto `project` (pulsante "New Agent" del gruppo nella sidebar), scrive il primo messaggio e lo invia.
-   * Si controlla che il progetto sia quello giusto e che l'ambiente sia "This Mac" (locale): mai chat nel cloud o in un worktree.
-   * Ritorna l'id della chat creata (la riga nuova comparsa nella sidebar).
+   * Open a NEW chat on `project` (sidebar group "New Agent"), type the first message, and send.
+   * Verify the correct project and "This Mac" (local) environment: never cloud or worktree chats.
+   * Returns the created chat id (new sidebar row).
    */
   async newChat({ project, text, files = [], dryRun = false, branch, model }) {
-    if (typeof project !== 'string' || !project.trim()) throw new UiError('bad_project', 'progetto non valido');
+    if (typeof project !== 'string' || !project.trim()) throw new UiError('bad_project', 'invalid project');
     return this.withSession(async (ctx) => {
       const st = {};
-      // Qualsiasi errore lascia Cursor sulla schermata della nuova chat: si riapre la chat che era selezionata.
+      // Any error leaves Cursor on the new-chat screen: reopen the previously selected chat.
       try {
         const screen = await this.#openNewChat(ctx, project, st);
         const { previous, before } = st;
@@ -1273,10 +1382,10 @@ export class AgentsUi {
         if (branch || model) {
           const r = await this.#applyChoices(ctx, { branch, model });
           chosen = r.after;
-          st.revert = r.before; // il predefinito di Cursor cambia con la scelta: si rimette com'era alla fine
+          st.revert = r.before; // Cursor's default changes with the pick: restore at the end
         }
         if (dryRun) {
-          // Solo per prove: arriva fin qui (schermata, progetto, ambiente, bozza vuota), allega e toglie le immagini, non invia.
+          // Tests only: reach here (screen, project, environment, empty draft), attach and remove images, do not send.
           let n = null;
           if (files.length) {
             await this.#attach(ctx, files);
@@ -1297,26 +1406,26 @@ export class AgentsUi {
           if (text) {
             await ctx.clickTarget({ target: 'composer' });
             const focus = await ctx.focusState('composer');
-            if (!focus.found || !focus.focused) throw new UiError('focus_failed', 'campo di scrittura senza focus');
+            if (!focus.found || !focus.focused) throw new UiError('focus_failed', 'composer field not focused');
             await ctx.typeText(text);
             const typed = await waitFor(async () => {
               const f = await ctx.focusState('composer');
               return f.found && norm(f.text).startsWith(norm(text).slice(0, 40)) ? f : null;
             }, { timeoutMs: 3000, sleep: this.sleep });
-            if (!typed) throw new UiError('type_failed', 'testo non inserito nel campo di scrittura');
+            if (!typed) throw new UiError('type_failed', 'text not entered in composer');
           }
           const enabled = await waitFor(async () => {
             const i = await ctx.page({ op: 'composerInfo' });
             return i.send && !i.send.disabled ? i : null;
           }, { timeoutMs: 3000, sleep: this.sleep });
-          if (!enabled) throw new UiError('send_disabled', 'pulsante di invio non disponibile');
+          if (!enabled) throw new UiError('send_disabled', 'send button not available');
         } catch (e) {
           if (attached) await ctx.clearImages().catch(() => {});
           throw e;
         }
         await ctx.clickTarget({ target: 'send' });
-        // Cursor crea PRIMA una riga "bozza" e, inviato il messaggio, la sostituisce con la chat vera (altro id): si prende la riga
-        // nuova solo quando l'elenco delle righe nuove e' stabile e ne resta una.
+        // Cursor first creates a "draft" row and, after send, replaces it with the real chat (different id): take the new row
+        // only when the list of new rows is stable and exactly one remains.
         let lastSig = null;
         let since = 0;
         const created = await waitFor(async () => {
@@ -1330,14 +1439,14 @@ export class AgentsUi {
           }
           return fresh.length === 1 && Date.now() - since >= 1200 ? fresh[0] : null;
         }, { timeoutMs: 15_000, intervalMs: 250, sleep: this.sleep });
-        if (!created) throw new UiError('send_failed', 'non vedo la chat nuova in Cursor');
+        if (!created) throw new UiError('send_failed', 'new chat not visible in Cursor');
         if (st.revert) {
-          // Si riapre una schermata "nuova chat" solo per rimettere ramo e modello predefiniti come erano.
+          // Reopen "new chat" only to restore branch and model defaults as they were.
           try {
             await this.#openNewChat(ctx, project, {});
             await this.#applyChoices(ctx, { branch: st.revert.branch, model: st.revert.model });
           } catch {
-            // best-effort: la chat e' gia' partita, non si trasforma in errore
+            // best-effort: chat already started, do not turn into failure
           }
         }
         await this.#restore(ctx, previous, created.replace(/^row:/, ''));

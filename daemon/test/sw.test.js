@@ -1,6 +1,6 @@
-// Service worker della PWA, eseguito in un contesto isolato con un finto `self`.
-// Punti critici su iOS: ogni push DEVE mostrare una notifica, il tocco deve aprire la chat giusta, i dati delle chat
-// non devono mai finire nella cache.
+// PWA service worker, run in an isolated context with a fake `self`.
+// iOS-critical: every push MUST show a notification, tap must open the right chat, chat data
+// must never end up in the cache.
 import assert from 'node:assert/strict';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -89,7 +89,7 @@ function pushEvent(data) {
   return { data: { json: () => data } };
 }
 
-test('push valido: mostra la notifica con titolo, testo, tag e URL, e imposta il badge', async () => {
+test('valid push: shows notification with title, body, tag and URL, and sets badge', async () => {
   const { listeners, calls } = loadWorker();
   await fire(listeners.push, pushEvent({ title: 'Domanda in attesa', body: 'Chat - app\nCome procedo?', tag: 'chat-1', url: '/#/chat/1', badge: 3 }));
   assert.equal(calls.notifications.length, 1);
@@ -101,7 +101,7 @@ test('push valido: mostra la notifica con titolo, testo, tag e URL, e imposta il
   assert.deepEqual(calls.badge, [['set', 3]]);
 });
 
-test('push anomalo (JSON rotto, vuoto, campi di tipo sbagliato): mostra COMUNQUE una notifica (iOS lo esige)', async () => {
+test('malformed push (broken JSON, empty, wrong field types): still shows a notification (iOS requires it)', async () => {
   for (const data of [new SyntaxError('x'), undefined, {}, { title: 42, body: { a: 1 }, tag: 7, url: 5 }, null]) {
     const { listeners, calls } = loadWorker();
     await fire(listeners.push, pushEvent(data));
@@ -112,7 +112,7 @@ test('push anomalo (JSON rotto, vuoto, campi di tipo sbagliato): mostra COMUNQUE
   }
 });
 
-test('push: URL esterni o non previsti non sono accettati', async () => {
+test('push: external or unexpected URLs are not accepted', async () => {
   for (const url of ['https://evil.example/', 'javascript:alert(1)', '//evil', '/api/state', '#/chat/1']) {
     const { listeners, calls } = loadWorker();
     await fire(listeners.push, pushEvent({ title: 't', url }));
@@ -120,7 +120,7 @@ test('push: URL esterni o non previsti non sono accettati', async () => {
   }
 });
 
-test('push: badge a zero lo cancella, valori enormi sono limitati a 99', async () => {
+test('push: zero badge clears it, huge values capped at 99', async () => {
   let w = loadWorker();
   await fire(w.listeners.push, pushEvent({ title: 't', badge: 0 }));
   assert.deepEqual(w.calls.badge, [['clear']]);
@@ -132,14 +132,14 @@ test('push: badge a zero lo cancella, valori enormi sono limitati a 99', async (
   assert.deepEqual(w.calls.badge, [['clear']]);
 });
 
-test('push: un errore del badge (API non supportata) non fa fallire la gestione del push', async () => {
+test('push: badge API failure does not break push handling', async () => {
   const { listeners, calls } = loadWorker({ badgeFails: true });
-  await fire(listeners.push, pushEvent({ title: 'Chat finita', badge: 2 })); // se lanciasse, il test fallirebbe qui
+  await fire(listeners.push, pushEvent({ title: 'Chat finita', badge: 2 })); // would fail the test here if it threw
   assert.equal(calls.notifications.length, 1);
   assert.equal(calls.notifications[0].title, 'Chat finita');
 });
 
-test('tocco sulla notifica: porta in primo piano la finestra aperta e chiede la navigazione', async () => {
+test('notification click: focuses open window and requests navigation', async () => {
   const log = [];
   const win = { url: `${ORIGIN}/`, focus: async () => log.push('focus'), postMessage: (m) => log.push(m) };
   const other = { url: 'https://altro.example/', focus: async () => log.push('ERRORE'), postMessage: () => log.push('ERRORE') };
@@ -147,13 +147,13 @@ test('tocco sulla notifica: porta in primo piano la finestra aperta e chiede la 
   let closed = false;
   await fire(listeners.notificationclick, { notification: { close: () => (closed = true), data: { url: '/#/chat/abc-123' } } });
   assert.equal(closed, true);
-  // JSON: il messaggio e' creato nel contesto isolato del worker (prototipi diversi)
-  // la navigazione viene richiesta prima del focus (il focus puo' fallire su iOS)
+  // JSON: message is created in the worker isolated context (different prototypes)
+  // navigation is requested before focus (focus can fail on iOS)
   assert.deepEqual(JSON.parse(JSON.stringify(log)), [{ type: 'navigate', hash: '#/chat/abc-123' }, 'focus']);
   assert.deepEqual(calls.opened, []);
 });
 
-test('tocco sulla notifica: se il focus fallisce la navigazione e\' comunque richiesta (e si ripiega su openWindow); piu\' finestre: tutte ricevono il messaggio', async () => {
+test('notification click: if focus fails navigation is still requested (fallback openWindow); multiple windows: all get the message', async () => {
   const log = [];
   const broken = { url: `${ORIGIN}/`, focus: async () => { throw new Error('focus non consentito'); }, postMessage: (m) => log.push(['a', m.type]) };
   const visible = { url: `${ORIGIN}/#/chat/x`, visibilityState: 'visible', focus: async () => log.push('focus-visible'), postMessage: (m) => log.push(['b', m.type]) };
@@ -168,7 +168,7 @@ test('tocco sulla notifica: se il focus fallisce la navigazione e\' comunque ric
   assert.deepEqual(two.calls.opened, []);
 });
 
-test('tocco sulla notifica: senza finestre aperte apre l\'app sull\'URL della notifica', async () => {
+test('notification click: with no open windows opens the app at the notification URL', async () => {
   const { listeners, calls } = loadWorker({ windows: [] });
   await fire(listeners.notificationclick, { notification: { close() {}, data: { url: '/#/chat/xyz' } } });
   assert.deepEqual(calls.opened, ['/#/chat/xyz']);
@@ -177,7 +177,7 @@ test('tocco sulla notifica: senza finestre aperte apre l\'app sull\'URL della no
   assert.deepEqual(again.calls.opened, ['/#/']);
 });
 
-test('fetch: API, healthz, il worker stesso, richieste non GET e altre origini NON passano dalla cache', () => {
+test('fetch: API, healthz, the worker itself, non-GET and other origins do NOT use the cache', () => {
   const { listeners } = loadWorker();
   const intercepted = (request) => {
     let hit = false;
@@ -196,7 +196,7 @@ test('fetch: API, healthz, il worker stesso, richieste non GET e altre origini N
   assert.equal(intercepted(get('/', { mode: 'navigate' })), true);
 });
 
-test('fetch: rete prima di tutto; offline serve il guscio per le navigazioni e 503 per il resto', async () => {
+test('fetch: network first; offline serves shell for navigations and 503 for the rest', async () => {
   const online = loadWorker();
   let res;
   online.listeners.fetch({ request: { method: 'GET', url: `${ORIGIN}/css/app.css`, mode: 'cors' }, respondWith: (p) => (res = p) });
@@ -212,17 +212,17 @@ test('fetch: rete prima di tutto; offline serve il guscio per le navigazioni e 5
   assert.equal((await other).status, 503);
 });
 
-test('installazione e attivazione: pre-cache di tutti i file, vecchie cache rimosse (solo le proprie)', async () => {
+test('install and activate: precache all files, remove old caches (own only)', async () => {
   const { listeners, calls } = loadWorker();
   await fire(listeners.install, {});
   assert.deepEqual(calls.added, ['/', '/js/app.js', '/css/app.css']);
   await fire(listeners.activate, {});
   assert.ok(calls.cached.includes('delete:cp-shell-vecchia'));
-  assert.ok(!calls.cached.includes('delete:altro'), 'non tocca cache altrui');
-  assert.ok(!calls.cached.includes('delete:cp-shell-test'), 'non cancella la cache corrente');
+  assert.ok(!calls.cached.includes('delete:altro'), 'does not touch foreign caches');
+  assert.ok(!calls.cached.includes('delete:cp-shell-test'), 'does not delete current cache');
 });
 
-test('senza sostituzione dei segnaposto il worker parte lo stesso (solo guscio)', async () => {
+test('without placeholder substitution the worker still starts (shell only)', async () => {
   const sandbox = { URL, Response, Promise, JSON, location: { origin: ORIGIN }, listeners: {}, added: [] };
   Object.assign(sandbox, {
     caches: { open: async () => ({ add: async (u) => sandbox.added.push(u) }), keys: async () => [], delete: async () => true },

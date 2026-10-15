@@ -1,5 +1,5 @@
-// Avvia un Chromium headless (quello di Playwright, se presente) con la porta di debug, per provare agents-ui.js su un
-// DOM vero. Se non c'e' un Chromium i test che lo usano vengono saltati: la suite resta senza dipendenze.
+// Launches headless Chromium (Playwright's if present) with debug port, to exercise agents-ui.js on a
+// real DOM. If no Chromium is available, tests that use this are skipped: the suite stays dependency-free.
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 import net from 'node:net';
@@ -39,10 +39,10 @@ function freePort() {
   });
 }
 
-/** Avvia Chromium sulla pagina `htmlPath` (file locale). Ritorna `{ port, evalPage(expr), close() }`. */
+/** Starts Chromium on local page `htmlPath`. Returns `{ port, evalPage(expr), close() }`. */
 export async function launchChromium(htmlPath) {
   const bin = findChromium();
-  if (!bin) throw new Error('nessun Chromium disponibile');
+  if (!bin) throw new Error('no Chromium available');
   const port = await freePort();
   const profile = fs.mkdtempSync(path.join(os.tmpdir(), 'cp-chromium-'));
   const child = spawn(bin, [`--remote-debugging-port=${port}`, `--user-data-dir=${profile}`, '--no-first-run', '--disable-gpu', '--window-size=900,700', 'about:blank'], { stdio: 'ignore' });

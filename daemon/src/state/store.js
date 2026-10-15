@@ -1,6 +1,6 @@
-// Archivio locale del daemon (SQLite proprio, `daemon/data/store.db`). NON e' il database di Cursor.
-// Contiene: chat ignorate, sottoscrizioni push, notifiche gia' inviate, codici di abbinamento, sessioni, chiavi VAPID.
-// Il file e' creato con permessi 0600 (directory 0700): contiene il segreto VAPID e gli hash delle sessioni.
+// Local daemon store (own SQLite, `daemon/data/store.db`). NOT Cursor's database.
+// Holds: ignored chats, push subscriptions, sent notifications, pairing codes, sessions, VAPID keys.
+// File is created with mode 0600 (directory 0700): contains VAPID secret and session hashes.
 import fs from 'node:fs';
 import path from 'node:path';
 import { DatabaseSync } from 'node:sqlite';
@@ -14,7 +14,7 @@ CREATE TABLE IF NOT EXISTS ignored (
 );
 CREATE TABLE IF NOT EXISTS push_subscriptions (
   endpoint TEXT PRIMARY KEY, p256dh TEXT NOT NULL, auth TEXT NOT NULL, session_hash TEXT,
-  created_at INTEGER NOT NULL, last_ok_at INTEGER, fail_count INTEGER NOT NULL DEFAULT 0
+  created_at INTEGER NOT NULL, last_ok_at INTEGER, fail_count INTEGER NOT NULL DEFAULT 0, lang TEXT
 );
 CREATE TABLE IF NOT EXISTS notified (dedupe_key TEXT PRIMARY KEY, created_at INTEGER NOT NULL);
 CREATE TABLE IF NOT EXISTS pairing_codes (code_hash TEXT PRIMARY KEY, expires_at INTEGER NOT NULL, used_at INTEGER);
@@ -37,19 +37,20 @@ export class Store {
       try {
         fs.chmodSync(dir, 0o700);
       } catch {
-        // directory non nostra: ignoriamo
+        // not our directory: ignore
       }
     }
     this.#db = new DatabaseSync(file);
     this.#db.exec('PRAGMA journal_mode = WAL');
     this.#db.exec('PRAGMA synchronous = NORMAL');
     this.#db.exec(SCHEMA);
+    this.#migrate();
     if (file !== ':memory:') {
       for (const f of [file, `${file}-wal`, `${file}-shm`]) {
         try {
           fs.chmodSync(f, 0o600);
         } catch {
-          // il file wal/shm puo' non esistere ancora
+          // wal/shm file may not exist yet
         }
       }
     }
@@ -68,14 +69,15 @@ export class Store {
       listPrefs: db.prepare('SELECT composer_id, favorite, muted FROM chat_prefs WHERE favorite = 1 OR muted = 1'),
       prunePrefs: db.prepare('DELETE FROM chat_prefs WHERE favorite = 0 AND muted = 0'),
       pruneIgnore: db.prepare('DELETE FROM ignored WHERE created_at < ?'),
+      getSub: db.prepare('SELECT lang FROM push_subscriptions WHERE endpoint = ?'),
       upsertSub: db.prepare(
-        `INSERT INTO push_subscriptions (endpoint, p256dh, auth, session_hash, created_at) VALUES (?, ?, ?, ?, ?)
+        `INSERT INTO push_subscriptions (endpoint, p256dh, auth, session_hash, created_at, lang) VALUES (?, ?, ?, ?, ?, ?)
          ON CONFLICT(endpoint) DO UPDATE SET p256dh = excluded.p256dh, auth = excluded.auth,
-           session_hash = excluded.session_hash, fail_count = 0`,
+           session_hash = excluded.session_hash, fail_count = 0, lang = excluded.lang`,
       ),
       delSub: db.prepare('DELETE FROM push_subscriptions WHERE endpoint = ?'),
       delSubsBySession: db.prepare('DELETE FROM push_subscriptions WHERE session_hash = ?'),
-      listSubs: db.prepare('SELECT endpoint, p256dh, auth, session_hash FROM push_subscriptions'),
+      listSubs: db.prepare('SELECT endpoint, p256dh, auth, session_hash, lang FROM push_subscriptions'),
       subOk: db.prepare('UPDATE push_subscriptions SET last_ok_at = ?, fail_count = 0 WHERE endpoint = ?'),
       subFail: db.prepare('UPDATE push_subscriptions SET fail_count = fail_count + 1 WHERE endpoint = ?'),
       subCount: db.prepare('SELECT COUNT(*) AS n FROM push_subscriptions'),
@@ -100,7 +102,14 @@ export class Store {
     this.#db.close();
   }
 
-  // --- meta (chiavi VAPID, ecc.) ---
+  #migrate() {
+    const cols = this.#db.prepare('PRAGMA table_info(push_subscriptions)').all();
+    if (!cols.some((c) => c.name === 'lang')) {
+      this.#db.exec('ALTER TABLE push_subscriptions ADD COLUMN lang TEXT');
+    }
+  }
+
+  // --- meta (VAPID keys, etc.) ---
   getMeta(k) {
     return this.#q.getMeta.get(k)?.v ?? null;
   }
@@ -108,14 +117,14 @@ export class Store {
     this.#q.setMeta.run(k, String(v));
   }
 
-  // --- ignorati ---
+  // --- ignored ---
   addIgnored(composerId, key, now) {
     this.#q.addIgnore.run(composerId, key, now);
   }
   removeIgnored(composerId, key) {
     return this.#q.delIgnore.run(composerId, key).changes > 0;
   }
-  /** @returns {Set<string>} coppie `composerId|key` (vedi ignoreKey) */
+  /** @returns {Set<string>} `composerId|key` pairs (see ignoreKey) */
   ignoredSet() {
     return new Set(this.#q.listIgnore.all().map((r) => ignoreKey(r.composer_id, r.tool_call_key)));
   }
@@ -126,8 +135,8 @@ export class Store {
     return this.#q.pruneIgnore.run(olderThan).changes;
   }
 
-  // --- preferenze per chat (solo locali al daemon: Cursor non ne sa nulla) ---
-  /** Aggiorna `favorite` e/o `muted` di una chat (i campi non indicati restano come sono). */
+  // --- per-chat prefs (daemon-local only: Cursor does not know) ---
+  /** Updates `favorite` and/or `muted` for a chat (omitted fields stay unchanged). */
   setChatPrefs(composerId, patch, now) {
     const cur = this.#q.getPrefs.get(composerId) ?? { favorite: 0, muted: 0 };
     const favorite = typeof patch.favorite === 'boolean' ? Number(patch.favorite) : cur.favorite;
@@ -135,14 +144,17 @@ export class Store {
     this.#q.setPrefs.run(composerId, favorite, muted, now);
     return { favorite: favorite === 1, muted: muted === 1 };
   }
-  /** @returns {Map<string, {favorite: boolean, muted: boolean}>} solo le chat con almeno un flag acceso */
+  /** @returns {Map<string, {favorite: boolean, muted: boolean}>} only chats with at least one flag set */
   chatPrefs() {
     return new Map(this.#q.listPrefs.all().map((r) => [r.composer_id, { favorite: r.favorite === 1, muted: r.muted === 1 }]));
   }
 
-  // --- sottoscrizioni push ---
-  upsertSubscription({ endpoint, p256dh, auth }, sessionHash, now) {
-    this.#q.upsertSub.run(endpoint, p256dh, auth, sessionHash ?? null, now);
+  // --- push subscriptions ---
+  upsertSubscription({ endpoint, p256dh, auth }, sessionHash, now, extra = {}) {
+    const prev = this.#q.getSub.get(endpoint);
+    let lang = prev?.lang ?? null;
+    if (Object.hasOwn(extra, 'lang')) lang = extra.lang;
+    this.#q.upsertSub.run(endpoint, p256dh, auth, sessionHash ?? null, now, lang);
   }
   removeSubscription(endpoint) {
     return this.#q.delSub.run(endpoint).changes > 0;
@@ -151,7 +163,13 @@ export class Store {
     return this.#q.delSubsBySession.run(sessionHash).changes;
   }
   listSubscriptions() {
-    return this.#q.listSubs.all().map((r) => ({ endpoint: r.endpoint, p256dh: r.p256dh, auth: r.auth, sessionHash: r.session_hash }));
+    return this.#q.listSubs.all().map((r) => ({
+      endpoint: r.endpoint,
+      p256dh: r.p256dh,
+      auth: r.auth,
+      sessionHash: r.session_hash,
+      lang: r.lang ?? null,
+    }));
   }
   countSubscriptions() {
     return this.#q.subCount.get().n;
@@ -163,7 +181,7 @@ export class Store {
     this.#q.subFail.run(endpoint);
   }
 
-  // --- notifiche gia' inviate (deduplica) ---
+  // --- already-sent notifications (dedupe) ---
   hasNotified(key) {
     return this.#q.hasNotified.get(key) !== undefined;
   }
@@ -174,7 +192,7 @@ export class Store {
     return this.#q.pruneNotified.run(olderThan).changes;
   }
 
-  // --- abbinamento e sessioni (si salvano solo gli hash) ---
+  // --- pairing and sessions (only hashes stored) ---
   addPairingCode(codeHash, expiresAt) {
     this.#q.addPairing.run(codeHash, expiresAt);
   }

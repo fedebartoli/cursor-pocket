@@ -1,5 +1,5 @@
-// Immagini caricate dal telefono in attesa di essere allegate a un messaggio. Restano su disco (solo l'utente puo' leggerle),
-// con un nome casuale, il tempo necessario; si cancellano dopo l'invio, dopo TTL e a ogni avvio.
+// Images uploaded from the phone pending attachment to a message. Stored on disk (user-readable only),
+// random filename, for as long as needed; removed after send, after TTL, and on every startup.
 import crypto from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
@@ -7,7 +7,7 @@ import path from 'node:path';
 export const UPLOAD_LIMITS = Object.freeze({ bytes: 8 * 1024 * 1024, perMessage: 4, pending: 12, ttlMs: 30 * 60_000 });
 const ID_RE = /^[a-f0-9]{32}$/;
 
-/** Tipo reale dal contenuto (non ci si fida del Content-Type dichiarato). */
+/** Actual type from content (declared Content-Type is not trusted). */
 export function sniffImage(buf) {
   if (buf.length >= 3 && buf[0] === 0xff && buf[1] === 0xd8 && buf[2] === 0xff) return 'jpg';
   if (buf.length >= 8 && buf.subarray(0, 8).equals(Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]))) return 'png';
@@ -22,7 +22,7 @@ export class Uploads {
     this.now = now;
     this.files = new Map(); // id -> { path, at }
     fs.mkdirSync(dir, { recursive: true, mode: 0o700 });
-    for (const f of fs.readdirSync(dir)) fs.rmSync(path.join(dir, f), { force: true }); // residui di un avvio precedente
+    for (const f of fs.readdirSync(dir)) fs.rmSync(path.join(dir, f), { force: true }); // leftovers from a previous run
   }
 
   sweep() {
@@ -45,7 +45,7 @@ export class Uploads {
     return { id, size: buf.length };
   }
 
-  /** Percorsi dei file per gli id dati, oppure null se uno manca o e' scaduto. */
+  /** File paths for the given ids, or null if any is missing or expired. */
   paths(ids) {
     this.sweep();
     const out = [];

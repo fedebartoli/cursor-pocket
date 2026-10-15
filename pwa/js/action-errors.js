@@ -1,39 +1,35 @@
-// Messaggi in italiano per gli errori delle azioni (risposta, salta, messaggio). Logica pura (si prova in Node).
+// User-facing messages for action errors (answer, skip, message). Pure logic (testable in Node).
 //
-// Il daemon risponde gia' con testi chiari per quasi tutti i codici; qui si sostituiscono solo quelli che dipendono
-// da cio' che la schermata fa dopo (es. "ho aggiornato la vista") o che nascono nel client.
-const CUSTOM = Object.freeze({
-  network: 'Daemon non raggiungibile. Controlla la connessione e riprova.',
-  stale: 'La richiesta \u00e8 cambiata o \u00e8 gi\u00e0 stata risolta: ho aggiornato la vista.',
-  already_sent: 'Questa richiesta \u00e8 gi\u00e0 stata inviata: attendo che Cursor la registri.',
-  too_large: 'Il testo \u00e8 troppo lungo.',
-  too_long: 'Il messaggio \u00e8 troppo lungo.',
-  not_image: 'Formato non supportato: servono JPEG, PNG, GIF o WebP.',
-  bad_name: 'Scrivi un nome (massimo 100 caratteri).',
-  http: 'Operazione non riuscita. Riprova.',
-});
+// The daemon returns English defaults plus stable codes; the PWA translates via error.<detail> or error.<code>.
+import { hasMessage, t } from './i18n/index.js';
 
-/** Codici dopo i quali conviene riscaricare lo stato (la situazione sul Mac e' cambiata). */
+const CUSTOM_CODES = Object.freeze(['network', 'stale', 'already_sent', 'too_large', 'too_long', 'not_image', 'bad_name', 'http']);
+
+/** Codes after which reloading state is worthwhile (the situation on the Mac changed). */
 const REFRESH_AFTER = new Set(['stale', 'no_question', 'mismatch', 'already_sent', 'not_found', 'not_running', 'timeout']);
 
 export function describeActionError(err) {
+  const detail = err?.detail;
   const code = err?.code;
-  if (code && CUSTOM[code]) return CUSTOM[code];
+  const params = err?.params ?? {};
+  if (detail && hasMessage(`error.${detail}`)) return t(`error.${detail}`, params);
+  if (code && hasMessage(`error.${code}`)) return t(`error.${code}`, params);
+  if (code && CUSTOM_CODES.includes(code)) return t(`actionErrors.${code}`);
   const msg = typeof err?.message === 'string' ? err.message.trim() : '';
-  return msg || 'Operazione non riuscita. Riprova.';
+  return msg || t('actionErrors.generic');
 }
 
 export const shouldRefreshAfter = (err) => REFRESH_AFTER.has(err?.code);
 
-/** Esito di un invio riuscito -> testo per l'utente. `res`: risposta del daemon. */
+/** Successful send outcome -> user-facing text. `res`: daemon response. */
 export function describeAnswerResult(res) {
-  if (res?.warning === 'differs') return 'Risposta inviata, ma Cursor ha registrato una scelta diversa. Controlla sul Mac.';
-  if (res?.verified === false) return 'Risposta inviata. Non riesco ancora a confermare che Cursor l\u2019abbia registrata.';
-  return 'Risposta inviata.';
+  if (res?.warning === 'differs') return t('actionErrors.answerDiffers');
+  if (res?.verified === false) return t('actionErrors.answerUnverified');
+  return t('actionErrors.answerOk');
 }
 
 export function describeMessageResult(res) {
-  if (res?.queued) return 'Messaggio messo in coda da Cursor: l\u2019agente lo legger\u00e0 al termine del lavoro in corso.';
-  if (res?.verified === false) return 'Messaggio inviato. Non riesco ancora a confermare che Cursor lo abbia ricevuto.';
-  return 'Messaggio inviato.';
+  if (res?.queued) return t('actionErrors.messageQueued');
+  if (res?.verified === false) return t('actionErrors.messageUnverified');
+  return t('actionErrors.messageOk');
 }

@@ -1,4 +1,4 @@
-// Punto di ingresso del daemon: `npm start` (da daemon/).
+// Daemon entry point: `npm start` (from daemon/).
 import { createApp } from './app.js';
 import { loadConfig } from './config.js';
 import { createLogger } from './log.js';
@@ -11,9 +11,9 @@ try {
   await app.start();
 } catch (err) {
   if (err?.code === 'EADDRINUSE') {
-    console.error(`Porta ${config.port} gia' in uso. Un altro daemon e' in esecuzione? Cambia porta con CP_PORT.`);
+    console.error(`Port ${config.port} is already in use. Is another daemon running? Change port with CP_PORT.`);
   } else {
-    console.error(`Avvio non riuscito: ${err?.message ?? err}`);
+    console.error(`Startup failed: ${err?.message ?? err}`);
   }
   process.exit(1);
 }
