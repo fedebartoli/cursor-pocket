@@ -1,0 +1,4 @@
+User-agent: *
+Allow: /
+
+Sitemap: https://fedebartoli.github.io/cursor-pocket/sitemap.xml
