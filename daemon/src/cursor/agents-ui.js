@@ -1168,6 +1168,8 @@ export class AgentsUi {
           if (text) await this.#discardOwnText(ctx, composerId, text);
           throw new UiError('send_disabled', 'send button not available');
         }
+        // Last check before sending: the chat on screen must still be the requested one (someone may have switched on the Mac).
+        if (enabled.panel && enabled.panel !== composerId) throw new UiError('chat_not_open', 'the open chat changed before sending');
         await ctx.clickTarget({ target: 'send' });
 
         // Send succeeded = field clears (and image previews disappear).
@@ -1175,7 +1177,7 @@ export class AgentsUi {
           const f = await ctx.focusState('composer');
           const i = await ctx.page({ op: 'composerInfo' });
           return (!f.found || f.empty) && !(i.images > 0) ? true : null;
-        }, { timeoutMs: 5000, sleep: this.sleep });
+        }, { timeoutMs: 10000, sleep: this.sleep });
         if (!cleared) {
           if (text) await this.#discardOwnText(ctx, composerId, text);
           throw new UiError('send_failed', 'message does not appear sent');

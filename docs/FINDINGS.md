@@ -691,6 +691,11 @@ Live measurement on the test chat (read-only observer every 0.5 s, after an answ
   before typing, the foreground panel's `data-glass-agent-id` must equal the requested chat; after any failure the text THIS daemon typed
   is removed (Cmd+A, Backspace, only if the field still holds exactly that text); a leftover draft equal to the message or to what the
   daemon last typed in that chat is cleared automatically, anything else is the user's and still blocks (`draft_not_empty`).
+- Follow-up report (same day): a message sent from the phone showed up in a second chat. Read-only check of the database (times and lengths
+  only): the delivered user message sits in the requested chat at 02:40:27, while the daemon had logged `send_failed` at 02:40:31, i.e. the
+  field was simply slow to clear (false negative; wait raised from 5 s to 10 s). The copy seen in the other chat is the text typed there
+  while the wrong chat was in front (02:34), consistent with the fix above; not provable afterwards because the log carries no chat ids
+  (by design). New last check: the foreground chat must still be the requested one right before pressing send.
 - Hidden sidebar: the rows stay in the DOM with no size, and the toolbar button is `aria-label="Show Sidebar"` / `"Hide Sidebar"`.
   Actions that need rows now show it, and hide it again at the end (VERIFIED LIVE, state restored). The read-only pin probe never opens
   it, to avoid flicker on the Mac.
