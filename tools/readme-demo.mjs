@@ -84,7 +84,7 @@ try {
     await ctx.close();
 
     // Compose each frame: caption on top, phone below, flat background.
-    const bg = scheme === 'dark' ? '#0d1117' : '#f3f4f6';
+    const bg = scheme === 'dark' ? '#0d1117' : (process.env.DEMO_LIGHT_BG ?? '#ffffff');
     const fg = scheme === 'dark' ? '#e6edf3' : '#1f2328';
     const cctx = await browser.newContext({ viewport: { width: 420, height: 700 }, deviceScaleFactor: 1.5 });
     const cpage = await cctx.newPage();
