@@ -1,0 +1,15 @@
+# Continuous integration for GitHub Actions. To enable it, copy this file to .github/workflows/test.yml
+# (pushing workflow files needs a token with the 'workflow' scope: gh auth refresh -s workflow).
+name: test
+on:
+  push:
+  pull_request:
+jobs:
+  daemon:
+    runs-on: macos-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: cd daemon && npm test
