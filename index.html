@@ -3,8 +3,8 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>cursor-pocket: control Cursor agents from your iPhone</title>
-  <meta name="description" content="Get a push notification when a Cursor agent asks a question or needs approval, and answer from your iPhone. Open source, private by design: a small Node daemon on your Mac, no cloud, no account.">
+  <title>cursor-pocket: manage your local Cursor agent chats from your phone</title>
+  <meta name="description" content="Manage the local chats of Cursor's Agents Window from your phone: read them, answer, approve, start new ones, and get a push when an agent needs you. Open source, private by design: a small Node daemon on your Mac, no cloud, no account.">
   <link rel="canonical" href="https://fedebartoli.github.io/cursor-pocket/">
   <meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)">
   <meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)">
@@ -12,8 +12,8 @@
   <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
 
   <meta property="og:type" content="website">
-  <meta property="og:title" content="cursor-pocket: control Cursor agents from your iPhone">
-  <meta property="og:description" content="Push notifications and one-tap answers for the local chats of Cursor's Agents Window. Open source, no cloud, no account.">
+  <meta property="og:title" content="cursor-pocket: manage your local Cursor agent chats from your phone">
+  <meta property="og:description" content="All your local Cursor agent chats on your phone: read, reply, approve, start new ones, and get a push when an agent needs you. Open source, no cloud, no account.">
   <meta property="og:url" content="https://fedebartoli.github.io/cursor-pocket/">
   <meta property="og:image" content="https://fedebartoli.github.io/cursor-pocket/img/og.png">
   <meta name="twitter:card" content="summary_large_image">
@@ -27,7 +27,7 @@
     "name": "cursor-pocket",
     "applicationCategory": "DeveloperApplication",
     "operatingSystem": "macOS, iOS (web app)",
-    "description": "Follow and drive the local chats of Cursor's Agents Window from an iPhone: push notifications, answers and approvals.",
+    "description": "Manage the local chats of Cursor's Agents Window from your phone: read conversations, send messages, start new chats, answer questions, approve commands, push notifications.",
     "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
     "license": "https://opensource.org/licenses/MIT",
     "codeRepositoryUrl": "https://github.com/fedebartoli/cursor-pocket"
@@ -56,7 +56,7 @@
       {
         "@type": "Question",
         "name": "Does it work with Cursor cloud agents or on Android?",
-        "acceptedAnswer": { "@type": "Answer", "text": "It targets the local chats of Cursor 3.x's Agents Window on macOS. Cloud agents are not covered. The web app is built for iPhone; other phones can open it but push notification support is only verified on iOS." }
+        "acceptedAnswer": { "@type": "Answer", "text": "It targets the local chats of Cursor 3.x's Agents Window on macOS. Cloud agents are not covered. The web app is built and tested on iPhone. It is a standard web app, so other phones should be able to use it, but push notifications are only verified on iOS." }
       }
     ]
   }
@@ -83,11 +83,11 @@
   <main id="top">
     <section class="hero">
       <div class="hero-text">
-        <p class="eyebrow">Open source &middot; macOS &middot; iPhone</p>
-        <h1>Your Cursor agents ask. You answer from your phone.</h1>
+        <p class="eyebrow">Open source &middot; macOS &middot; iPhone web app</p>
+        <h1>Your local Cursor chats, on your phone.</h1>
         <p class="lead">
-          Agents stop and wait: a question, a command to approve, a plan to read. cursor-pocket sends a push notification when that
-          happens and lets you handle it from your iPhone, wherever you are. No cloud, no account.
+          All your local Agents Window chats on your phone: read them, send messages, start new ones, answer and approve. A push
+          notification tells you when an agent is waiting for you. No cloud, no account.
         </p>
         <p class="cta">
           <a class="btn primary" href="#start">Get started</a>
@@ -186,7 +186,7 @@ tools/cursor-cdp.sh             # optional: lets you act from the phone</code></
       </details>
       <details>
         <summary>Does it work with cloud agents, or on Android?</summary>
-        <p>Cloud agents are not covered: it targets local chats on macOS. The app is built and tested for iPhone, where push notifications need iOS 16.4 or newer and the app on the Home Screen.</p>
+        <p>Cloud agents are not covered: it targets local chats on macOS. The app is built and tested on iPhone, where push notifications need iOS 16.4 or newer and the app on the Home Screen. It is a standard web app, so other phones should be able to use it, but that is not verified.</p>
       </details>
       <details>
         <summary>Is it safe to approve commands from the phone?</summary>
