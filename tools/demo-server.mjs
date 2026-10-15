@@ -23,6 +23,8 @@ const portIdx = args.indexOf('--port');
 const port = portIdx >= 0 ? Number(args[portIdx + 1]) : 8799;
 const animate = args.includes('--animate');
 const withActions = !args.includes('--no-actions');
+const langIdx = args.indexOf('--lang');
+const demoLang = langIdx >= 0 ? args[langIdx + 1] : 'it'; // 'en' swaps the made-up chat content for English (README screenshots)
 
 const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'cp-demo-'));
 const fx = new CursorFixture(dir);
@@ -30,6 +32,75 @@ fx.db.exec('PRAGMA journal_mode=WAL'); // like the real Cursor database: readers
 
 const ago = (minutes) => Date.now() - minutes * 60_000;
 const id = (n) => `00000000-0000-4000-8000-${String(n).padStart(12, '0')}`;
+
+// English variant of the made-up content: exact-string dictionary, applied recursively to names, texts and tool params.
+const EN = {
+  'negozio-online': 'online-store', 'app-mobile': 'mobile-app', 'sito-vetrina': 'showcase-site',
+  '/Users/demo/negozio-online': '/Users/demo/online-store', '/Users/demo/app-mobile': '/Users/demo/mobile-app', '/Users/demo/sito-vetrina': '/Users/demo/showcase-site',
+  'Correggi il calcolo del carrello': 'Fix the cart total calculation',
+  'Migrazione della tabella ordini': 'Orders table migration',
+  'Piano per il flusso di checkout': 'Plan for the checkout flow',
+  'Test per il modulo pagamenti': 'Tests for the payments module',
+  'Ottimizza le immagini dei prodotti': 'Optimize product images',
+  'Bug nel filtro per categoria': 'Category filter bug',
+  'Aggiorna le dipendenze': 'Update dependencies',
+  'Documentazione delle API': 'API documentation',
+  'Tema scuro nelle impostazioni': 'Dark theme in settings',
+  'Refactor dell\u2019autenticazione': 'Authentication refactor',
+  'Schermata di avvio animata': 'Animated splash screen',
+  'Preferenze di notifica': 'Notification preferences',
+  'Pubblicazione del pacchetto': 'Package release',
+  'Pulizia della cartella temporanea': 'Temp folder cleanup',
+  'Installazione delle dipendenze': 'Installing dependencies',
+  'Chiamata a un servizio esterno': 'Call to an external service',
+  'Scelta del fornitore di pagamenti': 'Payment provider choice',
+  'Vecchio esperimento sul menu': 'Old menu experiment',
+  'Testi della pagina iniziale': 'Landing page copy',
+  'Prova di un tema scuro': 'Dark theme trial',
+  'Procedi pure.': 'Go ahead.',
+  'Prima di continuare mi serve una decisione sugli sconti.': 'Before I continue I need a decision about discounts.',
+  'Sto aggiornando le query che leggono lo storico ordini.': 'I am updating the queries that read the order history.',
+  'Ho preparato un piano in quattro passaggi: indirizzo, spedizione, pagamento, conferma.': 'I prepared a four-step plan: address, shipping, payment, confirmation.',
+  'Le immagini sono ora servite in formato WebP con dimensioni responsive.': 'Images are now served as WebP with responsive sizes.',
+  'Il filtro ignorava le categorie con spazi nel nome: corretto.': 'The filter ignored categories with spaces in the name: fixed.',
+  'Pubblico la nuova versione sul registro.': 'Publishing the new version to the registry.',
+  'Svuoto la cartella temporanea prima di rigenerare i file.': 'Clearing the temp folder before regenerating files.',
+  'Svuota la cache locale': 'Clear the local cache',
+  'Installo i pacchetti mancanti.': 'Installing the missing packages.',
+  'Mi serve una scelta sul fornitore.': 'I need a choice about the provider.',
+  'Come gestisco gli sconti?': 'How should discounts work?',
+  'Gli sconti si applicano prima o dopo il costo di spedizione?': 'Do discounts apply before or after shipping costs?',
+  'Prima della spedizione': 'Before shipping',
+  'Dopo la spedizione': 'After shipping',
+  'Il refactor \u00e8 concluso, resta solo la revisione.': 'The refactor is done, only the review is left.',
+  'L\u2019animazione dura 900 ms e rispetta la riduzione del movimento.': 'The animation lasts 900 ms and respects reduced motion.',
+  'Per configurare le notifiche mi servono due scelte.': 'I need two choices to set up notifications.',
+  'Ho generato la documentazione a partire dagli schemi.': 'I generated the documentation from the schemas.',
+  'Ho aggiunto i test per i rimborsi parziali e per i pagamenti rifiutati.\n\n```\nnpm test -- payments\n```\nSono tutti **verdi** con `jest`.\n<script>alert(1)</script>':
+    'I added tests for partial refunds and declined payments.\n\n```\nnpm test -- payments\n```\nAll **green** with `jest`.\n<script>alert(1)</script>',
+  'Ho aggiunto il tema scuro alla schermata delle impostazioni e collegato la scelta al salvataggio locale.': 'I added the dark theme to the settings screen and connected the choice to local storage.',
+  'Cosa ho cambiato:': 'What I changed:',
+  '- nuova sezione Aspetto con tre opzioni: Chiaro, Scuro, Automatico;': '- new Appearance section with three options: Light, Dark, Automatic;',
+  '- i colori sono ora definiti in un unico file di temi, senza valori ripetuti nei componenti;': '- colors now live in a single theme file, with no repeated values in components;',
+  '- la preferenza viene letta all\u2019avvio, cos\u00ec non c\u2019\u00e8 il lampo di colore sbagliato;': '- the preference is read at startup, so there is no flash of the wrong color;',
+  '- aggiornati gli screenshot di riferimento dei test visivi.': '- updated the reference screenshots of the visual tests.',
+  'Cosa resta da verificare:': 'Still to check:',
+  '- il contrasto del testo secondario nella schermata Profilo;': '- the contrast of secondary text on the Profile screen;',
+  '- il comportamento con le impostazioni di accessibilit\u00e0 di sistema attive;': '- behavior with the system accessibility settings turned on;',
+  '- la schermata di caricamento iniziale, che usa ancora un colore fisso.': '- the initial loading screen, which still uses a fixed color.',
+  'Quando vuoi ricevere le notifiche?': 'When do you want to be notified?', 'Sempre': 'Always', 'Solo di giorno': 'Daytime only',
+  'Mai di notte, ma i messaggi diretti s\u00ec': 'Never at night, except direct messages', 'Per quali eventi?': 'For which events?',
+  'Nuovi messaggi': 'New messages', 'Promemoria': 'Reminders', 'Aggiornamenti dell\u2019app': 'App updates', 'Offerte': 'Offers',
+  'Notifiche dell\u2019app': 'App notifications',
+  'Fammi sapere se vuoi che proceda con il Profilo oppure se preferisci prima una revisione di quanto fatto.': 'Let me know if I should go on with the Profile screen, or if you would rather review what is done first.',
+};
+const tr = (v) => {
+  if (demoLang !== 'en') return v;
+  if (typeof v === 'string') return EN[v] ?? v;
+  if (Array.isArray(v)) return v.map(tr);
+  if (v && typeof v === 'object') return Object.fromEntries(Object.entries(v).map(([k, x]) => [k, tr(x)]));
+  return v;
+};
 
 const WS = {
   negozio: { workspaceId: 'ws-negozio', path: '/Users/demo/negozio-online' },
@@ -73,15 +144,16 @@ const chatSpecs = new Map(); // n -> { name, where, minutesAgo }
 const bubblesOf = new Map(); // n -> bubble[] (to append more)
 
 function chat(n, name, where, minutesAgo, header = {}) {
+  name = tr(name);
   chatSpecs.set(n, { name, where, minutesAgo });
-  fx.chat(id(n), { ...WS[where], name, lastUpdatedAt: ago(minutesAgo), createdAt: ago(minutesAgo + 600), header });
+  fx.chat(id(n), { ...WS[where], ...(demoLang === 'en' ? { path: tr(WS[where].path) } : {}), name, lastUpdatedAt: ago(minutesAgo), createdAt: ago(minutesAgo + 600), header });
 }
 
 function talk(n, minutesAgo, assistantText, tool) {
   const t = ago(minutesAgo);
-  const bubbles = [{ id: 'b1', type: 1, createdAt: t - 60_000, text: 'Procedi pure.' }];
-  if (assistantText) bubbles.push({ id: 'b2', type: 2, createdAt: t - 30_000, text: assistantText });
-  if (tool) bubbles.push({ id: 'b3', type: 2, createdAt: t, tool });
+  const bubbles = [{ id: 'b1', type: 1, createdAt: t - 60_000, text: tr('Procedi pure.') }];
+  if (assistantText) bubbles.push({ id: 'b2', type: 2, createdAt: t - 30_000, text: tr(assistantText) });
+  if (tool) bubbles.push({ id: 'b3', type: 2, createdAt: t, tool: tr(tool) });
   bubblesOf.set(n, bubbles);
   fx.conversation(id(n), bubbles);
 }
@@ -307,7 +379,7 @@ const demoUi = {
   },
   async newChatOptions() {
     await new Promise((r) => setTimeout(r, 400));
-    return { branch: { current: 'main', options: ['main', 'sviluppo', 'fix/login'] }, model: { current: 'Claude Sonnet 5.5 High', options: ['Auto', 'Composer 2.5', 'Claude Sonnet 5.5 High', 'Claude Opus 4.6 High'] } };
+    return { branch: { current: 'main', options: ['main', demoLang === 'en' ? 'develop' : 'sviluppo', 'fix/login'] }, model: { current: 'Claude Sonnet 5.5 High', options: ['Auto', 'Composer 2.5', 'Claude Sonnet 5.5 High', 'Claude Opus 4.6 High'] } };
   },
   async pinState({ composerId }) {
     if (!chatSpecs.get(numOf(composerId))) throw Object.assign(new Error('demo'), { code: 'row_not_found' });

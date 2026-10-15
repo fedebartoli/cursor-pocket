@@ -45,7 +45,7 @@ status = { ok, error: 'db' | null, actions: 'ok' | 'off' | 'no_window' | 'disabl
 ```
 Detail (`GET /api/chats/:id`) adds `lastMessage` (text of the agent's last message) and `question`
 (title, questions, options) when the request is a question. `GET /api/info` also reports action status and the
-expected debug port (for "Impostazioni" (Settings)).
+expected debug port (for “Settings”).
 
 ## Derivation rules
 - Chat list: non-archived `composerHeaders`, not a subagent, not a draft, `lastUpdatedAt > 0`; `agentLocation` null
@@ -57,7 +57,7 @@ expected debug port (for "Impostazioni" (Settings)).
   (in default order), then the filtered saved order. The algorithm is derived from Cursor's bundle and
   confirmed visually with the user's sidebar screenshot (FINDINGS 8.3). Known limit: `removedSectionIds` is not
   handled (no case in real data).
-- "Richiede attenzione" (Require attention) = like Cursor's dot: `hasBlockingPendingActions` or `hasPendingPlan`. The flag alone does not say
+- “Richiede attenzione” (Require attention) = like Cursor's dot: `hasBlockingPendingActions` or `hasPendingPlan`. The flag alone does not say
   what kind of request it is, so classification uses the last bubble:
   - `question`: last `ask_question` bubble with no answer, i.e. `loading` (first seconds) or `completed` with
     `additionalData.status: "pending"` (turn finished, question waiting for hours), with the flag on OR created less than
@@ -72,24 +72,24 @@ expected debug port (for "Impostazioni" (Settings)).
     or chat working with the flag still on); key = last tool or last bubble.
   - A tool WITHOUT `reviewData` is never a request: a running tool looks the same as an approval request based on
     `loading` and lack of `userDecision` (hypothesis disproved live, FINDINGS 9.1). Only `question` and
-    `approval` are "live" and generate notifications; everything else is display-only.
+    `approval` are “live” and generate notifications; everything else is display-only.
 - A chat that is WORKING (`running`) with a leftover or plan does not need you: state `running`, outside
-  "Richiedono attenzione" (Cursor still shows the dot while the agent works). During the run only one
+  “Cursor still shows the dot while the agent works”. During the run only one
   live request counts (question or approval). When the run ends the leftover becomes visible again and can be ignored.
-- "In sospeso" (Pending) = ignored requests (`reason: ignored`) or older than `CP_PENDING_AFTER_HOURS` (`reason: old`).
-  The dot and "Richiedono attenzione" count do not include them.
-- "Ignora" (Ignore): writes only to the daemon store, key `(chatId, key)`. No interaction with Cursor. With a new request
+- “Pending” = ignored requests (`reason: ignored`) or older than `CP_PENDING_AFTER_HOURS` (`reason: old`).
+  The dot and “Needs attention” count do not include them.
+- “Ignore”: writes only to the daemon store, key `(chatId, key)`. No interaction with Cursor. With a new request
   the key changes and the dot reappears. The API responds 409 `stale` if the submitted key is no longer that of the current
   request: only what the user actually saw is ignored.
-- "In corso" (Running) = the header has `unfinishedRunAt` more recent than `CP_STALE_RUN_HOURS` AND the composer state is not `completed`
+- “In progress” (Running) = the header has `unfinishedRunAt` more recent than `CP_STALE_RUN_HOURS` AND the composer state is not `completed`
   (the composer signals run end immediately, the header up to 30 s late: FINDINGS 9.1).
-- "Chat finita" (event) = was running, then stopped for `CP_DONE_SETTLE_MS`, with no live requests, no open question as
+- “Chat finita” (event) = was running, then stopped for `CP_DONE_SETTLE_MS`, with no live requests, no open question as
   last bubble (a run that ends with a question waits for the user: not finished), no queued messages, and work of at least
   `CP_MIN_RUN_SECONDS` (work already in progress at daemon startup counts as long).
 - ALL visible chats are re-read (composer tail and last bubble) every `CP_FULL_SCAN_MS` even when the header is unchanged:
   Cursor writes the header in bursts, every 60 s or on certain events, and after the composer; a new question or run end may
   therefore not change it for tens of seconds. Re-read costs 0.5–3 ms per chat (FINDINGS 9.7), so there is no need to limit it
-  to "hot" chats. Typical delay for a question notification: a few seconds.
+  to “hot” chats. Typical delay for a question notification: a few seconds.
 
 ## Execution
 - `npm start` to try; for daily use a user LaunchAgent (`tools/launchd.sh install`): starts at login with
@@ -126,7 +126,7 @@ POST /api/chats/:id/message  { text }
 - One action at a time (serial queue); timeout responds 504 immediately but the queue stays busy until the real work
   finishes. Deduplication: same answer 60 s, same message 8 s.
 - Answer: open the chat in the sidebar, verify the displayed questionnaire is the expected one, fill it
-  (check state before clicking: in single choice a second click DESELECTS), press "Next"/"Continue"; then
+  (check state before clicking: in single choice a second click DESELECTS), press “Next”/“Continue”; then
   reopen the chat the user had open. Send a message: opens the chat, rejects if there is a draft or a pending question,
   focuses the composer, `Input.insertText` (newline with Shift+Enter), send.
 - Post-action verification from the database (up to 12 s): answer `submitted` with expected selection; message with more bubbles or
@@ -160,22 +160,22 @@ POST /api/chats/:id/message  { text }
   read the database read-only for verification.
 
 ## PWA UI
-- Home: "Richiedono attenzione" (with count), "In sospeso" (collapsed), then workspaces in Cursor order (collapsed
-  state like Cursor, editable locally), 5 chats per group and "Mostra altre N" (Show N more).
-- Chat detail: state, pending request, "Ignora"/"Ripristina" (Restore), last message, composer at bottom. For a chat in
+- Home: “with count”, “collapsed”, then workspaces in Cursor order (collapsed
+  state like Cursor, editable locally), 5 chats per group and “Mostra altre N” (Show N more).
+- Chat detail: state, pending request, “Ignore”/“Restore”, last message, composer at bottom. For a chat in
   progress the request panel is not shown (Cursor leftover).
   - With actions enabled the question is a questionnaire: options with badges A, B, C (single choice = exclusive selection,
-    multiple = checkboxes), "Altro" (Other) entry with free-text field (always at bottom, as in Cursor), one section per
-    question, "Invia risposta" (Submit answer) active only with complete answers, "Salta" (Skip) with second confirmation that expires on its own, "Ignora".
+    multiple = checkboxes), “Other” entry with free-text field (always at bottom, as in Cursor), one section per
+    question, “Send answer” active only with complete answers, “Skip” with second confirmation that expires on its own, “Ignore”.
     The outcome stays a few seconds above the composer even when the questionnaire disappears.
   - Without actions (debug port closed or offline) options are a read-only list with explanation and a
-    link to "Impostazioni".
+    link to “Settings”.
   - Composer (`composer.js`): field grows with text (max 140 px), draft kept in memory per chat (never on
     disk), send disabled when empty, hidden if a question is pending (answer first), reduced to one line
     of explanation if actions are unavailable; when the chat is working warns that Cursor queues the message.
   - Questionnaire and composer DOM is persistent (updated in place): a live update does not lose
     focus, selection, or typed text.
-- "Impostazioni": "Rispondere dal telefono" (Answer from phone) panel with status (Attivo / porta chiusa / finestra non aperta / disattivato) and
+- “Settings”: “Answer from phone” panel with status (Active / porta chiusa / finestra non aperta / disattivato) and
   instructions to enable it.
 - Safari/iOS: `touch-action: manipulation` and block ONLY the second tap of a double-tap (pinch free, text fields
   excluded), 16 px fields, `viewport-fit=cover` with safe margins and `100dvh`, composer follows the keyboard

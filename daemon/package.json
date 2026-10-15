@@ -2,7 +2,7 @@
   "name": "cursor-pocket-daemon",
   "version": "0.1.0",
   "private": true,
-  "description": "Daemon locale che espone le chat locali dell'Agents Window di Cursor a una PWA (lettura, notifiche e, con la porta di debug di Cursor, azioni).",
+  "description": "Local daemon that exposes the local chats of Cursor's Agents Window to a phone web app (read, notifications and, with Cursor's debug port, actions).",
   "type": "module",
   "engines": {
     "node": ">=22.13"

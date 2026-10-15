@@ -19,7 +19,7 @@ npm start
 - Reads the Cursor database in read-only mode (`mode=ro`, `query_only`): never writes to that database.
 - Stores its own data in `daemon/data/` (permissions 0700): ignored items, sessions, push subscriptions, VAPID keys.
   Deleting the folder means starting from scratch (sessions and notifications must be re-enabled).
-- Quick checks: `npm run status` (daemon running or not, “Dispositivi abbinati” (Paired devices), push subscriptions, ignored requests),
+- Quick checks: `npm run status` (daemon running or not, “Paired devices”, push subscriptions, ignored requests),
   `npm run probe` (reads the Cursor database and summarizes chats and groups anonymously; with `-- --names` shows
   workspace names, useful for comparing order with the Cursor sidebar).
 
@@ -98,25 +98,25 @@ tailnet (not on the Internet).
 3. Share, then “Add to Home Screen”. Open the app FROM the Home screen: Safari and the installed app do not share data,
    so pairing must be done inside the installed app.
 4. Enter the code. Access stays valid for 90 days of inactivity (`HttpOnly` cookie, `SameSite=Strict`).
-5. “Impostazioni” (Settings), “Attiva notifiche”, allow, then “Invia notifica di prova”.
+5. “Settings”, “Enable notifications”, allow, then “Send test notification”.
 
-The badge on the icon shows how many chats “Richiedono attenzione” (Need attention).
+The badge on the icon shows how many chats “Need attention”.
 
 ## 6. Reply from the phone (Phase 2, optional)
 Answering Cursor questions, skipping them, and sending messages to a chat requires Cursor started with a local
-debug port. Without it, the app stays read-only (notifications, list, “Ignora” (Ignore)) and “Impostazioni” (Settings) explains it.
+debug port. Without it, the app stays read-only (notifications, list, “Ignore”) and “Settings” explains it.
 
 1. Quit Cursor with Cmd+Q. WARNING: in-progress chats are interrupted; wait until they finish.
 2. From the project folder: `tools/cursor-cdp.sh`. Opens Cursor with `--remote-debugging-port=9222`; does not change Cursor settings
    or files in `~/.cursor`: the option applies only to that launch. `tools/cursor-cdp.sh status` says whether the port responds.
-3. In the app’s “Impostazioni” (Settings) the “Rispondere dal telefono” panel switches to “Attivo” on its own (the daemon checks every 5 s).
+3. In the app’s “Settings” the “Answer from phone” panel switches to “Active” on its own (the daemon checks every 5 s).
    From the terminal: `cd daemon && npm run cdp -- status`.
 4. To disable it: quit Cursor and reopen it normally (Dock, Spotlight). After every Mac or Cursor restart repeat
    step 2: the option is not permanent. A permanent launcher (app or Shortcut) has not been created.
 
 What you can do from the phone, in a chat:
 - Pending question: choose options (one or more, depending on the question), or “Altro” and write the answer, then “Invia
-  risposta”. “Salta” skips the question (asks for a second confirmation). “Ignora” removes only the dot in the app.
+  risposta”. “Skip” skips the question (asks for a second confirmation). “Ignore” removes only the dot in the app.
 - Message: the field at the bottom of the chat sends a new message to Cursor. If the agent is working Cursor decides whether
   to queue it or send it immediately. It does not send if the chat has a pending question (answer first) or if Cursor’s compose
   field already has a draft.
@@ -142,7 +142,7 @@ Good to know:
 | `CP_CURSOR_DB` | `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb` | Cursor database (read-only) |
 | `CP_WORKSPACE_STORAGE` | `.../Cursor/User/workspaceStorage` | Cursor workspace folders |
 | `CP_DATA_DIR` | `daemon/data` | Daemon’s own data |
-| `CP_PENDING_AFTER_HOURS` | `24` | A pending request older than this moves from “Richiedono attenzione” (Need attention) to “In sospeso” (Pending) (0 = never) |
+| `CP_PENDING_AFTER_HOURS` | `24` | A pending request older than this moves from “Need attention” to “Pending” (0 = never) |
 | `CP_MIN_RUN_SECONDS` | `20` | “Chat finished” is notified only if work lasted at least this long |
 | `CP_DONE_SETTLE_MS` | `5000` | Stability wait before declaring a chat finished |
 | `CP_STALE_RUN_HOURS` | `12` | An “in progress” marker older than this is a leftover (Cursor closed during work) |
@@ -156,7 +156,7 @@ Good to know:
 | `CP_VAPID_SUBJECT` | `mailto:cursor-pocket@example.com` | Contact given to push services in VAPID headers. Recommended: an address you control. Only the push service (Apple) sees it, not public |
 | `CP_ACTIONS` | `true` | `false` disables actions from the phone (PWA stays read-only) |
 | `CP_APPROVALS` | `true` | `false` disables only Run/Reject from the phone (replies and messages remain) |
-| `CP_KEEP_AWAKE_CMD` | `/usr/bin/caffeinate` | command used by “Mac sveglio” (Keep Mac awake) (empty = feature unavailable) |
+| `CP_KEEP_AWAKE_CMD` | `/usr/bin/caffeinate` | command used by “Keep Mac awake” (empty = feature unavailable) |
 | `CP_KEEP_AWAKE_GRACE_MS` | `120000` | grace after the last in-progress chat before letting the Mac sleep |
 | `CP_KEEP_AWAKE_POLL_MS` | `5000` | screen, battery, and sleep check while the Mac is kept awake |
 | `CP_KEEP_AWAKE_MIN_BATTERY` | `20` | below this % on battery “lid closed” mode is suspended |
@@ -181,8 +181,8 @@ Good to know:
 - Notifications are never sent from initial state at daemon startup (except very recent questions or approvals,
   see `CP_STARTUP_GRACE_SECONDS`).
 
-## 9. The “Ignora” (Ignore) button
-Removes the red dot ONLY in the app: sends nothing to Cursor and does not change the chat. The request moves to “In sospeso”
+## 9. The “Ignore” button
+Removes the red dot ONLY in the app: sends nothing to Cursor and does not change the chat. The request moves to “Pending”
 and can be restored. If the chat asks a new question, the dot reappears.
 Cursor often leaves the dot on even for requests already closed (“leftovers”): the app shows them as “Richiesta non
 risolta” and lets you ignore them.
@@ -191,12 +191,12 @@ risolta” and lets you ignore them.
 - “Daemon non raggiungibile”: the daemon is not running or Tailscale is off on one of the devices.
 - Error 421 / “Host non consentito”: you are using a name other than localhost or `*.ts.net`; add it with `CP_ALLOWED_HOSTS`.
 - No notifications: the app is not installed from Home, permission denied (iOS Settings, Notifications), the address is not
-  HTTPS, or the test from the app’s “Impostazioni” fails. Also check `npm run status`.
+  HTTPS, or the test from the app’s “Settings” fails. Also check `npm run status`.
 - “Database di Cursor non leggibile”: check `CP_CURSOR_DB`; if Cursor is open the database is still readable.
 - Missing chats you had in Cursor, or fewer: the app shows only those in the Agents Window, so
   it hides chats from projects you REMOVED from the sidebar (even if you did not archive them). `npm run probe` reports how many
   are hidden for this reason.
-- A working chat is “In corso” even if Cursor shows the orange dot: Cursor’s dot stays on for
+- A working chat is “In progress” even if Cursor shows the orange dot: Cursor’s dot stays on for
   old questions; the app considers it only when the chat is idle.
 - “Porta gia' in uso”: another instance is active, or change `CP_PORT`.
 - Session expired or revoked: the app returns to the pairing screen on its own; generate a new code with `npm run pair`.

@@ -20,7 +20,7 @@ Path: `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb` (~17
   referencedPlans, subtitle, totalLinesAdded, totalLinesRemoved, trackedGitRepos, type, unifiedMode, workspaceIdentifier,
   worktreeStartedReadOnly.
 - Verified in Phase 0 (see section 8): semantics of `hasBlockingPendingActions`, values of `agentLocation`, where Cursor
-  saves workspace ORDER in the sidebar, how to recognize "in progress" and "finished".
+  saves workspace ORDER in the sidebar, how to recognize “in progress” and “finished”.
 - [OK] Map workspaceId -> folder: `~/Library/Application Support/Cursor/User/workspaceStorage/<id>/workspace.json`
   (`folder` field). Some workspaces are not mappable this way (to investigate, `workspaceIdentifier` in JSON).
 - [OK] `cursorDiskKV`: keys `composerData:<composerId>` (JSON with `fullConversationHeadersOnly`, `status`,
@@ -34,7 +34,7 @@ Path: `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb` (~17
   freeformTexts:{qid:text}}`, `result` = JSON `{"answers":[{questionId, selectedOptionIds, freeformText}]}`.
 - [OK] Detection latency with 1 s polling: the question is seen as pending within ~1 s; scanning the 40 most
   recent chats costs ~0.4 s.
-- The `status` field of `composerData` for chats with agent in loop can remain "aborted"/"completed": do not rely on it alone
+- The `status` field of `composerData` for chats with agent in loop can remain “aborted”/“completed”: do not rely on it alone
   to tell if the chat is finished; use the last bubble and headers.
 
 ## 3. Cursor hooks (hooks.json)
@@ -43,18 +43,18 @@ Path: `~/Library/Application Support/Cursor/User/globalStorage/state.vscdb` (~17
 - [OK] They can block >= 100 s, deny with message (`user_message` arrives, `agent_message` does not), rewrite inputs
   (including MCP).
 - [OK] They do NOT fire for: native AskQuestion, Glob, WebFetch. So the native question cannot be intercepted with a hook.
-- [NOT VERIFIED] `stop` hook (not testable in a chat in loop): to try for "chat finished".
+- [NOT VERIFIED] `stop` hook (not testable in a chat in loop): to try for “chat finished”.
 
 ## 4. Blocking MCP tool (discarded alternative but documented)
 The user wants to use NATIVE AskQuestion, so this path is discarded. Measurements made:
-- Without `notifications/progress`: 75 s OK, 330 s -> error -32001 "Request timed out" (limit between 75 and 330 s, not measured more precisely).
-- With progress every 15 s: 130 s OK, 900 s OK, 3700 s -> "Maximum total timeout exceeded" at exactly 3600 s (1 hour total cap).
-- Cursor can restart an MCP stdio server (all in-flight calls fail with "Connection closed"): success after
+- Without `notifications/progress`: 75 s OK, 330 s -> error -32001 “Request timed out” (limit between 75 and 330 s, not measured more precisely).
+- With progress every 15 s: 130 s OK, 900 s OK, 3700 s -> “Maximum total timeout exceeded” at exactly 3600 s (1 hour total cap).
+- Cursor can restart an MCP stdio server (all in-flight calls fail with “Connection closed”): success after
   starting a subagent, cause not confirmed.
 
 ## 5. Answering native questions: CDP
-- [OK] `Cursor --remote-debugging-port=<port>` works: `/json/list` exposes the "Cursor Agents" window as a `page` target
-  (title "Cursor Agents"). Cursor reads the switch in `main.js` and passes `cdpPort` to windows.
+- [OK] `Cursor --remote-debugging-port=<port>` works: `/json/list` exposes the “Cursor Agents” window as a `page` target
+  (title “Cursor Agents”). Cursor reads the switch in `main.js` and passes `cdpPort` to windows.
 - [NO] `~/.cursor/argv.json` CANNOT set it (switch whitelist). Must be passed at launch:
   `open -a Cursor --args --remote-debugging-port=9222` (only with Cursor closed). See `research/launch-cursor-cdp.sh`.
 - [OK] The port binds to 127.0.0.1. Anyone on the Mac can drive Cursor while it is active: risk to disclose.
@@ -65,8 +65,8 @@ The user wants to use NATIVE AskQuestion, so this path is discarded. Measurement
   - option: `button.ui-tray-option` (attributes `aria-pressed`, `data-selected`, `data-label-style="letter"`),
     badge `.ui-tray-option__badge` (A, B, C...), label `.ui-tray-option__label`
   - freeform field: `.questionnaire-freeform-option` (rich text editor; focus, then `Input.insertText`)
-  - primary button: `.ui-tray-footer__primary button` (text "Continue" or "Next"); secondary "Skip"
-  - multiple questions = steps (stepper): "Next" until the last, then "Continue"
+  - primary button: `.ui-tray-footer__primary button` (text “Continue” or “Next”); secondary “Skip”
+  - multiple questions = steps (stepper): “Next” until the last, then “Continue”
   - tray open only for the visible chat: for an unselected chat you must open it in the sidebar first
   - sidebar: container `.glass-sidebar-agent-list-container`, rows with `data-sidebar-item-key` (HYPOTHESIS: chat id),
     `data-sidebar-selected-static-row`, `data-sidebar-status-subdued` ("done-unseen")
@@ -82,7 +82,7 @@ The user wants to use NATIVE AskQuestion, so this path is discarded. Measurement
 - Tailscale: installed on Mac (`/usr/local/bin/tailscale`); at the start of research the iPhone had been offline for 23
   days and needed reconnecting (device names omitted: the repository may become public).
 - Fallback: ntfy (App Store app) that opens the PWA.
-- True "persistent" notification does not exist on iOS without Live Activity (requires APNs/native app). Alternative: "In sospeso" (Pending)
+- True “persistent” notification does not exist on iOS without Live Activity (requires APNs/native app). Alternative: “Pending”
   section in the PWA and, optional, repeated reminders (disabled by default).
 
 ## 7. Security
@@ -109,15 +109,15 @@ or text) and reading with `rg` of bundle `Cursor.app/Contents/Resources/app/out/
   [INTERPRETATION CORRECTED IN 9.1] Then the `completed`/`pending` were mistaken for stuck leftovers. Live trace
   shows that is the NORMAL state of a question waiting for answer: `loading` lasts only a few seconds. True leftovers
   are others: flag on with last bubble that is not a pending question (answer given, question superseded by other
-  messages, ...). Cursor keeps the dot on in those cases too: that is the reason for the "Ignora" (Ignore) button.
-- Adopted rule (current version in 9.1): "Need attention" = like Cursor (flag or pending plan, not archived, not
+  messages, ...). Cursor keeps the dot on in those cases too: that is the reason for the “Ignore” button.
+- Adopted rule (current version in 9.1): “Need attention” = like Cursor (flag or pending plan, not archived, not
   subagent, with content). Type: `domanda` if last bubble is an `ask_question` without answer (actionable in phase 2);
   `residuo` otherwise (the `azione` hypothesis for approvals was removed because disproven: 9.1). NOTIFICATIONS
   fire only from a new question (new pending `toolCallId`), from a pending tool approval (section 11), and from
   end of a run, never from initial state.
-- [OK] `hasPendingPlan`: true in 1 header. `hasUnreadMessages`: true in 1 header out of 588 (idle chats are "read").
+- [OK] `hasPendingPlan`: true in 1 header. `hasUnreadMessages`: true in 1 header out of 588 (idle chats are “read”).
 - [CODE] `hasUnreadMessages` goes true at end of turn only if the chat is NOT the one shown in the Agents Window
-  (`turnCompletionAnnouncement`); `lastReadAtMs` is in `composerData` (and in 1 header). So NOT enough for "chat finished":
+  (`turnCompletionAnnouncement`); `lastReadAtMs` is in `composerData` (and in 1 header). So NOT enough for “chat finished”:
   if the user is viewing the chat on Mac the flag never fires.
 - [HYPOTHESIS DISPROVEN, see 9.1] "Pending tool approval = tool in `loading` without `userDecision`": a running tool is
   `loading` without `userDecision` the same way (observed on dozens of commands in the same chat).
@@ -132,12 +132,12 @@ or text) and reading with `rg` of bundle `Cursor.app/Contents/Resources/app/out/
   `agentLocationHistory` is a list with 1 element for the same 142.
 - [CODE] Location types known to the bundle are `local`, `worktree`, `remote-ssh`, `remote-wsl`. In the local database
   there are no cloud agents: they come from the server (headers with `source:"cloud"`), not from `composerHeaders`.
-- [OK] `isDraft:true` in 142 headers, all with null `agentLocation`: they are leftovers from the "new agent" flow (one per every
+- [OK] `isDraft:true` in 142 headers, all with null `agentLocation`: they are leftovers from the “new agent” flow (one per every
   agent created from the Agents Window, same count as those with `agentLocation`). They are not chats: exclude.
 - [OK] `lastUpdatedAt == 0` in 249 headers: they are empty chats (sample of 60: 55 with 0 bubbles, 5 without `composerData`). For
   them `recency == createdAt`; for others `recency == lastUpdatedAt` (339 of 339). Chats with content
   (`lastUpdatedAt > 0`) almost all have 3+ bubbles.
-- [OK] Set "visible local chats" = not archived, not subagent, not draft, `lastUpdatedAt > 0`: 35 chats of 588
+- [OK] Set “visible local chats” = not archived, not subagent, not draft, `lastUpdatedAt > 0`: 35 chats of 588
   (another 131 not archived are empty). Origin: 24 with `agentLocation`, 11 classic (`agentLocation` null, with
   `workspaceIdentifier`).
 - [OK] SQL columns and JSON match: `lastUpdatedAt`, `createdAt`, `workspaceId == workspaceIdentifier.id` (0 differences).
@@ -153,7 +153,7 @@ or text) and reading with `rg` of bundle `Cursor.app/Contents/Resources/app/out/
   Rule "chat's workspace is among removed -> hidden": 9 shown of 9, 26 hidden of 26, 0 errors, both by id
   (column and header) and by name; for `uri.path` 34 chats of 35 (one has no uri). Comparison by id is the one used.
 - [OK] Hypotheses discarded with same data: project `isArchived` in `glass.localAgentProjects.v1` (0 archived of 20),
-  membership in a project in `glass.localAgentProjectMembership.v1` (272 entries: rule "has membership" showed 23 chats,
+  membership in a project in `glass.localAgentProjectMembership.v1` (272 entries: rule “has membership” showed 23 chats,
   22 extra and 8 missing), chat age, classic chats.
 - [NOT VERIFIED] What happens if the user re-adds a removed project (presumed Cursor removes it from
   `glass.removedProjects`: daemon re-reads every 10 s) or creates a new chat in a removed project.
@@ -179,11 +179,11 @@ or text) and reading with `rg` of bundle `Cursor.app/Contents/Resources/app/out/
   (in default order), then saved order filtered to present sections. Default order: `max(lastUpdatedAt)` of
   section chats, descending; tie by label (folder name). Inside section with `sortAgentsBy:"updated"`:
   descending `lastUpdatedAt`. With `sortGroupsBy:"updated"` only default order applies. Sidebar shows 5 chats per
-  section then "More".
+  section then “More”.
 - [OK, Oct 12] Visual comparison with user's sidebar screenshot (after excluding removed projects, 8.2): the 7 groups
   come out in the same order, folder name for folder name (user project names not repeated here)
   and with same sizes (2, 1, 1, 1, 1, 1, 2 chats).
-- [CODE, Oct 12] Group "collapsed" state (bundle `workbench.glass.main.js`, `hmI`): `filterEmpty ?? transient ??
+- [CODE, Oct 12] Group “collapsed” state (bundle `workbench.glass.main.js`, `hmI`): `filterEmpty ?? transient ??
   (persisted || stale)`. List in `collapsedSectionIdsByGroupBy` is only the base value: groups emptied by filter
   are collapsed, a session value (click) overrides. [NOT EXPLAINED] In screenshot two groups are open
   despite showing collapsed in data read 24 minutes later (they may have been collapsed after screenshot, or a
@@ -195,20 +195,20 @@ or text) and reading with `rg` of bundle `Cursor.app/Contents/Resources/app/out/
   `workspaceIdentifier:{id}` without `uri` are never visible chats: 142 drafts (136 archived, 6 active), 98 empty active
   chats, 9 archived.
 - Resolution priority: 1) `agentLocation.environment.uri`, 2) `workspaceIdentifier.uri`, 3) `workspace.json`
-  (`folder` or `workspace`), 4) `empty-window` -> "home" section. `workspaceStorage`: 77 folders, 73 with `folder`,
+  (`folder` or `workspace`), 4) `empty-window` -> “home” section. `workspaceStorage`: 77 folders, 73 with `folder`,
   3 with `workspace`, 1 without `workspace.json`.
 
 ### 8.5 Chat in progress and finished chat
 - [CODE] `unfinishedRunAt` in header equals `lastUpdatedAt ?? createdAt` only while `composerData.status === "generating"`
   (function `aqr`) and disappears (key absent) when run finishes. If Cursor dies during a run the marker remains:
   3 archived headers show it from 2 to 10 days.
-- [CODE] Cursor considers "turn completed" (`bJm`) when `composerData.status === "completed"` and moreover: not
+- [CODE] Cursor considers “turn completed” (`bJm`) when `composerData.status === "completed"` and moreover: not
   subagent, not archived, empty `queueItems`, no foreground tool, no background subagent, no continuation
   goal.
 - [OK] On the agent chat that made these measurements (in progress): header had `unfinishedRunAt` for entire run;
   `lastUpdatedAt`, `unfinishedRunAt` and `hasBlockingPendingActions` do NOT change during run; only
   `conversationCheckpointLastUpdatedAt` changes (about every 30-60 s).
-- [OK] Persisted `composerData.status` stays "aborted" for entire in-progress run: NOT reliable during run. At rest
+- [OK] Persisted `composerData.status` stays “aborted” for entire in-progress run: NOT reliable during run. At rest
   it is `completed` (26 chats of 33), `aborted` (6), `none` (1).
 - [OK] Header `lastUpdatedAt` = time of last USER message (start of last turn; median skew 0.0 s),
   not last activity. `conversationCheckpointLastUpdatedAt` = about 3.5 s after last bubble (median): follows end
@@ -221,8 +221,8 @@ or text) and reading with `rg` of bundle `Cursor.app/Contents/Resources/app/out/
   `submitted` (answer given) / `pending` (WITHOUT answer: still waiting, or superseded by freeform message; see 9.1) /
   `cancelled`; `task_v2` `pending` -> `running`.
 - Scan of 25 chats x 40 bubbles (793 bubbles) costs 0.4 s: 1 s polling is sustainable.
-- Chosen signal (CALIBRATED live in 9.2): a chat is "in progress" if header has `unfinishedRunAt` or last bubble
-  is recent; it is "finished" when it goes from in progress to not in progress (`unfinishedRunAt` gone, no question nor flag, last
+- Chosen signal (CALIBRATED live in 9.2): a chat is “in progress” if header has `unfinishedRunAt` or last bubble
+  is recent; it is “finished” when it goes from in progress to not in progress (`unfinishedRunAt` gone, no question nor flag, last
   bubble not `loading`, stable for a few seconds). `composerData.status` only to distinguish `completed` from `aborted`
   (interrupted: no notification by default). [Implemented version and why it differs: 9.2.]
 - [NOT VERIFIED] `stop` hook: requires modifying `~/.cursor/hooks.json` (confirm and backup). With these signals
@@ -246,9 +246,9 @@ live. Times in UTC; chats are identified by the first 8 characters of the id.
      flag stayed on for hours (no change until sampling ended, 20:07) and the answer arrived the next morning.
   3. On answer: bubble `submitted`, flag off, new run with a new `unfinishedRunAt` (read afterward).
   On another chat (`6814061b`) the `loading` window lasted 5.6 s. So `loading` is NOT a reliable marker of
-  "question pending": almost always the bubble is `completed`/`pending`. (Sections 2, 8.1 and 8.5 and the first daemon version
-  assumed the opposite: with that rule every question would become a "residue" after a few seconds and the
-  daemon would also send an out-of-place "Chat finished" when the turn ended with the question. Fixed and covered by tests.)
+  “question pending”: almost always the bubble is `completed`/`pending`. (Sections 2, 8.1 and 8.5 and the first daemon version
+  assumed the opposite: with that rule every question would become a “residue” after a few seconds and the
+  daemon would also send an out-of-place “Chat finished” when the turn ended with the question. Fixed and covered by tests.)
 - [OK] Cursor can REWRITE the question bubble while waiting: `createdAt` moves forward (`be5784e2`: 19:04 and
   20:45; `6814061b`: 21:39) and the bubble list in composerData carries the same rewritten time. The bubble time is therefore not
   the question time: the stable key is `toolCallId`.
@@ -259,18 +259,18 @@ live. Times in UTC; chats are identified by the first 8 characters of the id.
   `completed`/`pending` as last bubble (11 to 323 hours) and 1 with last text bubble (true residue). With the old rule all 9 would have been residues.
 - [DECISION] Pending request is classified by looking at the last bubble: `domanda` (`ask_question` not `submitted`:
   `loading` or `additionalData.status: "pending"`; key `toolCallId`), `piano`, `residuo` (flag or plan on but last
-  bubble is not an open question). Only `domanda` is "live" and can be notified. The question is live if the flag is
+  bubble is not an open question). Only `domanda` is “live” and can be notified. The question is live if the flag is
   on OR if it is RECENT (bubble created less than 120 s ago): the Cursor header arrives late (9.7). With flag off
   an old question does not count: Cursor does not show the dot and it could be a tool stuck `loading` from an interrupted run.
 - [OK, Oct 12] Flag on also matches an OLD question still `pending` inside the conversation, not only
   the last bubble: `a9d0c36d` has a `ask_question` `completed`/`pending` from 34 hours earlier, followed by other bubbles (the chat
-  continued without using the questionnaire) and the flag stays on. That is why many "true" residues are actually forgotten questions.
+  continued without using the questionnaire) and the flag stays on. That is why many “true” residues are actually forgotten questions.
   Also because of the flag, Cursor shows the orange dot even while the agent is WORKING (`6814061b`, in
   progress for almost an hour with flag on: in the screenshot it has the dot like chats idle waiting).
 - [OK, HYPOTHESIS DISPROVEN] A running tool is NOT distinguishable from an approval. The first version classified as `azione`
   every tool other than `ask_question` in `loading` with no `userDecision` while flag on. After iPhone pairing (Oct 12,
   around 12:00 UTC) chat `6814061b` (flag on from an old unresolved question, now working through a
-  series of terminal commands) produced 1 to 5 "new requests" per minute: 68 distinct keys in 28 minutes (11:36-12:04
+  series of terminal commands) produced 1 to 5 “new requests” per minute: 68 distinct keys in 28 minutes (11:36-12:04
   UTC; between events 5 s to 161 s apart, median 15 s), i.e. one event per command. 14 became pushes actually
   sent to the iPhone. On those bubbles `userDecision` is absent and `additionalData.status` is `cancelled` while the command is
   still `loading`. Fix: no approval classification; only `ask_question` can be a live
@@ -278,37 +278,37 @@ live. Times in UTC; chats are identified by the first 8 characters of the id.
   `watcher.test.js`, verified by reintroducing the bug (both fail). After daemon restart: 0 events.
   Lesson: an unverified hypothesis must never be able to generate notifications. (The real approval signal, `reviewData`, is
   in 11; this rule remains valid for any tool WITHOUT `reviewData`.)
-- [DECISION] A request stays in "Richiedono attenzione" (Need attention) for 24 h (`CP_PENDING_AFTER_HOURS`) from its start (bubble time
-  for question and action, last chat update for residue and plan), then moves to "In sospeso" (Pending) (reason `vecchia`).
-  A live question days old does not disappear: it stays visible in "In sospeso" (by design, actionable in phase 2).
-- [DECISION] Ignora (Ignore): key `(chatId, key)`; `key` = `toolCallId` (question and action), last tool or last bubble (residue),
-  `plan:<bubble>` (plan). Writes only `daemon/data/store.db`. Moves the request to "In sospeso" (reason `ignorata`), reversible.
+- [DECISION] A request stays in “Need attention” for 24 h (`CP_PENDING_AFTER_HOURS`) from its start (bubble time
+  for question and action, last chat update for residue and plan), then moves to “Pending” (reason `vecchia`).
+  A live question days old does not disappear: it stays visible in “by design, actionable in phase 2”.
+- [DECISION] Ignore: key `(chatId, key)`; `key` = `toolCallId` (question and action), last tool or last bubble (residue),
+  `plan:<bubble>` (plan). Writes only `daemon/data/store.db`. Moves the request to “reason `ignorata`”, reversible.
   With a new request the key changes and the dot reappears.
 
 ### 9.2 Notifications
 - [DECISION] Only transitions are notified, never initial state. Persistent dedup keys: `a:<chat>:<toolCallId>`
   (question or approval) and `d:<chat>:<lastUpdatedAt>` (chat finished). On startup live questions older than 300 s are marked as already
   notified without sending anything; more recent ones fire (covers a daemon restart right after a question).
-- [DECISION] "In corso" (In progress) = header has `unfinishedRunAt` (no older than 12 h) AND composer state is not `completed`.
-  The "recent last bubble" heuristic hypothesized in 8.5 was not adopted: the marker alone is simpler and does not
+- [DECISION] “In progress” = header has `unfinishedRunAt` (no older than 12 h) AND composer state is not `completed`.
+  The “recent last bubble” heuristic hypothesized in 8.5 was not adopted: the marker alone is simpler and does not
   require thresholds to tune.
 - [OK] The header lags behind the composer. At end of run for `be5784e2` the composer removed `unfinishedRunAt`
   at 18:09:20 and the header 27 s later; for a 35 s run (`6814061b`) the header never showed the run; in a third case
   (`7cb1e28c`, 1 s run) the two writes were simultaneous. The composer changes immediately instead: `status` goes to
   `aborted` when the user sends a message and back to `completed` the instant the run ends (3 of 3 cases, together with
   disappearance of `unfinishedRunAt`); during the run it is never `completed` (no exception in over an hour of run).
-  So `completed` is a reliable signal of "run finished": a chat the header still says in progress is considered finished if
+  So `completed` is a reliable signal of “run finished”: a chat the header still says in progress is considered finished if
   the composer is `completed` (early finish). The header remains the start signal.
-- [DECISION] "Chat finished" = was in progress, then stopped for 5 s, with no live requests and no open question (a run that
+- [DECISION] “Chat finished” = was in progress, then stopped for 5 s, with no live requests and no open question (a run that
   ends with a question is NOT finished: waiting for user), no queued messages, after a run of at least 20 s. A run already
   in progress at daemon startup counts as long.
 - [DECISION] All visible chats are re-read every 5 s even with unchanged header (before, only those with flag, in progress or
   just finished): a new question in a chat with flag already on (`6814061b`) does not change the header for tens of seconds
   and, in a chat without flag, the header can arrive up to 60 s after the bubble (9.7). Measured cost: 11 ms for 9 chats.
 - [LIMIT] The daemon does NOT distinguish a manually stopped (or failed) run from a successful finish: at rest it was never observed and
-  `status` is `aborted` in 6 of 33 chats (8.5). "Chat finished" notification anyway: better one extra notification than one missed.
+  `status` is `aborted` in 6 of 33 chats (8.5). “Chat finished” notification anyway: better one extra notification than one missed.
 - [LIMIT] The daemon learns run start from the header, which can arrive late or be missing: a 20-60 s run may
-  not produce "Chat finished" and a longer one may be measured shorter than reality. Does not affect runs of minutes or hours.
+  not produce “Chat finished” and a longer one may be measured shorter than reality. Does not affect runs of minutes or hours.
 - [CODE] iOS requires every push to show a notification (section 6): the service worker always calls `showNotification`, even
   with absent or invalid payload (there was a bug with JSON `null`, found by a test and fixed).
 - [OK] The VAPID contact (`CP_VAPID_SUBJECT`) reaches push services in the `sub` claim. The default uses an example domain
@@ -326,15 +326,15 @@ live. Times in UTC; chats are identified by the first 8 characters of the id.
 
 ### 9.4 PWA: what was verified
 - [OK] In Cursor embedded browser (390 px emulation, light and dark theme), on the real daemon with synthetic database
-  (`npm run demo`): pairing with wrong and correct code, home, Ignora and Ripristina (Restore) (state, counts, tab title),
-  Impostazioni (Settings), live updates (SSE), banner when daemon is down, return to login on 401, logout, service
+  (`npm run demo`): pairing with wrong and correct code, home, Ignore and Restore (state, counts, tab title),
+  Settings, live updates (SSE), banner when daemon is down, return to login on 401, logout, service
   worker activation with pre-cache of 19 files without API data, cold start offline from cache. Text/background contrast >= 4.5:1
   (WCAG AA) in both themes.
 - [OK] Real iPhone (Oct 12): PWA reachable via `tailscale serve`, installed to Home from Safari and paired with the
   code; user granted permission and received the test notification. Daemon side: `paired`, `push_subscribed`
   (service `web.push.apple.com`), `push_sent kind=test sent=1 failed=0`.
 - [NOT VERIFIED] Push with PWA closed or screen locked (not explicitly verified), tap on notification opening the chat,
-  badge on icon, real "chat finished" notification, long-term behavior (session, subscription). Service worker behavior on notification press is verified only with a
+  badge on icon, real “chat finished” notification, long-term behavior (session, subscription). Service worker behavior on notification press is verified only with a
   simulation (`daemon/test/sw.test.js`).
 - [OK] `tailscale serve --bg 8787` (Tailscale 1.104.1, with user consent, after they enabled HTTPS certificates in the
   panel: `CertDomains` went from 0 to 1). `serve status` reports `(tailnet only)`. From Mac, via HTTPS with verified
@@ -352,7 +352,7 @@ live. Times in UTC; chats are identified by the first 8 characters of the id.
   `conversationCheckpointLastUpdatedAt` changed (55 times, about every 60 s); no flag and no composer `status` changed.
 - [OK] On message send the composer does: `status` -> `aborted` and `genUUID` -> empty; 2-8 s later arrive new
   `genUUID`, `lastUpdatedAt` and `unfinishedRunAt` (same value: send time).
-- [OK] `hasUnreadMessages` is NOT a "finished" signal: on `7cb1e28c` it went `true` at the START of a 1 s run, not
+- [OK] `hasUnreadMessages` is NOT a “finished” signal: on `7cb1e28c` it went `true` at the START of a 1 s run, not
   at the end (confirms 8.1).
 - During tool calls `additionalData.status` took `pending`, `running`, `cancelled`: possible discriminator
   for tool approvals, NOT verified.
@@ -363,7 +363,7 @@ live. Times in UTC; chats are identified by the first 8 characters of the id.
   store for dedup), not yet used.
 - `removedSectionIds` (sections manually removed from sidebar) is not handled: no case in real data. Different from
   `glass.removedProjects`, which is handled (8.2).
-- [SUPERSEDED IN 11] Tool approvals ("Run"/"Allow", including those requested by a hook) are now recognized from
+- [SUPERSEDED IN 11] Tool approvals (“Run”/“Allow”, including those requested by a hook) are now recognized from
   `reviewData.status: "Requested"` and generate a notification; still to verify live that the database contains it DURING
   the wait (11.4). A tool without `reviewData` is never a request.
 - A removed project then re-added, or a new chat in a removed project: Cursor behavior not verified (8.2).
@@ -384,13 +384,13 @@ User report (Oct 12): a question notification "arrived, a bit late". Measurement
   12:24:32.909. Fields `loading -> completed/pending` and `composerData` are updated IN PLACE (same `rowid`: 1.135.286
   for a bubble created 30 s before a max of 1.135.943; `composerData` 1.004.523): `rowid` only sees creations.
   That is why it is not used as a change log.
-- [DECISION] Every 5 s the "tail" of ALL visible chats is re-read (`composerTail` + last bubble: 11 ms total for
+- [DECISION] Every 5 s the “tail” of ALL visible chats is re-read (`composerTail` + last bubble: 11 ms total for
   9 chats; 0.5 ms per 1000 bubbles, 3 ms per 5000) and an unanswered question created less than 120 s ago counts as live even with flag
   off (`FRESH_QUESTION_MS`, two periodic write cycles). Key `toolCallId`, so a flag arriving later does not generate
   a second notification. Expected delay: at most `fullScanMs` (5 s) plus read step (1 s).
-- [OK, SUBJECTIVE] With the fix active the user reported the notification "feels immediate" (Oct 12). Not a
+- [OK, SUBJECTIVE] With the fix active the user reported the notification “feels immediate” (Oct 12). Not a
   measurement: for a value in seconds a sampler on a real question is needed.
-- [OK] A chat that is WORKING with flag on is not "waiting for you": in the PWA it is "In corso" (In progress) (not "Richiedono attenzione")
+- [OK] A chat that is WORKING with flag on is not “waiting for you”: in the PWA it is “In progress” (not “Needs attention”)
   until the run ends; then the residue returns and can be ignored. Only a live question stays in attention.
 - [OK, Oct 12] Daemon cost at steady state (35 visible chats, read every second and deep re-read every 5 s, after phase 2
   features and approvals): CPU 0.2%, memory 24 MB per `top` (68 MB RSS per `ps`), 8 threads.
@@ -405,13 +405,13 @@ an explanation (no error).
 
 ### 10.1 What the Cursor 3.24.6 bundle says [CODE]
 Read `out/vs/workbench/workbench.glass.main.js` (never modified). Beyond the selectors in section 5:
-- The questionnaire is component `kVC` (class `glass-questionnaire-tray`): one question per "step". The primary button in
-  the footer is always the one that sends the final answer ("Next" while more steps remain, "Continue" on the last);
-  "Skip" is secondary.
+- The questionnaire is component `kVC` (class `glass-questionnaire-tray`): one question per “step”. The primary button in
+  the footer is always the one that sends the final answer (“Next” while more steps remain, “Continue” on the last);
+  “Skip” is secondary.
 - Tapping the ALREADY selected option on a SINGLE-choice question DESELECTS it (function `Weg`). That is why the daemon
   checks state before clicking: the action is idempotent. On single choice, selecting an option advances automatically
   to the next step (`Jnl`); on multiple choice you advance with the primary button.
-- Free-form entry has id `__freeform_other__` and is added by Cursor itself: agent options that look like "Altro" (Other)
+- Free-form entry has id `__freeform_other__` and is added by Cursor itself: agent options that look like “Other”
   are hidden by Cursor and the daemon filters them with the same rule (`isOtherLabel`).
 - Composer: Lexical editor (class `aislash-editor-input`) and button with `aria-label="Send message"`.
 - Sidebar: rows with `data-sidebar-item-key`, shape `row:<composerId>` [HYPOTHESIS derived from code].
@@ -421,14 +421,14 @@ Read `out/vs/workbench/workbench.glass.main.js` (never modified). Beyond the sel
 ### 10.2 How the daemon acts [DECISION]
 - Actions apply only to what the daemon sees NOW: the request carries the key (`toolCallId`) of the question the user has
   in front of them; if it is no longer the current one the response is 409 `stale` and Cursor is not touched.
-- Answers are validated against the real question read from the database (existing options, "Altro" with text, a single
+- Answers are validated against the real question read from the database (existing options, “Altro” with text, a single
   option on single-choice questions, max lengths), not against what the phone sends.
 - One action at a time (serial queue: they manipulate the same window). If time runs out
   (`CP_ACTION_TIMEOUT_SECONDS`, 45 s) the phone gets 504 immediately, but the queue stays busy until the real work
   finishes: no second action runs on top of the first.
 - Deduplication: same answer within 60 s, or same message text within 8 s, yields 409 `already_sent`.
 - A message is not sent if a question is pending (409 `question_pending`: answer first), if approval is pending
-  (409 `approval_pending`: with "ferma e invia" (stop and send) enabled in Cursor it would cancel the command, so decide first on the
+  (409 `approval_pending`: with “ferma e invia” (stop and send) enabled in Cursor it would cancel the command, so decide first on the
   Mac; section 11), or if the Cursor composer already has a draft (`draft_not_empty`): work the user did on the Mac is never
   overwritten.
 - The chat is opened in the sidebar (the questionnaire exists only for the visible chat) and at the end of the action the PREVIOUS
@@ -447,8 +447,8 @@ Read `out/vs/workbench/workbench.glass.main.js` (never modified). Beyond the sel
 - [OK] CDP client (`daemon/test/cdp.test.js`): URL validation, errors, timeout, close, click and text, parallel
   requests. With a fake WebSocket and a real server.
 - [OK] `agents-ui.js` on real Chromium with `daemon/test/helpers/mock-agents-page.html` (sidebar and questionnaire built
-  as in the bundle): single choice, multiple choice, "Altro" (Other) with line breaks, multiple questions with automatic advance, already-
-  selected option not clicked again, wrong question (`mismatch`), missing chat, "Skip", restoring the open chat.
+  as in the bundle): single choice, multiple choice, “Other” with line breaks, multiple questions with automatic advance, already-
+  selected option not clicked again, wrong question (`mismatch`), missing chat, “Skip”, restoring the open chat.
   The suite skips these tests if it finds no Chromium (`CP_TEST_CHROME` or Playwright's): it stays dependency-free.
 - [OK] Actions service (`daemon/test/actions.test.js`, 19 tests): queue, timeout with immediate 504, deduplication,
   `stale`, validation, database verification, queued messages, HTTP endpoints, exposed state.
@@ -456,22 +456,22 @@ Read `out/vs/workbench/workbench.glass.main.js` (never modified). Beyond the sel
   recognition and keyboard height calculation.
 - [OK] PWA in real browsers with the demo server (fake Cursor, no real data), `tools/ui-check.mjs`: 51 checks
   in WebKit (Safari's engine, Playwright build) and Chromium, light and dark theme, iPhone 14 viewport. They verify:
-  logo top left, `touch-action`, 16 px fields (no zoom on focus), questionnaire (single, multiple, "Altro",
-  multiple questions, "Salta" (Skip) with double confirm), composer (anchored at bottom, grows with text, draft preserved,
+  logo top left, `touch-action`, 16 px fields (no zoom on focus), questionnaire (single, multiple, “Altro”,
+  multiple questions, “Skip” with double confirm), composer (anchored at bottom, grows with text, draft preserved,
   outcome), double tap blocked with real touches (`touchscreen.tap`: the second close tap is cancelled, the first and an
-  isolated one are not), approval screen (action type without the command, no composer, "Ignora" (Ignore) and "Ripristina" (Restore)),
+  isolated one are not), approval screen (action type without the command, no composer, “Ignore” and “Restore”),
   no horizontal scroll, no CSP violation.
 - [WORKAROUND] In WebKit every Playwright `page.screenshot()` triggers a spurious CSP error (one per screenshot, zero
   before): it does not come from the page. Strict CSP checking is running without `--shots`.
 - [OK, FOUND BY TEST] After a successful answer the questionnaire disappeared as soon as the daemon saw `submitted`, and with it
-  the "Risposta inviata" (Answer sent) text: the user might never see confirmation. Now the outcome stays a few seconds above the
+  the “Risposta inviata” (Answer sent) text: the user might never see confirmation. Now the outcome stays a few seconds above the
   composer (`composer.flash`).
 
 ### 10.4 Safari/iOS: choices and what cannot be tested here
 - Zoom: no `maximum-scale` or `user-scalable=no` (iOS ignores them from version 10 onward, for accessibility). Use
   `touch-action: manipulation` everywhere, 16 px text fields (below that, iOS zooms on focus) and a JavaScript safety net
   (`pwa/js/viewport.js`) that cancels the SECOND tap of a double tap (within 350 ms and 36 px, only if clean:
-  not a drag or long press), excluding text fields where double tap selects text. Pinch zoom stays free. A double tap on "Invia" (Send) does not send twice.
+  not a drag or long press), excluding text fields where double tap selects text. Pinch zoom stays free. A double tap on “Invia” (Send) does not send twice.
 - Keyboard: on iOS the keyboard does not resize the page but only the visual viewport; `--kb` (CSS) follows its height
   (80 px threshold, ignoring pinch) and the composer stays above the keyboard.
 - Other: `viewport-fit=cover` and safe margins, `100dvh`, `-webkit-text-size-adjust`, no automatic detection of
@@ -484,21 +484,21 @@ Read `out/vs/workbench/workbench.glass.main.js` (never modified). Beyond the sel
   with no dependencies; change the SVG and rerun it.
 
 ### 10.4b Revised iOS interface (Oct 14) [OK in browser, NOT VERIFIED on iPhone]
-User-selected package: (1) bottom bar Chat / "Impostazioni" (Settings) with badge for requests that need attention, hidden
+User-selected package: (1) bottom bar Chat / “Settings” with badge for requests that need attention, hidden
 in chats (the composer is there); (2) rows with title, project, and status on separate lines, request-type icon
 (question, approval, plan), question preview; (3) formatted agent text (headings, lists, code, quotes,
   bold and italic) with a dedicated safe formatter (`pwa/js/markdown.js`: DOM nodes only, no clickable links, HTML
-  stays text; 6 tests); (4) swiping a row left reveals "Ignora" (Pointer events, `touch-action: pan-y pinch-zoom`,
+  stays text; 6 tests); (4) swiping a row left reveals “Ignore” (Pointer events, `touch-action: pan-y pinch-zoom`,
  the list does not redraw during the gesture) and pulling the list down at the top refreshes it (touch events); (5) 160 ms fade
  between screens, opacity only (a transform would move the fixed composer) and off with Reduce Motion.
 Verified: `tools/ui-check.mjs` in WebKit and Chromium, light and dark theme (74-80 checks, including mouse drag,
- "Ignora" from the row, real taps via CDP in Chromium for pull-to-refresh). NOT verified: behavior of these
+ “Ignore” from the row, real taps via CDP in Chromium for pull-to-refresh). NOT verified: behavior of these
  gestures with a finger on a real iPhone (edge back gesture conflict, Safari bounce at top, scrolling).
 
 ### 10.4c Recent activity and detail refresh (Oct 15) [OK in browser and on real read-only data, NOT VERIFIED on iPhone]
-User request: more updates while the agent works and no "freeze" after answering a question. Cause: detail (last message, question) was
+User request: more updates while the agent works and no “freeze” after answering a question. Cause: detail (last message, question) was
 re-read only when the chat tab changed, and Cursor writes the header with
- delay (after an answer the chat stays ~20 s as a "live question" with nothing else to show). Now: `GET /api/chats/:id` also returns
+ delay (after an answer the chat stays ~20 s as a “live question” with nothing else to show). Now: `GET /api/chats/:id` also returns
  `activity` (last 10 bubbles: type, time, category and tool LABEL, one-line message preview; never commands
  or paths: `daemon/src/state/present.js` `activityOf`, `db.recentActivity`, ~2 ms) and the PWA re-reads detail every 4 s (1.5 s while the agent works or its reaction is awaited) with the
  screen open and visible (and when returning to foreground). After an answer or message from the phone the daemon re-reads that
@@ -506,33 +506,33 @@ re-read only when the chat tab changed, and Cursor writes the header with
  now ~1 s. Panel "L'agente sta lavorando" (The agent is working) (tool with `loading` state or chat in
  progress), "Inviato: in attesa dell'agente" (Sent: waiting for the agent) (after an answer or message, until the first new step (compare by bubble id, not timestamps) or 90 s) or "Attivita' recente" (Recent activity). A tool left `loading` for over 15 minutes is
  treated as stale. Bubble shape observed on the test chat: type 1 user, type 2 assistant (text) or tool
- (`toolFormerData.name/status`, e.g. `ask_question`, `run_terminal_command_v2`, state `completed`); NO "thinking" bubbles.
+ (`toolFormerData.name/status`, e.g. `ask_question`, `run_terminal_command_v2`, state `completed`); NO “thinking” bubbles.
  Limit: if Cursor does not write steps to the database until they finish (not verified on a long live run),
  the panel cannot show more than Cursor has written.
 
 Live measurement on the test chat (read-only observer every 0.5 s, after an answer sent by the daemon): 1.5 s after the
- answer the question becomes "stale" (header flag still on); the agent works (commands) but `unfinishedRunAt` is NOT
+ answer the question becomes “stale” (header flag still on); the agent works (commands) but `unfinishedRunAt` is NOT
  written, so `running` stays false for the whole phase and the chat looks idle when it is not; the new question appears as a
- `loading` bubble after ~16 s ("live question" state) but `toolFormerData.params` is empty until transition to `completed`, ~17 s
+ `loading` bubble after ~16 s (“live question” state) but `toolFormerData.params` is empty until transition to `completed`, ~17 s
  later (34 s from the answer): until the agent finishes wording the question Cursor does not save its text. PWA consequences during
- that window: the panel says "L'agente sta preparando la domanda" (The agent is preparing the question) (no longer "apri Cursor sul Mac" (open Cursor on the Mac)), the
- "stale" flag is not shown if the agent is working or its reaction is awaited, and detail is re-read every 1.5 s until
+ that window: the panel says "L'agente sta preparando la domanda" (The agent is preparing the question) (no longer “apri Cursor sul Mac” (open Cursor on the Mac)), the
+ “stale” flag is not shown if the agent is working or its reaction is awaited, and detail is re-read every 1.5 s until
  text appears. Reading the question from the Cursor window instead of the database does NOT shorten wait in a practical way: the tray
  (`.glass-questionnaire-tray`) exists in the DOM only for the foreground chat in the Agents Window (in a second measurement the
  window showed another chat and the tray text matched that one, not the test chat); to read the right one you would have to bring it
  to the foreground, changing what the user sees on the Mac. Second measurement: live question at +8.5 s,
  text in database at +10 s (first time 17 s: depends on how long the agent takes to word it).
- Residual delay reported by the user ("still arrives a few seconds late on iOS"): in logs `detectMs` (from bubble creation to detection) was 2-5 s because deep chat re-read was every 5 s; measured cost of a deep re-read of all 11 visible chats: ~25 ms. `CP_FULL_SCAN_MS` set to 1000 (~2.5% of one core): expected ~0.5-1.5 s.
+ Residual delay reported by the user (“still arrives a few seconds late on iOS”): in logs `detectMs` (from bubble creation to detection) was 2-5 s because deep chat re-read was every 5 s; measured cost of a deep re-read of all 11 visible chats: ~25 ms. `CP_FULL_SCAN_MS` set to 1000 (~2.5% of one core): expected ~0.5-1.5 s.
  There is no artificial delay on the daemon -> SSE/push path; what remains is Cursor writing to the database and, for
  notification, send (`sendMs` ~0.6 s) plus Apple delivery (not measurable from here).
  After faster detection the user reports: push notification almost immediate, but the open chat page updates with
  ~10 s delay. Hypothesis (NOT verified, needs iPhone): the live stream (SSE) arrives late or in bursts (iOS, `tailscale serve`
  proxy), while the page depended on it for chat STATE (detail was already re-read every 1.5-4 s).
  Changes: the chat page now also re-reads `/api/state` each cycle (same cadence) and no longer depends on the stream;
- "Impostazioni" has a "Diagnostica connessione" (Connection diagnostics) box (stream active, count and age of SSE events, estimated
+ “Settings” has a “Connection diagnostics” box (stream active, count and age of SSE events, estimated
  Mac->phone delay with `at` added to the payload OUTSIDE the hash, updates found by periodic poll before the stream
  delivered them, daemon response time): it helps tell whether delay is in the stream, the network, or elsewhere.
- Follow-up optimization (user: page faster, but notification still arrives first; without loading the Mac): one watcher cycle without deep re-reads costs ~1.1 ms and a deep re-read of one chat 2-3 ms, so for a "watched"
+ Follow-up optimization (user: page faster, but notification still arrives first; without loading the Mac): one watcher cycle without deep re-reads costs ~1.1 ms and a deep re-read of one chat 2-3 ms, so for a “watched”
  chat (any detail request keeps it warm for 15 s) or one just answered/written to (2 minutes) the watcher runs every
  250 ms and re-reads it each cycle (cost ~1.5% of one core, only in those periods); at rest it stays 1 cycle per second. The page, while
  waiting for the agent, re-reads every 1 s. Notification still stays one step ahead because it leaves the daemon without waiting for the
@@ -546,16 +546,16 @@ Live measurement on the test chat (read-only observer every 0.5 s, after an answ
  is empty. Comparison with `params` on ALL real read-only questions from visible chats (80 bubbles per chat): 109 of 110
  identical (title, id, texts, options, multiple choice, multiple questions); the only remaining one has empty field 23 (args not
  written yet), so it falls back to waiting for `params`. Expected effect: text and options appear on the phone
- (and in the notification) as soon as the question is born, without the "preparing" phase.
+ (and in the notification) as soon as the question is born, without the “preparing” phase.
  Zoom on text field tap on iOS (user report, fonts were already 16 px): added `maximum-scale=1` to the
  viewport, which on iOS 10+ prevents automatic zoom on focus but keeps two-finger zoom (accessibility). NOT verified on iPhone.
 
 ### 10.4d Tabs, favorites, and lighter pages (Oct 15) [OK in browser, NOT VERIFIED on iPhone]
-- User choices: 4-item bar ("Attenzione" (Attention), Chat, "Preferite" (Favorites), "Impostazioni"), bar ALWAYS fixed at bottom, no explanatory
-  notes on work screens (moved to "Come funziona" (How it works), under "Impostazioni"), heart for favorites.
-- "Attenzione" = requests to decide + chats in progress + "In sospeso" (Pending); Chat = groups by project like the sidebar, with search;
-  "Preferite" = chats with the heart. Favorites and muted are LOCAL daemon preferences (`chat_prefs` in `store.db`,
-  `POST /api/chats/:id/prefs {favorite?, muted?}`), they do not touch Cursor. Swipe a row: "Ignora" if it needs attention,
+- User choices: 4-item bar (“Attention”, Chat, “Favorites”, “Settings”), bar ALWAYS fixed at bottom, no explanatory
+  notes on work screens (moved to “How it works”, under “Settings”), heart for favorites.
+- “Attention” = requests to decide + chats in progress + “Pending”; Chat = groups by project like the sidebar, with search;
+  “Favorites” = chats with the heart. Favorites and muted are LOCAL daemon preferences (`chat_prefs` in `store.db`,
+  `POST /api/chats/:id/prefs {favorite?, muted?}`), they do not touch Cursor. Swipe a row: “Ignore” if it needs attention,
   otherwise the heart.
 - Bottom bar: user reports that on iPhone it sometimes rises to mid-screen while scrolling the list. Not reproduced in
   test browsers (there it stays fixed). Defenses, ALL to try on the phone: own layer (`translate3d`, `will-change`) and
@@ -564,23 +564,23 @@ Live measurement on the test chat (read-only observer every 0.5 s, after an answ
   outside the flow (more invasive: affects pull-to-refresh and scroll position).
 
 ### 10.4e Mute and quiet hours (Oct 15) [OK in test, NOT VERIFIED on iPhone]
-- Per-chat mute (bell on the chat page), per-project ("Impostazioni" (Settings) > Progetti silenziati (Muted projects); key
+- Per-chat mute (bell on the chat page), per-project (“Settings” > Muted projects; key
   `ws:<sectionId>` in `chat_prefs`) and time window (`quiet_hours` in `meta`, Mac local time, including across
   midnight; `GET/POST /api/settings/quiet`). Events are still marked as notified: when the window ends there is no
   flood of old alerts. The reason for dropping is in the log (`push_skipped {reason, kind}`), never the content.
 
 ### 10.4f Stop the agent from the phone (Oct 15) [OK on fake page and in browser, NOT VERIFIED on real Cursor]
-- `POST /api/chats/:id/stop`: the daemon opens the chat in Cursor (CDP) and presses "Stop generation" (same send button, which with
+- `POST /api/chats/:id/stop`: the daemon opens the chat in Cursor (CDP) and presses “Stop generation” (same send button, which with
   empty field and agent working changes label: FINDINGS 8). Only if the chat is running and has no live question or
   approval (409 `not_running` / `attention_pending`). Outcome: the button disappears (`settled`) or the chat reads as stopped
   from database state. In the log only `stop_agent {verified}`.
-- PWA: in the composer, with empty field and agent working, the send button becomes "Ferma" (Stop) (square); requires a second tap
-  within 4 s (turns red). When typing text it returns to "Invia" (Send). To verify live: label and position of the button in Cursor 3.x.
+- PWA: in the composer, with empty field and agent working, the send button becomes “Stop” (square); requires a second tap
+  within 4 s (turns red). When typing text it returns to “Invia” (Send). To verify live: label and position of the button in Cursor 3.x.
 
 ### 10.4g Paired devices and badge (Oct 15) [OK in test, NOT VERIFIED on iPhone]
-- Impostazioni > Dispositivi abbinati (Paired devices) (shown only with at least two devices): `GET /api/devices` (id = hash of hash of
+- Settings > Paired devices (shown only with at least two devices): `GET /api/devices` (id = hash of hash of
   token, label, last access, notifications enabled; never token or hash) and `POST /api/devices/:id/revoke` (removes the session and
-  its push subscriptions; the current device does not log out from here: for that there is "Esci" (Log out)). Two taps.
+  its push subscriptions; the current device does not log out from here: for that there is “Esci” (Log out)). Two taps.
 - Badge on the icon: already present since Phase 1 (`setAppBadge` from the service worker with the `badge` value from the push notification, and from the
   open page with the number of chats requiring attention). iOS limit: with the app closed the number changes only when a
   notification arrives (silent pushes do not exist): if you resolve a question on the Mac, the number updates on the next notification.
@@ -590,15 +590,15 @@ Live measurement on the test chat (read-only observer every 0.5 s, after an answ
   order, read ONLY by index from the `fullConversationHeadersOnly` list (never the full conversation, never a scan). User
   and assistant with text (truncated at 6000 characters, with `truncated`); tools as rows (action type and state, never commands or
   paths); empty bubbles skipped. Read-only: no action toward Cursor. Content never ends up in logs.
-- PWA: `#/chat/<id>/storia` (link "Conversazione intera" (Full conversation) on the chat page): starts at the bottom, "Messaggi precedenti" (Previous messages) loads
+- PWA: `#/chat/<id>/storia` (link “Conversazione intera” (Full conversation) on the chat page): starts at the bottom, “Previous messages” loads
   the previous page while keeping the read position. Agent text in safe Markdown (no active links).
 
 ### 10.4i Keep Mac awake while an agent works (Oct 15) [OK in test; `caffeinate`, screen/battery/brightness reads verified manually; screen closed and `pmset` NOT VERIFIED]
-- Optional, OFF by default (Impostazioni > Mac sveglio (Keep Mac awake); `GET/POST /api/settings/awake` with `enabled`, `closed`, `dim`; state in `meta`).
+- Optional, OFF by default (Settings > Keep Mac awake; `GET/POST /api/settings/awake` with `enabled`, `closed`, `dim`; state in `meta`).
 - Level 1 (always, no permission): with at least one chat running, `caffeinate -i -m -s -w <daemon pid>`; after the last chat stays
   2 minutes (tolerance) then exits. Verified with `pmset -g assertions` (`PreventSystemSleep`, `PreventUserIdleSystemSleep`). The
   screen is NOT kept on (no `-d`). Closing the screen: `-s` applies only on charger (on battery macOS ignores it).
-- Level 2 "even with screen closed and on battery": `sudo -n pmset -a disablesleep 1|0` from the daemon, possible ONLY after
+- Level 2 “even with screen closed and on battery”: `sudo -n pmset -a disablesleep 1|0` from the daemon, possible ONLY after
   `sudo tools/mac/power-setup.sh install` (sudoers rule allowing exactly those two commands; checked with `visudo -cf`;
   `uninstall` removes it). Reset to 0 with four protections: end of work, daemon shutdown, guard process
   (detached `/bin/sh` waiting for daemon death, even on SIGKILL), battery < 20% on battery (resumes above 25%).
@@ -608,20 +608,20 @@ Live measurement on the test chat (read-only observer every 0.5 s, after an answ
   (also in `meta` and in the guard); restored on open or end of work. Cannot test without actually closing the screen.
 
 ### 10.4j Rename, archive, restore (Oct 15) [VERIFIED LIVE on a test chat in Cursor; PWA NOT VERIFIED on iPhone]
-- From a chat page: "Rinomina" (Rename) (field with current name) and "Archivia" (Archive) (two taps, disabled if agent is working). From
-  Impostazioni > Chat archiviate (Archived chats): list with "Ripristina" (Restore). API: `POST /api/chats/:id/rename {name}`, `POST /api/chats/:id/archive`,
+- From a chat page: “Rename” (field with current name) and “Archive” (two taps, disabled if agent is working). From
+  Settings > Archived chats: list with “Restore”. API: `POST /api/chats/:id/rename {name}`, `POST /api/chats/:id/archive`,
   `GET /api/archived`, `POST /api/archived/:id/restore`.
 - Everything goes through the row context menu in the Cursor sidebar (right click via CDP, `Input.dispatchMouseEvent` with
   `button: 'right'`, `buttons: 2`): entries `Rename`, `Archive`, `Unarchive`. Rename = `input.ui-text-editable` field already selected,
   type and press Enter (focus verified before typing); outcome read from database (`composerHeaders.value.name`).
   Archive = `composerHeaders.isArchived` becomes 1 (read from database).
-- Archived rows are not in the sidebar: restore turns on the "Archived" filter ("Customize Sidebar" menu, entry
-  `menuitemcheckbox`), uses "Unarchive" and PUTS the filter back as it was (Cursor persistent setting). Verified live: returned to off.
+- Archived rows are not in the sidebar: restore turns on the “Archived” filter (“Customize Sidebar” menu, entry
+  `menuitemcheckbox`), uses “Unarchive” and PUTS the filter back as it was (Cursor persistent setting). Verified live: returned to off.
 - Live test (Test Chat): rename and revert to original name; archive -> `isArchived` true -> restore -> false, filter off.
 - Not verified: archiving a chat with a pending question; a running chat is not archived (409 `running`).
 
 ### 10.4k Images attached to messages (Oct 15) [VERIFIED LIVE through real send with image; PWA NOT VERIFIED on iPhone]
-- From the chat composer: "Allega immagini" (Attach images) button (up to 4). Each image is resized (long side 2048) and re-encoded as
+- From the chat composer: “Allega immagini” (Attach images) button (up to 4). Each image is resized (long side 2048) and re-encoded as
   JPEG on the phone (HEIC and large photos become lightweight, location metadata stripped), then `POST /api/uploads` (body = bytes, type
   `image/*`); the daemon checks CONTENT (JPEG/PNG/GIF/WebP, max 8 MB, not declared type), saves in `daemon/data/uploads/`
   with random name and permissions 600, max 12 pending, 30 minute expiry, cleanup on every startup. `DELETE /api/uploads/:id`.
@@ -636,15 +636,15 @@ Live measurement on the test chat (read-only observer every 0.5 s, after an answ
   (Cursor copies file to its folder) and the agent responded.
 
 ### 10.4l New local chat from the phone (Oct 15) [VERIFIED LIVE with one real message; PWA NOT VERIFIED on iPhone]
-- From Chat tab, "+" at top: choose project (single-choice list, not a `<select>`: WebKit injects style and strict CSP flags it), write first message, attach images and "Avvia chat" (Start chat). `POST /api/chats {sectionId, text?, images?}`; the
+- From Chat tab, "+" at top: choose project (single-choice list, not a `<select>`: WebKit injects style and strict CSP flags it), write first message, attach images and “Avvia chat” (Start chat). `POST /api/chats {sectionId, text?, images?}`; the
   daemon derives project name from its own state (not from client). When done the PWA waits for the chat to appear in state and opens it.
 - In Cursor: each sidebar project is a header `[data-section-head]` (text = folder name) with button
-  `button[aria-label="New Agent"]` (shown on hover: `mouseMoved` first). Click opens "new chat" screen (no
-  conversation panel) with three `.ui-select-trigger`: project (lowercase text), branch, environment. Environment options: "This Mac",
-  "This Mac (Self-Hosted Worker)", "Remote Machine", "New Worktree". The daemon checks project matches request and
-  environment is "This Mac"; otherwise does NOT send (`wrong_project`, `not_local`, `project_not_found`, `project_ambiguous` if two headers
-  share the same name). Composer is the same (`.ui-prompt-input-editor__input`, send "Send message").
-- ATTENTION: as soon as sent Cursor creates a "draft" row (header with `isDraft: true`, `isArchived: 1`, workspace `empty-window`, no
+  `button[aria-label="New Agent"]` (shown on hover: `mouseMoved` first). Click opens “new chat” screen (no
+  conversation panel) with three `.ui-select-trigger`: project (lowercase text), branch, environment. Environment options: “This Mac”,
+  "This Mac (Self-Hosted Worker)", “Remote Machine”, “New Worktree”. The daemon checks project matches request and
+  environment is “This Mac”; otherwise does NOT send (`wrong_project`, `not_local`, `project_not_found`, `project_ambiguous` if two headers
+  share the same name). Composer is the same (`.ui-prompt-input-editor__input`, send “Send message”).
+- ATTENTION: as soon as sent Cursor creates a “draft” row (header with `isDraft: true`, `isArchived: 1`, workspace `empty-window`, no
   bubble) and only after the real chat with a DIFFERENT id (`composerHeaders`: `isDraft` false, `agentLocation.type` local, name generated by
   Cursor). The daemon waits for new sidebar rows to stabilize (1,2 s and only one) and checks `isDraft`/`isArchived`.
   Bug found and fixed in live test (previously returned draft id).
@@ -655,24 +655,24 @@ Live measurement on the test chat (read-only observer every 0.5 s, after an answ
 
 ### 10.4m Pin chat (Oct 15) [VERIFIED LIVE on Cursor with test chat; PWA NOT VERIFIED on iPhone]
 - Row menu (right click): Pin/Unpin, Rename, Edit Icon, Mark as Unread, Fork, Move to, Copy, Archive, Archive All Below. Entry toggles
-  between "Pin" and "Unpin" by state.
+  between “Pin” and “Unpin” by state.
 - State is NOT in `composerHeaders` (no field) nor in `ItemTable` (no dedicated key): read from the page. Pinned chats
   sit at top of sidebar, BEFORE the first header `[data-section-head]`; pinned one leaves its project.
-- The daemon looks in the menu ONLY for the entry for desired state ("Pin" to pin, "Unpin" to unpin): if menu shows the opposite it clicks nothing.
+- The daemon looks in the menu ONLY for the entry for desired state (“Pin” to pin, “Unpin” to unpin): if menu shows the opposite it clicks nothing.
   `GET /api/chats/:id/pin` reads state (read-only page read), `POST /api/chats/:id/pin {pinned}` changes it. In the PWA the
-  Fissa/Togli (Pin/Unpin) button appears in chat management panel after reading state once.
+  Pin/Unpin button appears in chat management panel after reading state once.
 - Live test: initial state unpinned, pin, pinned state, repeat is no-op, unpin, final state unpinned (test chat restored).
 
 ### 10.4n Branch and model for new chat (Oct 15) [VERIFIED LIVE only WITHOUT sending; real send not verified; PWA NOT VERIFIED on iPhone]
-- "New chat" screen: 3 `.ui-select-trigger` (project, branch, environment "This Mac"). Branch menu is `[role=listbox][aria-label="Select branch"]`
+- “New chat” screen: 3 `.ui-select-trigger` (project, branch, environment “This Mac”). Branch menu is `[role=listbox][aria-label="Select branch"]`
   with rows `[role=option]` and `[data-branch-name]`. Model is the button without aria-label in composer bar: menu has
-  Context/Effort/Model; hovering "Model" opens submenu (Auto, MAX Mode, models, Add Models).
+  Context/Effort/Model; hovering “Model” opens submenu (Auto, MAX Mode, models, Add Models).
 - Cursor REMEMBERS branch and model choice as default (verified live): daemon, after start, restores branch and model as they were.
   If choice or restore fail the chat does not start and Cursor returns to previous screen (tested with mock).
 - API: `GET /api/projects/:sectionId/newchat-options` (opens and closes menus, changes nothing) and `POST /api/chats` with optional `branch`/`model`.
-  In the PWA the "Scegli ramo e modello" (Choose branch and model) block loads lists on demand only; "Come in Cursor" (Same as in Cursor) is the starting choice.
+  In the PWA the “Choose branch and model” block loads lists on demand only; “Same as in Cursor” is the starting choice.
 - Real test (Oct 15, with 1 message): new chat on cursor-pocket with EXPLICIT branch (master) and model choice (current ones, per user
-  request not to change model): chat created, message in database, agent reply "ok", branch and model unchanged after,
+  request not to change model): chat created, message in database, agent reply “ok”, branch and model unchanged after,
   chat selection restored. Archiving test chat: `archived` flag in database appears after a few seconds (not immediately).
 - Verified live: reading lists and choosing + restoring model without sending messages. In test project only one branch (master),
   so branch choice verified only with mock.
@@ -684,7 +684,7 @@ Live measurement on the test chat (read-only observer every 0.5 s, after an answ
   In chats (composer and keyboard) the window still scrolls. `--vv-shift` realignment remains as safety net.
 
 ### 10.4p Sending to the wrong chat, stray drafts, hidden sidebar, keyboard (Oct 15) [daemon part VERIFIED in tests and live for the sidebar; iPhone part NOT VERIFIED]
-- Report: a message sent to chat 2 was typed into chat 1; the retry then failed with "draft not empty" because the draft WAS the message
+- Report: a message sent to chat 2 was typed into chat 1; the retry then failed with “draft not empty” because the draft WAS the message
   just typed. Daemon log: `send_disabled` followed by `draft_not_empty` seconds later. Cause: `#openChat` clicked the row but, if the
   selection did not change within ~2 s, went on anyway; and a failed send left the typed text in the composer.
 - Fixes (`daemon/src/cursor/agents-ui.js`): the chat must really be open (2 click attempts, then `chat_not_open`, nothing typed);
@@ -707,23 +707,23 @@ Live measurement on the test chat (read-only observer every 0.5 s, after an answ
 ### 10.5 To verify live, with Cursor restarted with debug port [NOT VERIFIED]
 Each item has ready diagnostics: `cd daemon && npm run cdp -- status | inspect | tray` (prints page structure
 and never text).
-1. `/json/list` really exposes the "Cursor Agents" page (title or URL with `glass`).
+1. `/json/list` really exposes the “Cursor Agents” page (title or URL with `glass`).
 2. Shape of sidebar row keys (`row:<composerId>`), selected row marker, collapsed sections.
 3. Questionnaire selectors on a real question: options, "Other...", freeform editor (how to type and clear),
-   "Next"/"Continue"/"Skip" buttons.
+   “Next”/“Continue”/“Skip” buttons.
 4. Reliable clicks with Cursor in background (`Emulation.setFocusEmulationEnabled`).
 5. How fast Cursor writes `submitted` to database (verification waits up to 12 s).
 6. Composer: send with button, newline with Shift+Enter, draft already present.
 7. Message to a chat that is working: does Cursor queue it or stop the run and send? Outcome text in PWA
    assumes queue (`queued` read from database).
-8. "Dead" questions after Cursor restart (flag on but no questionnaire): today responds 409 `no_question`; verify
+8. “Dead” questions after Cursor restart (flag on but no questionnaire): today responds 409 `no_question`; verify
    whether to degrade to a new message.
 9. Delay before database reflects a sent message (verify with `bubbleCount`).
 
 ### 10.6 Live test outcome (Oct 13, Cursor 3.24.6 restarted with debug port) [OK]
 Test on a test chat created on purpose by the user (no work chats touched), with real daemon modules
 (`createApp`, temp archive) and real database read-only.
-- [OK] Port 9222 active; `/json/list` exposes ONE window, "Cursor Agents" (13 character title). Sidebar rows
+- [OK] Port 9222 active; `/json/list` exposes ONE window, “Cursor Agents” (13 character title). Sidebar rows
   with key `row:<composerId>`.
 - [OK] Questionnaire selectors (`.glass-questionnaire-tray`, `.ui-tray-option`, `.questionnaire-freeform-option`,
   `.ui-tray-footer__primary/secondary button`) correct first try. Tested and CONFIRMED from database (`submitted` with
@@ -733,24 +733,24 @@ Test on a test chat created on purpose by the user (no work chats touched), with
 - Findings fake-page tests could NOT provide (fixed in `agents-ui.js`, with regression tests):
   1. Questionnaire `innerText` is EMPTY even when visible: need `textContent` (without it, question/screen match failed).
   2. Composer is not Lexical but tiptap/ProseMirror (`.ui-prompt-input-editor__input`). Send button label
-     "Start voice input" when field empty, "Send message" with text, "Stop generation" while agent working.
+     “Start voice input” when field empty, “Send message” with text, “Stop generation” while agent working.
   3. Cursor keeps panels for multiple chats alive (each `data-agent-panel-conversation-shell` with `data-glass-agent-id` =
      composerId); background ones inside `data-keep-alive-hidden` have their OWN composer. Composer, tray and
      send are now searched only in foreground panel (without it, text could land in wrong chat).
-  4. No "selected row" marker in sidebar: open chat recognized from foreground panel.
-- Bug found by user from iPhone (Oct 14): on an ignored or old question (over 24 h, "In sospeso" (Pending) state) the PWA
-  said "Per rispondere apri Cursor sul Mac" and options were not clickable, against the rule "reply even after hours or
+  4. No “selected row” marker in sidebar: open chat recognized from foreground panel.
+- Bug found by user from iPhone (Oct 14): on an ignored or old question (over 24 h, “Pending” state) the PWA
+  said “Per rispondere apri Cursor sul Mac” and options were not clickable, against the rule "reply even after hours or
   days". Fixed: if Cursor still has it open (`attention.live`) the reply module appears even for pending
-  questions (title "(ignorata)" / "(non risolta da tempo)", button "Ignora" (Ignore) becomes "Ripristina"); if no longer open the
+  questions (title "(ignorata)" / "(non risolta da tempo)", button “Ignore” becomes “Restore”); if no longer open the
   daemon responds 409. Browser checks: 54 per run.
 - Real latencies from log (`push_sent`): question detected in 0,9-4,5 s, notification send in 0,6-1,5 s.
-- Not yet verified: "Skip"; message while chat is REALLY working (queue or interrupt: `queued` outcome read was
-  false, but not certain chat was working then); clicks with Cursor in background; restore of chat user was viewing; whether a "dead" questionnaire after restart exists (question open at restart
+- Not yet verified: “Skip”; message while chat is REALLY working (queue or interrupt: `queued` outcome read was
+  false, but not certain chat was working then); clicks with Cursor in background; restore of chat user was viewing; whether a “dead” questionnaire after restart exists (question open at restart
   stayed clickable and reply arrived).
-- To understand: right after a reply the chat still shows a "live" question for a few seconds and its parameters cannot
+- To understand: right after a reply the chat still shows a “live” question for a few seconds and its parameters cannot
   be read (next bubble not complete yet): harmless (409 `stale`/`no_question`), but PWA may show it briefly.
-## 11. Tool approvals ("Allow"/"Run"): signal, rules, and what is NOT verified
-User request (Oct 12): in one of their projects a chat had stopped waiting for an "allow" (because of a hook) and no
+## 11. Tool approvals (“Allow”/“Run”): signal, rules, and what is NOT verified
+User request (Oct 12): in one of their projects a chat had stopped waiting for an “allow” (because of a hook) and no
 notification had arrived: can this be notified too?
 
 ### 11.1 The signal [OK] [CODE]
@@ -761,7 +761,7 @@ notification had arrived: can this be notified too?
 - [OK] Shape of a RESOLVED review (command approved by the user): `reviewData: { approvalType: "user", selectedOption: "run",
   status: "Done", allowlistOptions: [], candidatesForAllowlist: [], defaultAllowlistOptionIds: [], hasClassifierSuggestions:
   false, isShowingInput: false, selectedAllowlistOptionIds: [] }`. `blockReason` is a string produced by the hook (contains
-  the word "hook"); the text is neither echoed nor read in the daemon: it may contain commands.
+  the word “hook”); the text is neither echoed nor read in the daemon: it may contain commands.
 - [CODE] `reviewData.status` is an enum with three values: `None`, `Requested`, `Done`. Cursor searches on its own, among the LAST TWO
   bubbles (`getLastBubbleWithReviewStatusFromLast2Bubbles`), for a tool with `status === "Requested"` among: EDIT_FILE,
   EDIT_FILE_V2, RUN_TERMINAL_COMMAND_V2, MCP, CALL_MCP_TOOL, READ_MCP_RESOURCE, CREATE_PLAN, WEB_FETCH.
@@ -774,7 +774,7 @@ notification had arrived: can this be notified too?
   `Requested` or `Done`. It does not prove WHEN it is written (11.4).
 - [OK] A `create_plan` stays `Requested` for hours until the plan is approved: it is the `piano` case
   (it has its own flag `hasPendingPlan`), excluded from the new rule.
-- [OK] The user's hook is per-project (`.cursor/hooks.json`, event `beforeShellExecution`, execution at "failClosed") and
+- [OK] The user's hook is per-project (`.cursor/hooks.json`, event `beforeShellExecution`, execution at “failClosed”) and
   responds `permission: "ask"` to commands outside policy, i.e. asks the user for approval: that is the cause of the wait. There is
   no global hook (`~/.cursor/hooks.json`).
 
@@ -782,16 +782,16 @@ notification had arrived: can this be notified too?
 - Request type `approvazione`: the last or second-to-last bubble is a tool (not `ask_question`, not `create_plan`) with
   `reviewData.status === "Requested"` and `approvalType` other than `allowlist` and `full_auto` (a missing or unknown type does not
   exclude). Key = `toolCallId` (same deduplication as questions).
-- It is "live" if the flag `hasBlockingPendingActions` is on, or the chat is working (the agent is stopped waiting for you),
+- It is “live” if the flag `hasBlockingPendingActions` is on, or the chat is working (the agent is stopped waiting for you),
   or the bubble is recent (less than 120 s: Cursor's header arrives late, 9.7). A `Requested` in an idle chat,
   without flag and old is a leftover (Cursor closed mid-way) and does not count.
 - The notification fires only if the request is still pending after `CP_APPROVAL_DELAY_SECONDS` (8 s): whoever is at the Mac and
   approves immediately receives nothing. While waiting the chat is re-read every second. One notification per request, no
   reminders. At daemon startup the same rules as for questions apply (recent yes, old only in the app).
-- The notification text and the PWA report only the TYPE of action ("Comando da eseguire" (Command to run), "Modifica di un file", "Strumento
-  MCP", "Richiesta web", "Azione da approvare"): never the command, paths, or hook text.
+- The notification text and the PWA report only the TYPE of action (“Comando da eseguire” (Command to run), “Modifica di un file”, "Strumento
+  MCP", “Richiesta web”, “Azione da approvare”): never the command, paths, or hook text.
 - From the PWA you approve or reject ONLY a terminal command (11.5); for every other request type the panel says to
-  decide on the Mac. "Ignora" (Ignore) works as for questions, and a message from the phone with a pending approval is rejected
+  decide on the Mac. “Ignore” works as for questions, and a message from the phone with a pending approval is rejected
   (409 `approval_pending`).
 - The log records `approval_seen` (bubble age, chat in progress, flag, startup) and `approval_gone` (seconds waited, whether it was
   notified): numbers and booleans only. Used to close 11.4 and measure how long waits last. Every `push_sent`
@@ -801,7 +801,7 @@ notification had arrived: can this be notified too?
 ### 11.3 What was verified
 - [OK] Automated tests with synthetic bubbles in the observed shape (suite 176/176): wait before notifying, one event
   per request and new event for a new request, approval given from the Mac before the delay (no notification),
-  request already present at startup (recent and old), residuo, second-to-last bubble, no "chat finita" while waiting,
+  request already present at startup (recent and old), residuo, second-to-last bubble, no “chat finita” while waiting,
   command and identifiers never in payload or log, tools without `reviewData` always `residuo`, message rejected.
 - [OK] On the real database (read-only, counts only): 35 visible chats, 0 classified approvals: no false positives
   (the 2 existing `reviewData` are `Done`).
@@ -812,20 +812,20 @@ notification had arrived: can this be notified too?
   true, flag: false}`, after 8 s wait `push_sent kind=approvazione` (`detectMs` 24223, `sendMs` 624), at decision
   `approval_gone {waitedSec: 92, notified: true}`. So `reviewData.status: "Requested"` IS written to the database
   DURING the wait and the signal works; `hasBlockingPendingActions` does NOT turn on for approvals (the rule does not
-  require it); the chat is "in progress" (`running`).
+  require it); the chat is “in progress” (`running`).
 - The bubble was already 16 s old when the daemon saw it (then +8 s wait = 24 s at notification): unknown whether the cause is
   hook time, delayed Cursor write, or scanning. To measure with other approvals.
 - That the notification arrived on the iPhone only the user can confirm.
 
-### 11.5 Approve or reject from the phone (Oct 15) [OK on live reject, "Esegui" (Run) NOT VERIFIED LIVE]
+### 11.5 Approve or reject from the phone (Oct 15) [OK on live reject, “Run” NOT VERIFIED LIVE]
 - Cursor: the command card is `.ui-shell-tool-call` inside the row with `data-message-id` = bubble id in the database; buttons
-  are recognized by text (Run/Esegui and Skip/Rifiuta (Reject)). `AgentsUi.approval` opens the chat, finds the card for THAT
+  are recognized by text (Run/Esegui and Skip/Salta, English and Italian Cursor). `AgentsUi.approval` opens the chat, finds the card for THAT
   bubble (if missing or has other buttons: error, no click) and presses the button.
 - Daemon: `POST /api/chats/:id/approval {key, decision: approve|reject}`. Rejects stale key (`stale`), non-terminal
   tool (`unsupported`), feature off (`CP_APPROVALS=0`, `approvals_disabled`). Chat detail carries
   `approval {key, type, supported, command, description}`: the COMMAND appears only from this authenticated API (max 2000
   characters), never from notifications and logs (the log has `approval_decision {decision, verified}`).
-- PWA: command in monospace + description, "Esegui" and "Rifiuta" buttons with TWO taps (the first arms the button
+- PWA: command in monospace + description, “Run” and “Reject” buttons with TWO taps (the first arms the button
   for 5 s, the second sends: a wrong tap executes nothing on the Mac).
 - Live test (Oct 15, on a real pending request; on the Mac the user was not using the chat): reject clicked the
   right card and the agent continued. In the database: right after the click the bubble stays `loading` with `reviewData.status:
@@ -835,8 +835,8 @@ notification had arrived: can this be notified too?
   `Requested` request, therefore new approval to decide). Conclusion: `reviewData.status` does NOT go to `Done` on
   reject; outcome write is delayed. Daemon confirmation accepts the card closing in Cursor (`settled`), `status != loading` or "the request is no longer
   current attention", but within 10 s it can still show `verified:false` with a successful decision: the PWA says so
-  ("non riesco ancora a confermare" (I still can't confirm)) without treating it as an error.
-- [NOT VERIFIED LIVE] "Esegui": the command for that request would run `git add -A && git commit` in another of the user's
+  (“non riesco ancora a confermare” (I still can't confirm)) without treating it as an error.
+- [NOT VERIFIED LIVE] “Run”: the command for that request would run `git add -A && git commit` in another of the user's
   projects, so it was NOT approved for testing. The code path is the same as reject (only the button changes), but the
   outcome in the database is not observed.
 

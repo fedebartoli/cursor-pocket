@@ -79,7 +79,7 @@ export function mountNewChat(root) {
     const rows = [{ value: null, text: t('newchat.asInCursor', { current: current ?? '?' }) }, ...options.filter((o) => o !== current).map((o) => ({ value: o, text: o })), ...(options.includes(current) ? [{ value: current, text: t('newchat.optionCurrent', { current }) }] : [])];
     return h(
       'div',
-      { class: 'choice' },
+      { class: 'newchat-group' },
       h('div', { class: 'newchat-label' }, label),
       h(
         'div',
