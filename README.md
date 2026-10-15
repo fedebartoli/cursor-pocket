@@ -23,8 +23,8 @@
 
 <p align="center">
   <picture>
-    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/hero-dark.png">
-    <img alt="Attention list, a question from an agent, a command waiting for approval, and the new chat screen" src="docs/screenshots/hero.png">
+    <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/demo-dark.gif">
+    <img alt="Animated demo: a question arrives, it is answered from the phone, then a command is approved" src="docs/screenshots/demo.gif" width="360">
   </picture>
 </p>
 
@@ -189,7 +189,8 @@ Working rules for contributors and AI agents are in [AGENTS.md](AGENTS.md); see 
 | --- | --- |
 | `daemon/` | the daemon (read-only on Cursor's database) and its tests |
 | `pwa/` | the web app: plain HTML, CSS and JavaScript modules, no build |
-| `tools/` | demo server, `launchd.sh`, `cursor-cdp.sh`, browser checks, icon and screenshot generators, macOS power helpers |
+| `tools/` | demo server, `launchd.sh`, `cursor-cdp.sh`, browser checks, icon, screenshot and demo-animation generators, macOS power helpers |
+| `site/` | the static project page (plain HTML and CSS); publish it from a `gh-pages` branch or GitHub Pages when the repo is public |
 | `docs/` | setup, architecture, findings, roadmap, iPhone checklist |
 | `research/` | research scripts and prototypes, not used in production |
 

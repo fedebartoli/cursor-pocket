@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>cursor-pocket: control Cursor agents from your iPhone</title>
+  <meta name="description" content="Get a push notification when a Cursor agent asks a question or needs approval, and answer from your iPhone. Open source, private by design: a small Node daemon on your Mac, no cloud, no account.">
+  <link rel="canonical" href="https://fedebartoli.github.io/cursor-pocket/">
+  <meta name="theme-color" content="#f3f4f6" media="(prefers-color-scheme: light)">
+  <meta name="theme-color" content="#0d1117" media="(prefers-color-scheme: dark)">
+  <link rel="icon" type="image/svg+xml" href="img/mark.svg">
+  <link rel="apple-touch-icon" href="img/apple-touch-icon.png">
+
+  <meta property="og:type" content="website">
+  <meta property="og:title" content="cursor-pocket: control Cursor agents from your iPhone">
+  <meta property="og:description" content="Push notifications and one-tap answers for the local chats of Cursor's Agents Window. Open source, no cloud, no account.">
+  <meta property="og:url" content="https://fedebartoli.github.io/cursor-pocket/">
+  <meta property="og:image" content="https://fedebartoli.github.io/cursor-pocket/img/og.png">
+  <meta name="twitter:card" content="summary_large_image">
+
+  <link rel="stylesheet" href="style.css">
+
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "SoftwareApplication",
+    "name": "cursor-pocket",
+    "applicationCategory": "DeveloperApplication",
+    "operatingSystem": "macOS, iOS (web app)",
+    "description": "Follow and drive the local chats of Cursor's Agents Window from an iPhone: push notifications, answers and approvals.",
+    "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" },
+    "license": "https://opensource.org/licenses/MIT",
+    "codeRepositoryUrl": "https://github.com/fedebartoli/cursor-pocket"
+  }
+  </script>
+  <script type="application/ld+json">
+  {
+    "@context": "https://schema.org",
+    "@type": "FAQPage",
+    "mainEntity": [
+      {
+        "@type": "Question",
+        "name": "Can I control Cursor from my iPhone?",
+        "acceptedAnswer": { "@type": "Answer", "text": "Yes. cursor-pocket runs a small daemon on your Mac and serves an installable web app to your iPhone over your private Tailscale network. You get push notifications and can answer agent questions, approve commands, send messages and start chats." }
+      },
+      {
+        "@type": "Question",
+        "name": "Does cursor-pocket send my code or chats to a cloud service?",
+        "acceptedAnswer": { "@type": "Answer", "text": "No. There is no cloud service and no account. The daemon listens on localhost and is exposed only through tailscale serve, inside your own tailnet." }
+      },
+      {
+        "@type": "Question",
+        "name": "Is cursor-pocket an official Cursor product?",
+        "acceptedAnswer": { "@type": "Answer", "text": "No. It is an unofficial open source project, not affiliated with Anysphere. It relies on Cursor internals that can change without notice." }
+      },
+      {
+        "@type": "Question",
+        "name": "Does it work with Cursor cloud agents or on Android?",
+        "acceptedAnswer": { "@type": "Answer", "text": "It targets the local chats of Cursor 3.x's Agents Window on macOS. Cloud agents are not covered. The web app is built for iPhone; other phones can open it but push notification support is only verified on iOS." }
+      }
+    ]
+  }
+  </script>
+</head>
+<body>
+  <header class="top">
+    <a class="brand" href="#top" aria-label="cursor-pocket">
+      <img src="img/mark.svg" width="28" height="28" alt="">
+      <span>cursor-pocket</span>
+    </a>
+    <nav aria-label="Main">
+      <a href="#features">Features</a>
+      <a href="#how">How it works</a>
+      <a href="#start">Quick start</a>
+      <a href="#faq">FAQ</a>
+      <a class="gh" href="https://github.com/fedebartoli/cursor-pocket">
+        <svg viewBox="0 0 24 24" width="18" height="18" fill="currentColor" aria-hidden="true"><path d="M12 .5C5.65.5.5 5.65.5 12c0 5.08 3.29 9.39 7.86 10.91.58.1.79-.25.79-.56v-2c-3.2.7-3.87-1.54-3.87-1.54-.52-1.33-1.28-1.69-1.28-1.69-1.04-.71.08-.7.08-.7 1.15.08 1.76 1.18 1.76 1.18 1.03 1.76 2.7 1.25 3.36.96.1-.75.4-1.25.73-1.54-2.55-.29-5.24-1.28-5.24-5.69 0-1.26.45-2.28 1.18-3.09-.12-.29-.51-1.46.11-3.05 0 0 .97-.31 3.17 1.18a11 11 0 0 1 5.76 0c2.2-1.49 3.17-1.18 3.17-1.18.62 1.59.23 2.76.11 3.05.74.81 1.18 1.83 1.18 3.09 0 4.42-2.7 5.4-5.27 5.68.41.36.78 1.06.78 2.14v3.17c0 .31.21.67.8.56A11.5 11.5 0 0 0 23.5 12C23.5 5.65 18.35.5 12 .5Z"/></svg>
+        GitHub
+      </a>
+    </nav>
+  </header>
+
+  <main id="top">
+    <section class="hero">
+      <div class="hero-text">
+        <p class="eyebrow">Open source &middot; macOS &middot; iPhone</p>
+        <h1>Your Cursor agents ask. You answer from your phone.</h1>
+        <p class="lead">
+          Agents stop and wait: a question, a command to approve, a plan to read. cursor-pocket sends a push notification when that
+          happens and lets you handle it from your iPhone, wherever you are. No cloud, no account.
+        </p>
+        <p class="cta">
+          <a class="btn primary" href="#start">Get started</a>
+          <a class="btn" href="https://github.com/fedebartoli/cursor-pocket">View on GitHub</a>
+        </p>
+        <p class="note">Unofficial project, not affiliated with Anysphere. Tested on Cursor 3.24.x.</p>
+      </div>
+      <figure class="hero-demo">
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="img/demo-dark.gif">
+          <img src="img/demo.gif" width="420" height="725" alt="Animated demo: a question arrives, it is answered from the phone, then a terminal command is approved">
+        </picture>
+      </figure>
+    </section>
+
+    <section id="features" class="block">
+      <h2>What you get</h2>
+      <div class="cards">
+        <article>
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M6 8a6 6 0 0 1 12 0c0 7 3 9 3 9H3s3-2 3-9"/><path d="M10.3 21a1.94 1.94 0 0 0 3.4 0"/></svg>
+          <h3>Push notifications</h3>
+          <p>A new question, a command waiting for approval, a finished chat. One notification each, no repeated reminders. Mute a chat or a project, set quiet hours.</p>
+        </article>
+        <article>
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="M20 6 9 17l-5-5"/></svg>
+          <h3>Answer and approve</h3>
+          <p>Reply to questions (single choice, multiple choice, free text), approve or reject terminal commands, send messages with images, stop an agent, start a new chat.</p>
+        </article>
+        <article>
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="18" height="11" x="3" y="11" rx="2" ry="2"/><path d="M7 11V7a5 5 0 0 1 10 0v4"/></svg>
+          <h3>Private by design</h3>
+          <p>A small Node daemon on your Mac, reachable only through your own Tailscale network. The Cursor database is opened read-only. Chats and keys are never logged.</p>
+        </article>
+        <article>
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><rect width="14" height="20" x="5" y="2" rx="2" ry="2"/><path d="M12 18h.01"/></svg>
+          <h3>The same order as Cursor</h3>
+          <p>Chats grouped by project in the order of the Agents Window sidebar, with the same red dot for "needs attention". Read any conversation, page by page.</p>
+        </article>
+        <article>
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="10"/><path d="M2 12h20"/><path d="M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+          <h3>Eight languages</h3>
+          <p>English, Italian, Spanish, French, German, Portuguese, Japanese and Simplified Chinese. Notifications follow the language of each device.</p>
+        </article>
+        <article>
+          <svg viewBox="0 0 24 24" width="24" height="24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><path d="m16 18 6-6-6-6"/><path d="m8 6-6 6 6 6"/></svg>
+          <h3>Nothing to build</h3>
+          <p>No dependencies and no build step: Node 22 and a plain web app. Try it first with a built-in demo that never touches your data.</p>
+        </article>
+      </div>
+    </section>
+
+    <section id="how" class="block">
+      <h2>How it works</h2>
+      <ol class="steps">
+        <li><strong>The daemon reads Cursor.</strong> It watches Cursor's local database, read-only, to find questions, approvals and finished chats.</li>
+        <li><strong>Your iPhone gets a push.</strong> Web Push, delivered to the app you installed on the Home Screen.</li>
+        <li><strong>You answer in the app.</strong> It reaches the daemon through Tailscale, over HTTPS, inside your private network.</li>
+        <li><strong>Cursor receives it like a click.</strong> The daemon drives the real Agents Window, so Cursor records it exactly as if you had answered on the Mac.</li>
+      </ol>
+      <figure class="wide">
+        <picture>
+          <source media="(prefers-color-scheme: dark)" srcset="img/hero-dark.png">
+          <img src="img/hero.png" loading="lazy" alt="Four screens of the app: the attention list, a question, a command waiting for approval, and the new chat screen">
+        </picture>
+      </figure>
+    </section>
+
+    <section id="start" class="block">
+      <h2>Quick start</h2>
+      <p>You need a Mac with Cursor 3.x, Node 22.13 or newer, and Tailscale on the Mac and on the iPhone. Try the demo first:</p>
+      <pre><code>git clone https://github.com/fedebartoli/cursor-pocket
+cd cursor-pocket/daemon
+npm run demo        # fake Cursor with invented chats</code></pre>
+      <p>Then run it for real:</p>
+      <pre><code>npm start                       # listens on 127.0.0.1:8787 only
+npm run pair                    # prints a one-time pairing code
+tailscale serve --bg 8787       # HTTPS inside your tailnet
+tools/cursor-cdp.sh             # optional: lets you act from the phone</code></pre>
+      <p>On the iPhone, open the HTTPS address in Safari, choose Share, Add to Home Screen, then enter the pairing code. The
+        <a href="https://github.com/fedebartoli/cursor-pocket/blob/master/docs/SETUP.md">full setup guide</a> covers every step.</p>
+    </section>
+
+    <section id="faq" class="block">
+      <h2>Questions</h2>
+      <details>
+        <summary>Can I control Cursor from my iPhone?</summary>
+        <p>Yes, for the local chats of the Agents Window. You get push notifications and can answer questions, approve commands, send messages and start chats.</p>
+      </details>
+      <details>
+        <summary>Does it send my code or chats to a cloud service?</summary>
+        <p>No. There is no cloud service and no account. The daemon listens on localhost and is exposed only through <code>tailscale serve</code>, inside your own tailnet. Never use Tailscale Funnel with it.</p>
+      </details>
+      <details>
+        <summary>Is it an official Cursor product?</summary>
+        <p>No. It is unofficial and not affiliated with Anysphere. It relies on Cursor internals that can change without notice, so after a Cursor update a small adjustment may be needed.</p>
+      </details>
+      <details>
+        <summary>Does it work with cloud agents, or on Android?</summary>
+        <p>Cloud agents are not covered: it targets local chats on macOS. The app is built and tested for iPhone, where push notifications need iOS 16.4 or newer and the app on the Home Screen.</p>
+      </details>
+      <details>
+        <summary>Is it safe to approve commands from the phone?</summary>
+        <p>The default is conservative: each device pairs with its own revocable session, approvals need a second tap to confirm, and the debug port that enables actions is opt-in. Read the <a href="https://github.com/fedebartoli/cursor-pocket/blob/master/SECURITY.md">security notes</a> before exposing anything.</p>
+      </details>
+    </section>
+  </main>
+
+  <footer>
+    <p>cursor-pocket is MIT licensed. <a href="https://github.com/fedebartoli/cursor-pocket">Source on GitHub</a> &middot;
+      <a href="https://github.com/fedebartoli/cursor-pocket/blob/master/CONTRIBUTING.md">Contribute</a> &middot;
+      <a href="https://github.com/fedebartoli/cursor-pocket/blob/master/SECURITY.md">Security</a></p>
+  </footer>
+</body>
+</html>
