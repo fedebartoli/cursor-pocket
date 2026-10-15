@@ -6,6 +6,7 @@
 </p>
 
 <p align="center">
+  <a href="https://github.com/fedebartoli/cursor-pocket/actions/workflows/test.yml"><img alt="Tests" src="https://github.com/fedebartoli/cursor-pocket/actions/workflows/test.yml/badge.svg"></a>
   <img alt="License: MIT" src="https://img.shields.io/badge/license-MIT-2f3640">
   <img alt="Node 22+" src="https://img.shields.io/badge/node-%E2%89%A5%2022.13-2f3640">
   <img alt="macOS" src="https://img.shields.io/badge/macOS-Cursor%203.x-2f3640">
