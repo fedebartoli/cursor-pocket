@@ -11,3 +11,7 @@ __pycache__/
 # Schermate del sistema: contengono nomi di chat e progetti reali
 Screenshot*.png
 Schermata*.png
+
+# Note personali (non fanno parte del repo)
+PIANO-LANCIO.md
+TESTI-LANCIO.md
