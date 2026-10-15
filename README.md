@@ -14,6 +14,14 @@
 </p>
 
 <p align="center">
+  <a href="#quick-start"><strong>Quick start</strong></a> &middot;
+  <a href="#what-you-can-do">Features</a> &middot;
+  <a href="#how-it-works">How it works</a> &middot;
+  <a href="#security">Security</a> &middot;
+  <a href="docs/SETUP.md">Full setup guide</a>
+</p>
+
+<p align="center">
   <picture>
     <source media="(prefers-color-scheme: dark)" srcset="docs/screenshots/hero-dark.png">
     <img alt="Attention list, a question from an agent, a command waiting for approval, and the new chat screen" src="docs/screenshots/hero.png">
