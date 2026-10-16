@@ -141,6 +141,9 @@ function mapUiError(err) {
 
 // After a timeout with the action still in progress, the same send stays blocked for this long past when the error was returned.
 const ORPHAN_HOLD_MS = 30_000;
+// A message whose delivery is not confirmed (Cursor wrote it late, or the page check was inconclusive) may still arrive: the same
+// text is not accepted again for this long, so a second tap cannot send it twice.
+const UNCERTAIN_HOLD_MS = 22_000;
 
 // Circuit breaker: `uiPauseFailures` "Cursor's interface changed" failures within this window (and no success in between) pause actions.
 const UI_FAILURE_WINDOW_MS = 10 * 60_000;
@@ -345,11 +348,12 @@ export class Actions extends EventEmitter {
     }
     this.#inFlight.add(id);
     return {
-      done: (ok) => {
+      /** `holdMs`: keep refusing the same request for this long beyond the normal window (outcome not certain). */
+      done: (ok, holdMs = 0) => {
         this.#inFlight.delete(id);
         // With a timed-out action still running the outcome is unknown: block resend for a while longer.
-        if (ok) this.#recent.set(id, this.now());
-        else if (this.#orphans > 0) this.#recent.set(id, this.now() + ORPHAN_HOLD_MS);
+        if (ok) this.#recent.set(id, this.now() + holdMs);
+        else if (holdMs > 0 || this.#orphans > 0) this.#recent.set(id, this.now() + Math.max(holdMs, this.#orphans > 0 ? ORPHAN_HOLD_MS : 0));
         for (const [k, v] of this.#recent) if (this.now() - v > 120_000) this.#recent.delete(k);
       },
     };
@@ -703,15 +707,30 @@ export class Actions extends EventEmitter {
     // A double tap on the button must not send the same text twice.
     const slot = this.#dedupe('message', chatId, crypto.createHash('sha1').update(clean + '\u0000' + ids.join(',')).digest('hex').slice(0, 16), 8_000);
     let ok = false;
+    let hold = 0;
     try {
       const res = await this.#run('message', async () => {
         const before = this.db.composerTail(chatId);
-        await this.ui.sendMessage({ composerId: chatId, text: clean, ...(files.length ? { files } : {}) });
-        const tail = await this.#waitFor(() => {
+        const delivered = () => {
           const t = this.db.composerTail(chatId);
           if (!t || !before) return null;
           return t.bubbleCount > before.bubbleCount || t.queueLength > before.queueLength ? t : null;
-        }, 12_000);
+        };
+        try {
+          await this.ui.sendMessage({ composerId: chatId, text: clean, ...(files.length ? { files } : {}) });
+        } catch (err) {
+          if (err?.code !== 'send_failed') throw err;
+          // The page did not clear the composer in time, but the click may well have landed and Cursor may write the message
+          // a little late. Look at the database before calling it a failure (a false failure makes people send it twice).
+          const late = await this.#waitFor(delivered, 8_000);
+          if (!late) {
+            hold = UNCERTAIN_HOLD_MS;
+            throw err;
+          }
+          return { ok: true, verified: true, queued: late.queueLength > before.queueLength };
+        }
+        const tail = await this.#waitFor(delivered, 12_000);
+        if (!tail) hold = UNCERTAIN_HOLD_MS;
         return { ok: true, verified: Boolean(tail), queued: Boolean(tail && before && tail.queueLength > before.queueLength) };
       });
       ok = true;
@@ -722,7 +741,7 @@ export class Actions extends EventEmitter {
       this.watcher.boost?.(chatId); // after the action the chat is re-read every second: agent reaction shows up quickly
       return res;
     } finally {
-      slot.done(ok);
+      slot.done(ok, hold);
     }
   }
 }

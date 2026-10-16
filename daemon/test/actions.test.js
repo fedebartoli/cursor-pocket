@@ -84,7 +84,7 @@ test('answersMatch: compares option sets and freeform (normalized spaces)', () =
 // service: queue, timeout, status (fake db/watcher/ui)
 // ----------------------------------------------------------------------------------------------------------------
 
-function service({ ui, config = {}, chats = [{ id: 'c1', attention: null }, { id: 'c2', attention: null }], db } = {}) {
+function service({ ui, config = {}, chats = [{ id: 'c1', attention: null }, { id: 'c2', attention: null }], db, now } = {}) {
   const logs = [];
   const logger = { info: (m, f) => logs.push(['info', m, f]), warn: (m, f) => logs.push(['warn', m, f]), error: (m, f) => logs.push(['error', m, f]), debug() {} };
   const state = { count: 0 };
@@ -96,6 +96,7 @@ function service({ ui, config = {}, chats = [{ id: 'c1', attention: null }, { id
     config: { actionsEnabled: true, cdpPollMs: 60_000, actionTimeoutMs: 1000, ...config },
     logger,
     sleep: fast,
+    ...(now ? { now } : {}),
   });
   return { a, logs, state };
 }
@@ -1103,4 +1104,68 @@ test('breaker: closing Cursor clears the pause (an update is applied by restarti
   await send(a, 7);
   assert.ok(logs.some(([, m, f]) => m === 'actions_resumed' && f.reason === 'restart'));
   assert.ok(logs.some(([, m]) => m === 'actions_paused'));
+});
+
+// ----------------------------------------------------------------------------------------------------------------
+// a slow write must not turn into a double send
+// ----------------------------------------------------------------------------------------------------------------
+
+test('message: the page reports "not sent" but Cursor wrote it late: success, not an error, and it does not count against the breaker', async () => {
+  const { a, state } = service({
+    config: { uiPauseFailures: 2 },
+    ui: upUi({
+      async sendMessage() {
+        state.count++; // the click landed and the database caught up...
+        throw uiError('send_failed'); // ...but the page check had already given up
+      },
+    }),
+  });
+  await a.refresh();
+  for (let i = 0; i < 4; i++) {
+    const r = await a.sendMessage('c1', { text: `late ${i}` });
+    assert.equal(r.ok, true);
+    assert.equal(r.verified, true);
+  }
+  assert.equal(a.status.reason, 'ok', 'real deliveries are never counted as interface failures');
+});
+
+test('message: not sent and nothing in the database: error, but the same text is refused for a while (it may still arrive)', async () => {
+  const clock = { t: 1_000_000 };
+  const { a } = service({
+    now: () => clock.t,
+    ui: upUi({
+      async sendMessage() {
+        throw uiError('send_failed');
+      },
+    }),
+  });
+  await a.refresh();
+  await assert.rejects(a.sendMessage('c1', { text: 'ciao' }), (e) => e.code === 'ui_changed');
+  await assert.rejects(a.sendMessage('c1', { text: 'ciao' }), (e) => e.status === 409 && e.code === 'already_sent');
+  await a.sendMessage('c2', { text: 'ciao' }).catch((e) => assert.equal(e.code, 'ui_changed')); // another chat is not blocked
+  clock.t += 20_000;
+  await assert.rejects(a.sendMessage('c1', { text: 'ciao' }), (e) => e.code === 'already_sent', 'still inside the hold');
+  clock.t += 20_000;
+  await assert.rejects(a.sendMessage('c1', { text: 'ciao' }), (e) => e.code === 'ui_changed', 'after the hold it is tried again');
+});
+
+test('message: sent but the database did not confirm: "verified: false" and the same text is refused for 30 s', async () => {
+  const clock = { t: 1_000_000 };
+  let sent = 0;
+  const { a } = service({
+    now: () => clock.t,
+    ui: upUi({
+      async sendMessage() {
+        sent++; // goes out, the database never changes
+      },
+    }),
+  });
+  await a.refresh();
+  const r = await a.sendMessage('c1', { text: 'ciao' });
+  assert.equal(r.verified, false);
+  clock.t += 10_000;
+  await assert.rejects(a.sendMessage('c1', { text: 'ciao' }), (e) => e.code === 'already_sent', 'past the old 8 s window, still held');
+  clock.t += 25_000;
+  await a.sendMessage('c1', { text: 'ciao' });
+  assert.equal(sent, 2);
 });

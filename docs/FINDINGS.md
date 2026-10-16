@@ -778,6 +778,13 @@ Prompted by a question from a user: how do writes reach Cursor, and what happens
   NOT used as a canary.
 - Gap 2: actions only found out about interface changes one failure at a time. Circuit breaker described in ARCHITECTURE.
 - Release: `cursor/version.js` reads `Cursor.app/Contents/Resources/app/package.json`; outside the tested list is a notice.
+- Follow-up from the same user: if the click lands but the database write lags past the check, the phone shows an error, the user
+  taps send again and the message goes out twice. Two paths existed: (a) the page check (composer must clear within 10 s) fails with
+  `send_failed` although the message goes out late; (b) the database check (12 s) times out and the answer was `verified: false`,
+  with only an 8 s block on the same text. Now (a) re-reads the database for 8 s before reporting failure and counts as success
+  if the message appeared (and never counts toward the circuit breaker); in both cases an uncertain outcome blocks the same
+  text on the same chat for about 30 s (`already_sent`). The timeout case (504) already had a 30 s hold. NOT verified live
+  (tested with fakes only).
 - NOT verified: behavior against a REAL Cursor update (the breaker and the layout check are tested with fakes and a synthetic
   database, and the layout check against the current real one).
 

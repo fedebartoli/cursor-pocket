@@ -13,6 +13,9 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 - Phone actions pause themselves after three consecutive "Cursor's interface changed" failures: the app stays read-only and says
   why, instead of clicking at things that are not there. They resume when the page check passes again or Cursor restarts; after
   resuming, one more failure pauses them again. `CP_UI_PAUSE_FAILURES=0` turns this off.
+- Sending a message no longer risks a double send when Cursor is slow: if the page does not confirm in time, the database is
+  checked for up to 8 more seconds before reporting a failure (a message that arrived late is a success), and the same text is
+  refused for about 30 seconds whenever the outcome is uncertain (not confirmed, or reported as not sent).
 - The installed Cursor release is read automatically (Settings shows it, with "not tested yet" for a release outside the tested
   list). It is only a notice: nothing is disabled because of a version.
 
