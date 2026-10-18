@@ -509,11 +509,20 @@ test('HTTP message: cleaned text, DB verify, queue, duplicate send and limits', 
     assert.deepEqual(r.json(), { ok: true, verified: true, queued: false });
     assert.deepEqual(ui.calls[0][1], { composerId: ID, text: 'ciao\ncome va' });
 
-    // double tap with same text
+    // the same text again right after a confirmed delivery is a deliberate repeat ("yes", "continue"); this time the
+    // database shows nothing new, so the outcome is uncertain
+    const again = await post('message', { text: 'ciao\ncome va' });
+    assert.equal(again.status, 200, again.text);
+    assert.equal(again.json().verified, false);
+    assert.equal(ui.calls.length, 2);
+
+    // uncertain outcome: a tap on the same text is refused, "send anyway" (force) is accepted
     const dup = await post('message', { text: 'ciao\ncome va' });
     assert.equal(dup.status, 409);
     assert.equal(dup.json().error, 'already_sent');
-    assert.equal(ui.calls.length, 1);
+    assert.equal(ui.calls.length, 2);
+    assert.equal((await post('message', { text: 'ciao\ncome va', force: true })).status, 200);
+    assert.equal(ui.calls.length, 3);
 
     // different text ok; Cursor queues it (agent working)
     ui.onMessage = () =>
@@ -1168,4 +1177,62 @@ test('message: sent but the database did not confirm: "verified: false" and the 
   clock.t += 25_000;
   await a.sendMessage('c1', { text: 'ciao' });
   assert.equal(sent, 2);
+});
+
+// ----------------------------------------------------------------------------------------------------------------
+// a deliberate repeat ("yes", "continue") must not be refused
+// ----------------------------------------------------------------------------------------------------------------
+
+test('message: a delivery the database confirmed does not block the same short text sent again', async () => {
+  const { a, state } = service({
+    ui: upUi({
+      async sendMessage() {
+        state.count++;
+      },
+    }),
+  });
+  await a.refresh();
+  assert.equal((await a.sendMessage('c1', { text: 'yes' })).verified, true);
+  assert.equal((await a.sendMessage('c1', { text: 'yes' })).verified, true, 'a repeat right away is deliberate');
+  assert.equal(state.count, 2);
+});
+
+test('message: concurrent double tap is still refused, even with force', async () => {
+  let release;
+  const gate = new Promise((r) => {
+    release = r;
+  });
+  const { a, state } = service({
+    ui: upUi({
+      async sendMessage() {
+        await gate;
+        state.count++;
+      },
+    }),
+  });
+  await a.refresh();
+  const first = a.sendMessage('c1', { text: 'yes' });
+  await assert.rejects(a.sendMessage('c1', { text: 'yes' }), (e) => e.code === 'already_sent');
+  await assert.rejects(a.sendMessage('c1', { text: 'yes', force: true }), (e) => e.code === 'already_sent', 'force does not skip the in-flight guard');
+  release();
+  await first;
+});
+
+test('message: force skips the hold of an uncertain delivery, and only that one', async () => {
+  const clock = { t: 1_000_000 };
+  let sent = 0;
+  const { a } = service({
+    now: () => clock.t,
+    ui: upUi({
+      async sendMessage() {
+        sent++; // goes out, the database never changes
+      },
+    }),
+  });
+  await a.refresh();
+  assert.equal((await a.sendMessage('c1', { text: 'yes' })).verified, false);
+  await assert.rejects(a.sendMessage('c1', { text: 'yes' }), (e) => e.code === 'already_sent');
+  assert.equal((await a.sendMessage('c1', { text: 'yes', force: true })).verified, false, 'send anyway');
+  assert.equal(sent, 2);
+  await assert.rejects(a.sendMessage('c1', { text: 'yes' }), (e) => e.code === 'already_sent', 'the new send is held again');
 });

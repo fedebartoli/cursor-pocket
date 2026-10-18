@@ -161,6 +161,7 @@ export default {
     "composer.placeholderBlocked": "Répondez d’abord à la question",
     "composer.placeholderReady": "Message à Cursor",
     "composer.placeholderUnavailable": "Écriture indisponible",
+    "composer.sendAnyway": "Envoyer quand même",
     "composer.sendFailed": "Échec de l’envoi.",
     "composer.sendMessage": "Envoyer le message",
     "composer.stopAgent": "Arrêter l’agent",

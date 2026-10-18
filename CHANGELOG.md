@@ -16,6 +16,9 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 - Sending a message no longer risks a double send when Cursor is slow: if the page does not confirm in time, the database is
   checked for up to 8 more seconds before reporting a failure (a message that arrived late is a success), and the same text is
   refused for about 30 seconds whenever the outcome is uncertain (not confirmed, or reported as not sent).
+- A short message sent twice on purpose ("yes", "continue") is no longer refused. After a delivery the database confirmed, the same
+  text can be sent again at once (the guard against an accidental double tap while a send is in progress stays). When the outcome
+  is uncertain and the same text is refused, the app offers "Send anyway" (`force` on `POST /api/chats/:id/message`).
 - The installed Cursor release is read automatically (Settings shows it, with "not tested yet" for a release outside the tested
   list). It is only a notice: nothing is disabled because of a version.
 

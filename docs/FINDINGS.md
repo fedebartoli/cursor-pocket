@@ -426,7 +426,8 @@ Read `out/vs/workbench/workbench.glass.main.js` (never modified). Beyond the sel
 - One action at a time (serial queue: they manipulate the same window). If time runs out
   (`CP_ACTION_TIMEOUT_SECONDS`, 45 s) the phone gets 504 immediately, but the queue stays busy until the real work
   finishes: no second action runs on top of the first.
-- Deduplication: same answer within 60 s, or same message text within 8 s, yields 409 `already_sent`.
+- Deduplication: same answer within 60 s yields 409 `already_sent`. Same message text: refused only while a send is in progress or
+  after an UNCERTAIN delivery (~30 s; `force: true` overrides the latter); a confirmed delivery does not block a repeat.
 - A message is not sent if a question is pending (409 `question_pending`: answer first), if approval is pending
   (409 `approval_pending`: with “ferma e invia” (stop and send) enabled in Cursor it would cancel the command, so decide first on the
   Mac; section 11), or if the Cursor composer already has a draft (`draft_not_empty`): work the user did on the Mac is never
@@ -785,6 +786,10 @@ Prompted by a question from a user: how do writes reach Cursor, and what happens
   if the message appeared (and never counts toward the circuit breaker); in both cases an uncertain outcome blocks the same
   text on the same chat for about 30 s (`already_sent`). The timeout case (504) already had a 30 s hold. NOT verified live
   (tested with fakes only).
+- Second follow-up: the hold had no way out, and even a CONFIRMED send blocked the same text for 8 s, so a deliberate "yes" twice
+  was refused. Now a confirmed delivery releases the key at once (the concurrent guard, one send at a time per chat and text, stays);
+  only an uncertain outcome holds for ~30 s, and the PWA then shows "Send anyway", which sends `force: true` (skips the hold,
+  never the concurrent guard). NOT verified live (fakes only).
 - NOT verified: behavior against a REAL Cursor update (the breaker and the layout check are tested with fakes and a synthetic
   database, and the layout check against the current real one).
 

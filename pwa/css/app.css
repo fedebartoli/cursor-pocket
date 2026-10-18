@@ -556,6 +556,7 @@ button.section-head { cursor: pointer; }
 .dock[hidden] { display: none; }
 .kb-open .dock { padding-bottom: 8px; }
 .dock-hint, .dock-status { margin: 0 4px 8px; color: var(--text-2); font-size: 13px; }
+.dock-status .link { padding: 0; border: 0; background: none; font: inherit; font-weight: 650; cursor: pointer; }
 .dock[data-mode="unavailable"] .composer { display: none; }
 .dock[data-mode="unavailable"] .dock-hint { margin-bottom: 0; }
 .composer { display: flex; align-items: flex-end; gap: 8px; }

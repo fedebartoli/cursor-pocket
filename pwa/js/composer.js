@@ -10,6 +10,7 @@ import { icon } from './icons.js';
 export const MESSAGE_MAX = 8000; // same as daemon LIMITS.messageChars
 const MAX_HEIGHT = 140;
 const STATUS_MS = 9000;
+const ACTION_STATUS_MS = 20000; // a status with a button stays long enough to be tapped
 const STOP_ARM_MS = 4000;
 
 const drafts = new Map(); // chatId -> text
@@ -17,7 +18,7 @@ const drafts = new Map(); // chatId -> text
 /**
  * @param {object} p
  * @param {string} p.chatId
- * @param {(text: string, images: string[]) => Promise<string>} p.onSend  send (images = ids of uploaded images); resolves with outcome text, rejects with Error(message)
+ * @param {(text: string, images: string[]) => Promise<string>} p.onSend  send (images = ids of uploaded images; `opts.force` = send even if the same text was just sent); resolves with outcome text, rejects with Error(message)
  * @param {() => Promise<string>} [p.onStop]  stop the agent (only while working and the field is empty); same convention as onSend
  */
 export function createComposer({ chatId, onSend, onStop }) {
@@ -78,16 +79,20 @@ export function createComposer({ chatId, onSend, onStop }) {
     sendBtn.disabled = stop ? busy : locked || files.uploading() || (area.value.trim().length === 0 && files.readyIds().length === 0);
   }
 
-  function showStatus(text, error = false) {
+  // `action`: optional {label, run}; shown as a text button after the message (for example "Send anyway").
+  function showStatus(text, error = false, action = null) {
     clearTimeout(statusTimer);
     statusEl.hidden = !text;
     statusEl.textContent = text ?? '';
     statusEl.classList.toggle('error-text', error);
+    if (text && action) {
+      statusEl.append(' ', h('button', { class: 'link', type: 'button', onClick: action.run }, action.label));
+    }
     if (text) {
       statusTimer = setTimeout(() => {
         statusEl.hidden = true;
         statusEl.textContent = '';
-      }, STATUS_MS);
+      }, action ? ACTION_STATUS_MS : STATUS_MS);
     }
   }
 
@@ -125,8 +130,7 @@ export function createComposer({ chatId, onSend, onStop }) {
     sync();
   }
 
-  form.addEventListener('submit', async (ev) => {
-    ev.preventDefault();
+  async function submit(force = false) {
     if (stopping()) return doStop();
     const text = area.value.trim();
     const ids = files.readyIds();
@@ -135,7 +139,7 @@ export function createComposer({ chatId, onSend, onStop }) {
     showStatus(null);
     sync();
     try {
-      const msg = await onSend(text, ids);
+      const msg = await onSend(text, ids, force ? { force: true } : undefined);
       area.value = '';
       drafts.delete(chatId);
       files.clearLocal(); // daemon already deleted them after send
@@ -143,10 +147,18 @@ export function createComposer({ chatId, onSend, onStop }) {
       area.blur(); // dismiss keyboard: chat state should be visible
       showStatus(msg);
     } catch (err) {
-      showStatus(err?.message || t('composer.sendFailed'), true);
+      // The same text was sent a moment ago and Cursor has not registered it yet (or it is not sure): the user may really
+      // want it twice ("yes", "continue"), so offer to send it anyway instead of making them wait it out.
+      const again = err?.code === 'already_sent' ? { label: t('composer.sendAnyway'), run: () => submit(true) } : null;
+      showStatus(err?.message || t('composer.sendFailed'), true, again);
     }
     busy = false;
     sync();
+  }
+
+  form.addEventListener('submit', (ev) => {
+    ev.preventDefault();
+    submit();
   });
 
   sync();

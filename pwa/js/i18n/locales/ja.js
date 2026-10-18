@@ -161,6 +161,7 @@ export default {
     "composer.placeholderBlocked": "先に質問に答えてください",
     "composer.placeholderReady": "Cursorにメッセージ",
     "composer.placeholderUnavailable": "入力できません",
+    "composer.sendAnyway": "そのまま送信",
     "composer.sendFailed": "送信に失敗しました。",
     "composer.sendMessage": "送信",
     "composer.stopAgent": "エージェントを停止",

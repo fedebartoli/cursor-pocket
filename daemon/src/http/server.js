@@ -266,7 +266,7 @@ export function createHttpServer({ config, store, auth, hub, watcher, notifier, 
         else if (action === 'archive') result = await actions.archive(id);
         else if (action === 'pin') result = await actions.pin(id, { pinned: body.pinned });
         else if (action === 'approval') result = await actions.approval(id, { key: body.key, decision: body.decision });
-        else result = await actions.sendMessage(id, { text: body.text, images: body.images });
+        else result = await actions.sendMessage(id, { text: body.text, images: body.images, force: body.force === true });
         return sendJson(res, 200, result, headers);
       }
       throw new HttpError(405, 'method_not_allowed', 'Method not allowed.');

@@ -161,6 +161,7 @@ export default {
     "composer.placeholderBlocked": "请先回答问题",
     "composer.placeholderReady": "给 Cursor 发消息",
     "composer.placeholderUnavailable": "无法输入",
+    "composer.sendAnyway": "仍然发送",
     "composer.sendFailed": "发送失败。",
     "composer.sendMessage": "发送消息",
     "composer.stopAgent": "停止代理",

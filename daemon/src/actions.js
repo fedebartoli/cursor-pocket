@@ -144,6 +144,8 @@ const ORPHAN_HOLD_MS = 30_000;
 // A message whose delivery is not confirmed (Cursor wrote it late, or the page check was inconclusive) may still arrive: the same
 // text is not accepted again for this long, so a second tap cannot send it twice.
 const UNCERTAIN_HOLD_MS = 22_000;
+// `done(true, RELEASE)`: the outcome is certain, so a repeat of the same text is a deliberate one and is not refused.
+const RELEASE = -1;
 
 // Circuit breaker: `uiPauseFailures` "Cursor's interface changed" failures within this window (and no success in between) pause actions.
 const UI_FAILURE_WINDOW_MS = 10 * 60_000;
@@ -340,10 +342,11 @@ export class Actions extends EventEmitter {
   }
 
   /** The same request (same chat and same question) must not start twice, neither concurrently nor back-to-back. */
-  #dedupe(kind, chatId, key, ttlMs = 60_000) {
+  #dedupe(kind, chatId, key, ttlMs = 60_000, { force = false } = {}) {
     const id = `${kind}:${chatId}:${key}`;
     const t = this.#recent.get(id);
-    if (this.#inFlight.has(id) || (t !== undefined && this.now() - t < ttlMs)) {
+    // `force` (the user chose "send anyway") skips the back-to-back hold, never the concurrent one.
+    if (this.#inFlight.has(id) || (!force && t !== undefined && this.now() - t < ttlMs)) {
       throw new ActionError(409, 'already_sent', 'This request was already sent.');
     }
     this.#inFlight.add(id);
@@ -352,7 +355,8 @@ export class Actions extends EventEmitter {
       done: (ok, holdMs = 0) => {
         this.#inFlight.delete(id);
         // With a timed-out action still running the outcome is unknown: block resend for a while longer.
-        if (ok) this.#recent.set(id, this.now() + holdMs);
+        if (ok && holdMs === RELEASE) this.#recent.delete(id);
+        else if (ok) this.#recent.set(id, this.now() + holdMs);
         else if (holdMs > 0 || this.#orphans > 0) this.#recent.set(id, this.now() + Math.max(holdMs, this.#orphans > 0 ? ORPHAN_HOLD_MS : 0));
         for (const [k, v] of this.#recent) if (this.now() - v > 120_000) this.#recent.delete(k);
       },
@@ -673,7 +677,7 @@ export class Actions extends EventEmitter {
   }
 
   /** Writes a message in the chat. If the agent is working, Cursor decides (queue or immediate send, its setting). */
-  async sendMessage(chatId, { text, images } = {}) {
+  async sendMessage(chatId, { text, images, force = false } = {}) {
     const ids = images === undefined ? [] : images;
     if (!Array.isArray(ids) || ids.length > UPLOAD_LIMITS.perMessage || !ids.every((x) => typeof x === 'string')) {
       throw new ActionError(400, 'bad_images', `At most ${UPLOAD_LIMITS.perMessage} images can be attached.`, {
@@ -705,9 +709,9 @@ export class Actions extends EventEmitter {
       );
     }
     // A double tap on the button must not send the same text twice.
-    const slot = this.#dedupe('message', chatId, crypto.createHash('sha1').update(clean + '\u0000' + ids.join(',')).digest('hex').slice(0, 16), 8_000);
+    const slot = this.#dedupe('message', chatId, crypto.createHash('sha1').update(clean + '\u0000' + ids.join(',')).digest('hex').slice(0, 16), 8_000, { force: force === true });
     let ok = false;
-    let hold = 0;
+    let hold = RELEASE;
     try {
       const res = await this.#run('message', async () => {
         const before = this.db.composerTail(chatId);
@@ -727,10 +731,11 @@ export class Actions extends EventEmitter {
             hold = UNCERTAIN_HOLD_MS;
             throw err;
           }
+          hold = RELEASE;
           return { ok: true, verified: true, queued: late.queueLength > before.queueLength };
         }
         const tail = await this.#waitFor(delivered, 12_000);
-        if (!tail) hold = UNCERTAIN_HOLD_MS;
+        hold = tail ? RELEASE : UNCERTAIN_HOLD_MS;
         return { ok: true, verified: Boolean(tail), queued: Boolean(tail && before && tail.queueLength > before.queueLength) };
       });
       ok = true;

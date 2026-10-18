@@ -432,16 +432,18 @@ export function mountChat(root, id) {
     if (force && changed && renaming) document.getElementById('rename-input')?.focus();
   }
 
-  async function sendMessage(text, images = []) {
+  async function sendMessage(text, images = [], opts = {}) {
     try {
-      const res = await api.post(`/api/chats/${enc}/message`, images.length ? { text, images } : { text });
+      const body = images.length ? { text, images } : { text };
+      if (opts?.force) body.force = true;
+      const res = await api.post(`/api/chats/${enc}/message`, body);
       markActed(Date.now());
       refreshSoon();
       load();
       return describeMessageResult(res);
     } catch (err) {
       if (shouldRefreshAfter(err)) refresh().catch(() => {});
-      throw new Error(describeActionError(err));
+      throw Object.assign(new Error(describeActionError(err)), { code: err?.code });
     }
   }
 

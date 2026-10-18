@@ -161,6 +161,7 @@ export default {
     "composer.placeholderBlocked": "Zuerst die Frage beantworten",
     "composer.placeholderReady": "Cursor schreiben",
     "composer.placeholderUnavailable": "Schreiben nicht verfügbar",
+    "composer.sendAnyway": "Trotzdem senden",
     "composer.sendFailed": "Senden fehlgeschlagen.",
     "composer.sendMessage": "Nachricht senden",
     "composer.stopAgent": "Agent stoppen",
