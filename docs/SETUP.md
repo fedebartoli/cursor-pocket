@@ -111,8 +111,14 @@ debug port. Without it, the app stays read-only (notifications, list, “Ignore�
    or files in `~/.cursor`: the option applies only to that launch. `tools/cursor-cdp.sh status` says whether the port responds.
 3. In the app’s “Settings” the “Answer from phone” panel switches to “Active” on its own (the daemon checks every 5 s).
    From the terminal: `cd daemon && npm run cdp -- status`.
-4. To disable it: quit Cursor and reopen it normally (Dock, Spotlight). After every Mac or Cursor restart repeat
-   step 2: the option is not permanent. A permanent launcher (app or Shortcut) has not been created.
+4. To disable it: quit Cursor and reopen it normally (Dock, Spotlight). The option is not permanent: after every Mac restart,
+   and after a Cursor self-update (which relaunches it without the flag), the port is closed until Cursor is started with it again.
+   `~/.cursor/argv.json` cannot set it.
+
+To avoid repeating step 2, run `tools/mac/make-launcher.sh` once. It creates `~/Applications/Cursor Pocket.app`, a tiny launcher
+(no Cursor setting or `~/.cursor` file is touched): open Cursor through it (Spotlight, or drag it to the Dock in place of Cursor)
+and the port is always on. If Cursor is already open without the port it only says so; it never restarts Cursor, because that
+would interrupt running chats. `tools/mac/make-launcher.sh --remove` deletes it.
 
 What you can do from the phone, in a chat:
 - Pending question: choose options (one or more, depending on the question), or “Altro” and write the answer, then “Invia

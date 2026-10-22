@@ -87,7 +87,7 @@ click with Cursor in the background, interface from the PWA on iPhone.
      `approval_gone`. If the chat waits but the log is silent, the signal is not written during the wait: update 11.4.
 - [ ] Handle dead questions after Cursor restart (today 409 `no_question`; evaluate fallback to new message).
 - [ ] Test on real iPhone: no zoom on double tap, composer above keyboard, full-screen PWA.
-- [ ] Permanent Cursor launcher with the flag (app or Quick Command): only with user consent.
+- [x] Permanent Cursor launcher with the flag: `tools/mac/make-launcher.sh` builds `~/Applications/Cursor Pocket.app` (Oct 22, with consent). A Cursor self-update still relaunches without the flag.
 - [x] App icon on Home screen and favicon (own mark, replaced the Cursor logo before going public): `tools/make-icons.mjs`
   derives it from `pwa/icons/app-logo.svg`. On Home it will show only after removing and re-adding the app (iOS caches the old
   icon).

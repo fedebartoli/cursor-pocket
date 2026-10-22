@@ -11,6 +11,8 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
   check also reports an emptied list, which it missed because the array was still there.
 
 ### Added
+- `tools/mac/make-launcher.sh` creates `Cursor Pocket.app`, a launcher that opens Cursor with the debug port, so phone actions do not
+  depend on remembering to start Cursor from the terminal. It never restarts a Cursor that is already open.
 - Compatibility check with Cursor. A moved field inside Cursor's database used to stop detection without any error (no red dot,
   no push). The daemon now checks, every few minutes and read-only, that column names and JSON field types of a few recent chats
   are what it reads (never content). When they are not, the home screen shows a banner, Settings says so, `/api/info` and
