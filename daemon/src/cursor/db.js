@@ -62,9 +62,22 @@ export class CursorDb {
                 json_extract(value, '$.fullConversationHeadersOnly[#-1]') AS lastHeader,
                 json_extract(value, '$.fullConversationHeadersOnly[#-2]') AS prevHeader,
                 json_array_length(value, '$.fullConversationHeadersOnly') AS bubbleCount,
-                json_array_length(value, '$.queueItems') AS queueLength
+                json_array_length(value, '$.queueItems') AS queueLength,
+                json_extract(value, '$.headerLog.count') AS logCount,
+                json_extract(value, '$.headerLog.chunkSize') AS logChunkSize,
+                json_extract(value, '$.headerLog.chunkCount') AS logChunkCount
            FROM cursorDiskKV WHERE key = ?`,
       ),
+      // Newer Cursor releases (3.26): the bubble list lives in numbered chunk rows, see `#headers`.
+      chunkTail: db.prepare(
+        `SELECT json_extract(value, '$[#-1]') AS last, json_extract(value, '$[#-2]') AS prev, json_array_length(value) AS n
+           FROM cursorDiskKV WHERE key = ?`,
+      ),
+      chunkItems: db.prepare(
+        `SELECT j.key AS idx, json_extract(j.value, '$.bubbleId') AS bubbleId, json_extract(j.value, '$.type') AS type
+           FROM cursorDiskKV AS c, json_each(c.value) AS j WHERE c.key = ?`,
+      ),
+      chunkType: db.prepare('SELECT json_type(value) AS t FROM cursorDiskKV WHERE key = ?'),
       bubble: db.prepare(
         `SELECT json_extract(value, '$.type') AS type,
                 json_extract(value, '$.createdAt') AS createdAt,
@@ -103,11 +116,6 @@ export class CursorDb {
                 json_extract(value, '$.toolFormerData.status') AS toolStatus,
                 substr(json_extract(value, '$.text'), 1, ?) AS text
            FROM cursorDiskKV WHERE key = ?`,
-      ),
-      bubbleIds: db.prepare(
-        `SELECT json_extract(j.value, '$.bubbleId') AS bubbleId, json_extract(j.value, '$.type') AS type
-           FROM cursorDiskKV AS c, json_each(c.value, '$.fullConversationHeadersOnly') AS j
-          WHERE c.key = ? AND j.key >= ?`,
       ),
       bubbleIdsRange: db.prepare(
         `SELECT json_extract(j.value, '$.bubbleId') AS bubbleId, json_extract(j.value, '$.type') AS type
@@ -191,16 +199,62 @@ export class CursorDb {
     return r ? { archived: r.isArchived === 1, draft: r.isDraft === 1, name: typeof r.name === 'string' ? r.name : null } : null;
   }
 
+  /**
+   * Where a chat's bubble list lives. Cursor up to 3.25 keeps it in `composerData.fullConversationHeadersOnly`; from 3.26 that array
+   * is empty and the list is stored in numbered rows `composerConvHeaders:<id>:<000000>` (arrays of up to `chunkSize` headers, in
+   * order) described by `composerData.headerLog` ({count, chunkSize, chunkCount}). `row` = result of the `tail` statement.
+   */
+  #source(row) {
+    const count = Number(row.logCount);
+    const size = Number(row.logChunkSize);
+    if (Number.isInteger(count) && count > 0 && Number.isInteger(size) && size > 0) {
+      return { chunked: true, count, size, chunks: Math.max(1, Number(row.logChunkCount) || Math.ceil(count / size)) };
+    }
+    return { chunked: false, count: row.bubbleCount ?? 0 };
+  }
+
+  static #chunkKey(composerId, index) {
+    return `composerConvHeaders:${composerId}:${String(index).padStart(6, '0')}`;
+  }
+
+  /** The last two bubble headers of a chunked list, `[last, prev]` (either may be null). */
+  #chunkedTail(composerId, src) {
+    const found = [];
+    for (let c = src.chunks - 1; c >= 0 && found.length < 2; c--) {
+      const r = this.#need().chunkTail.get(CursorDb.#chunkKey(composerId, c));
+      if (!r || !r.n) continue;
+      found.push(safeJsonParse(r.last, null));
+      if (r.n >= 2 && found.length < 2) found.push(safeJsonParse(r.prev, null));
+    }
+    return [found[0] ?? null, found[1] ?? null];
+  }
+
+  /** Bubble headers `[from, end)` as `{ bubbleId, type }`, oldest first, from whichever layout the chat uses. */
+  #headers(composerId, row, from, end) {
+    const st = this.#need();
+    const src = this.#source(row);
+    if (end <= from) return [];
+    if (!src.chunked) return st.bubbleIdsRange.all(`composerData:${composerId}`, from, end);
+    const out = [];
+    for (let c = Math.floor(from / src.size); c <= Math.floor((end - 1) / src.size); c++) {
+      for (const r of st.chunkItems.all(CursorDb.#chunkKey(composerId, c))) {
+        const index = c * src.size + Number(r.idx);
+        if (index >= from && index < end) out.push({ index, bubbleId: r.bubbleId, type: r.type });
+      }
+    }
+    return out.sort((a, b) => a.index - b.index);
+  }
+
   /** Summary state of a chat's composerData (null if missing). */
   composerTail(composerId) {
     const r = this.#need().tail.get(`composerData:${composerId}`);
     if (!r) return null;
-    const last = safeJsonParse(r.lastHeader, null);
-    const prev = safeJsonParse(r.prevHeader, null);
+    const src = this.#source(r);
+    const [last, prev] = src.chunked ? this.#chunkedTail(composerId, src) : [safeJsonParse(r.lastHeader, null), safeJsonParse(r.prevHeader, null)];
     const head = (h) => (h && h.bubbleId ? { id: h.bubbleId, type: h.type ?? null, createdAt: toMs(h.createdAt) } : null);
     return {
       status: r.status ?? null,
-      bubbleCount: r.bubbleCount ?? 0,
+      bubbleCount: src.count,
       queueLength: r.queueLength ?? 0,
       lastBubble: head(last),
       // Second-to-last bubble: Cursor looks for pending approval among the LAST TWO (FINDINGS 11).
@@ -269,10 +323,10 @@ export class CursorDb {
   /** Last assistant message with text, searching the last `lookback` bubbles. */
   lastAssistantMessage(composerId, { lookback = 40, maxChars = 1200 } = {}) {
     const st = this.#need();
-    const tail = st.tail.get(`composerData:${composerId}`);
-    if (!tail || !tail.bubbleCount) return null;
-    const from = Math.max(0, tail.bubbleCount - lookback);
-    const ids = st.bubbleIds.all(`composerData:${composerId}`, from);
+    const row = st.tail.get(`composerData:${composerId}`);
+    const count = row ? this.#source(row).count : 0;
+    if (!count) return null;
+    const ids = this.#headers(composerId, row, Math.max(0, count - lookback), count);
     for (let i = ids.length - 1; i >= 0; i--) {
       if (ids[i].type !== 2) continue;
       const b = st.bubbleText.get(maxChars, `bubbleId:${composerId}:${ids[i].bubbleId}`);
@@ -288,9 +342,10 @@ export class CursorDb {
    */
   recentActivity(composerId, { limit = 8, maxChars = 200 } = {}) {
     const st = this.#need();
-    const tail = st.tail.get(`composerData:${composerId}`);
-    if (!tail || !tail.bubbleCount) return [];
-    const ids = st.bubbleIds.all(`composerData:${composerId}`, Math.max(0, tail.bubbleCount - limit));
+    const row = st.tail.get(`composerData:${composerId}`);
+    const count = row ? this.#source(row).count : 0;
+    if (!count) return [];
+    const ids = this.#headers(composerId, row, Math.max(0, count - limit), count);
     const out = [];
     for (const { bubbleId, type } of ids) {
       const r = st.brief.get(maxChars, `bubbleId:${composerId}:${bubbleId}`);
@@ -314,21 +369,21 @@ export class CursorDb {
    */
   conversationPage(composerId, { before = null, limit = 30, maxChars = 6000 } = {}) {
     const st = this.#need();
-    const tail = st.tail.get(`composerData:${composerId}`);
-    if (!tail) return null;
-    const total = tail.bubbleCount ?? 0;
+    const row = st.tail.get(`composerData:${composerId}`);
+    if (!row) return null;
+    const total = this.#source(row).count;
     const end = Math.max(0, Math.min(total, Number.isInteger(before) ? before : total));
     const from = Math.max(0, end - limit);
     const items = [];
     if (end > from) {
-      const ids = st.bubbleIdsRange.all(`composerData:${composerId}`, from, end);
-      ids.forEach(({ bubbleId, type }, i) => {
+      const ids = this.#headers(composerId, row, from, end);
+      ids.forEach(({ bubbleId, type, index }, i) => {
         const r = st.brief.get(maxChars + 1, `bubbleId:${composerId}:${bubbleId}`);
         if (!r) return;
         const text = String(r.text ?? '').trim();
         items.push({
           id: bubbleId,
-          index: from + i,
+          index: index ?? from + i,
           type: r.type ?? type ?? null,
           at: toMs(r.createdAt),
           tool: r.toolName ? { name: r.toolName, status: r.toolStatus ?? null } : null,
@@ -350,8 +405,17 @@ export class CursorDb {
 
   /** Shape of a chat's `composerData` (JSON types, no content), or null when the row is missing. */
   composerShape(composerId) {
-    const r = this.#need().composerShape.get(`composerData:${composerId}`);
-    return r ? { headersType: r.headersType ?? null, bubbleCount: r.bubbleCount ?? 0, lastBubbleId: r.lastBubbleId ?? null } : null;
+    const st = this.#need();
+    const r = st.composerShape.get(`composerData:${composerId}`);
+    if (!r) return null;
+    const row = st.tail.get(`composerData:${composerId}`);
+    const src = row ? this.#source(row) : { chunked: false };
+    if (!src.chunked) return { headersType: r.headersType ?? null, bubbleCount: r.bubbleCount ?? 0, lastBubbleId: r.lastBubbleId ?? null };
+    return {
+      headersType: st.chunkType.get(CursorDb.#chunkKey(composerId, 0))?.t ?? null,
+      bubbleCount: src.count,
+      lastBubbleId: this.#chunkedTail(composerId, src)[0]?.bubbleId ?? null,
+    };
   }
 
   /** Shape of one bubble (JSON types, no content), or null when the row is missing. */

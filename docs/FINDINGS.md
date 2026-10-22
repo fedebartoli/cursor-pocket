@@ -793,6 +793,24 @@ Prompted by a question from a user: how do writes reach Cursor, and what happens
 - NOT verified: behavior against a REAL Cursor update (the breaker and the layout check are tested with fakes and a synthetic
   database, and the layout check against the current real one).
 
+### 10.4s Cursor 3.26: the bubble list moved (Oct 22) [VERIFIED on the real database, read-only; actions on 3.26 NOT VERIFIED]
+After Cursor updated itself to 3.26.13 the phone showed no messages and no chat state. Cause, found by comparing structure only
+(keys and JSON types, never content) of the five most recent chats:
+- `composerData.fullConversationHeadersOnly` is still there but EMPTY (`[]`), while the `bubbleId:<id>:<bubbleId>` rows are all
+  present (tens of thousands for a long chat). The daemon read "0 bubbles" for every chat: no last message, no recent activity, no
+  question detected, no history.
+- The list now lives in numbered rows `composerConvHeaders:<composerId>:<000000>` (6 digits, from 0), each a JSON array of up to
+  `chunkSize` (256) headers `{bubbleId, type, grouping, createdAt, startedAtMs}` in conversation order. `composerData.headerLog`
+  describes it: `{chunkSize, chunkCount, count, generation}`; `count` equals the sum of the chunks (checked on four chats, from
+  112 to 7139 bubbles). Other new `composerData` fields seen: `conversationState`, `blobEncryptionKey`, `isNAL` (not used).
+- Older chats keep the old array (checked on the oldest chats): the reader uses the chunked rows when `headerLog.count > 0`, else the
+  old array. Index to chunk: `floor(i / chunkSize)`, position `i % chunkSize`. Only the chunks of the requested range are read.
+- Why the compatibility check (10.4r) stayed quiet: the array was still `array`-typed, just empty. It now also raises
+  `bubble_list_changed` when several recent chats ALL have zero bubbles.
+- Test fixture can write both layouts (`layout: 'chunked'`, or `CP_TEST_HEADER_LAYOUT=chunked CP_TEST_CHUNK_SIZE=2 npm test` to
+  run the whole suite against the new one): all pass except the one test that renames the old field, which does not apply.
+- The debug port was closed because the self-update restarted Cursor without the launch flag (see SETUP). `argv.json` cannot set it.
+
 ## 11. Tool approvals (“Allow”/“Run”): signal, rules, and what is NOT verified
 User request (Oct 12): in one of their projects a chat had stopped waiting for an “allow” (because of a hook) and no
 notification had arrived: can this be notified too?

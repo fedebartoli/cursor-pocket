@@ -5,6 +5,11 @@ All notable changes. The format follows [Keep a Changelog](https://keepachangelo
 
 ## [Unreleased]
 
+### Fixed
+- Cursor 3.26 (self-update): no messages, no recent activity and no questions on the phone. Cursor moved each chat's bubble list into
+  numbered rows (`composerConvHeaders:<id>:<n>`) and left the old array empty. The daemon now reads both layouts. The compatibility
+  check also reports an emptied list, which it missed because the array was still there.
+
 ### Added
 - Compatibility check with Cursor. A moved field inside Cursor's database used to stop detection without any error (no red dot,
   no push). The daemon now checks, every few minutes and read-only, that column names and JSON field types of a few recent chats

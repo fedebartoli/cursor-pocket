@@ -61,6 +61,12 @@ export function evaluateDbCompat(db, { visibleCount = null, sampleSize = SAMPLE_
     reasons.push('bubble_list_changed');
     return { reasons, examined: sample.length };
   }
+  // The list can also stay where it was but empty: Cursor 3.26 moved it to numbered rows and left an empty array behind. Chats with
+  // recent activity always have bubbles, so several of them all empty means the reader is looking in the wrong place.
+  if (present.length >= 2 && present.every((c) => !c.shape.bubbleCount)) {
+    reasons.push('bubble_list_changed');
+    return { reasons, examined: sample.length };
+  }
 
   const lasts = withList.filter((c) => c.shape.lastBubbleId).map((c) => ({ id: c.id, bubble: db.bubbleShape(c.id, c.shape.lastBubbleId) }));
   if (lasts.length > 0 && lasts.every((l) => !l.bubble)) {

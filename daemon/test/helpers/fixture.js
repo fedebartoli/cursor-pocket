@@ -102,12 +102,24 @@ export class CursorFixture {
 
   /**
    * Writes composerData + bubble. `bubbles`: [{id, type, createdAt (ms), text?, tool?:{name,status,toolCallId,params?,userDecision?,additionalData?}}]
+   * `layout`: how the bubble list is stored. 'legacy' = `composerData.fullConversationHeadersOnly` (Cursor up to 3.25);
+   * 'chunked' = empty array there, a `headerLog` and numbered `composerConvHeaders:<id>:<000000>` rows of `chunkSize` headers (3.26).
+   * Default: legacy, or whatever `CP_TEST_HEADER_LAYOUT` says (lets the whole suite run against the newer layout).
    */
-  conversation(id, bubbles, { status = 'completed', queueItems = [] } = {}) {
+  conversation(id, bubbles, { status = 'completed', queueItems = [], layout = process.env.CP_TEST_HEADER_LAYOUT || 'legacy', chunkSize = Number(process.env.CP_TEST_CHUNK_SIZE) || 256 } = {}) {
     const headers = bubbles.map((b) => ({ bubbleId: b.id, type: b.type, createdAt: new Date(b.createdAt).toISOString() }));
-    this.db
-      .prepare('INSERT INTO cursorDiskKV (key, value) VALUES (?, ?)')
-      .run(`composerData:${id}`, JSON.stringify({ composerId: id, status, fullConversationHeadersOnly: headers, queueItems }));
+    const data = { composerId: id, status, fullConversationHeadersOnly: headers, queueItems };
+    if (layout === 'chunked') {
+      data.fullConversationHeadersOnly = [];
+      const chunkCount = Math.ceil(headers.length / chunkSize);
+      data.headerLog = { chunkSize, chunkCount, count: headers.length, generation: 'test-generation' };
+      for (let c = 0; c < chunkCount; c++) {
+        this.db
+          .prepare('INSERT INTO cursorDiskKV (key, value) VALUES (?, ?)')
+          .run(`composerConvHeaders:${id}:${String(c).padStart(6, '0')}`, JSON.stringify(headers.slice(c * chunkSize, (c + 1) * chunkSize)));
+      }
+    }
+    this.db.prepare('INSERT INTO cursorDiskKV (key, value) VALUES (?, ?)').run(`composerData:${id}`, JSON.stringify(data));
     for (const b of bubbles) {
       const v = { type: b.type, createdAt: new Date(b.createdAt).toISOString(), text: b.text ?? '' };
       if (b.tool) {
